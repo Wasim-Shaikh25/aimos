@@ -17,6 +17,8 @@ from typing import Sequence
 
 import numpy as np
 
+from aimos.learning.model import LogisticModel, auc, fit_logistic
+
 
 class LeakageError(AssertionError):
     """Raised when a split would leak future information (§9.1, §13)."""
@@ -81,11 +83,37 @@ class PromotionChecklist:
         )
 
 
+def train_model(
+    X: np.ndarray, y: Sequence[int], timestamps: Sequence[datetime], n_folds: int = 3
+) -> LogisticModel:
+    """Walk-forward validate then fit the final model on all data (§6.3).
+
+    Returns a real ``LogisticModel`` whose ``val_auc`` is the mean out-of-sample
+    AUC across the rolling folds — never a random split (each fold's guard runs).
+    """
+    X = np.atleast_2d(np.asarray(X, dtype=float))
+    y = np.asarray(list(y), dtype=int)
+    folds = walk_forward_splits(timestamps, n_folds=n_folds)
+    aucs: list[float] = []
+    for f in folds:
+        assert_temporal_split([timestamps[i] for i in f.train_idx],
+                              [timestamps[i] for i in f.val_idx])
+        if len(set(y[f.train_idx])) < 2:
+            continue
+        m = fit_logistic(X[f.train_idx], y[f.train_idx])
+        scores = m.predict_proba(X[f.val_idx])
+        aucs.append(auc(scores, y[f.val_idx]))
+    final = fit_logistic(X, y)
+    final.val_auc = float(np.mean(aucs)) if aucs else 0.5
+    return final
+
+
 __all__ = [
     "Fold",
     "LeakageError",
     "PromotionChecklist",
     "assert_temporal_split",
     "shadow_weight",
+    "train_model",
     "walk_forward_splits",
 ]

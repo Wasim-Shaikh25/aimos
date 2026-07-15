@@ -15,7 +15,7 @@ from __future__ import annotations
 import hashlib
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 from aimos.core.schemas import Action, OrderResult, TradePlan
 
@@ -84,22 +84,83 @@ class DivergenceTracker:
 
 
 class LiveBroker:
-    """ccxt live adapter (§7.6). Refuses to operate outside the mandate."""
+    """ccxt live adapter (§7.6). Refuses to operate outside the mandate.
 
-    def __init__(self, exchange_id: str, mandate: MandateGate, api_permissions: Mapping[str, bool]) -> None:
+    ``exchange`` is a ccxt-like client (``create_order``/``fetch_positions``/
+    ``cancel_all_orders``); injected for tests, else lazily built from
+    ``api_credentials`` (testnet-aware). The order-building path is real — it just
+    needs live/testnet keys to actually reach an exchange.
+    """
+
+    def __init__(
+        self,
+        exchange_id: str,
+        mandate: MandateGate,
+        api_permissions: Mapping[str, bool],
+        exchange: Optional[Any] = None,
+        api_credentials: Optional[Mapping[str, str]] = None,
+        testnet: bool = True,
+    ) -> None:
         if not verify_withdrawal_disabled(api_permissions):
             raise PermissionError("API key has withdrawal permission — refusing live mode (§23.4)")
         self.exchange_id = exchange_id
         self.mandate = mandate
-        self._ex = None  # lazily created ccxt client (testnet or live)
+        self.testnet = testnet
+        self._ex = exchange or self._build_exchange(api_credentials)
+
+    def _build_exchange(self, creds: Optional[Mapping[str, str]]) -> Any:
+        if not creds:
+            return None  # created on first use / injected in tests
+        import ccxt  # pragma: no cover - needs the [data] extra + keys
+        ex = getattr(ccxt, self.exchange_id)({
+            "apiKey": creds.get("apiKey"), "secret": creds.get("secret"),
+            "enableRateLimit": True,
+        })
+        if self.testnet and hasattr(ex, "set_sandbox_mode"):
+            ex.set_sandbox_mode(True)
+        return ex
 
     def place(self, plan: TradePlan, total_notional_after: float, open_positions_after: int) -> OrderResult:
         decision = self.mandate.check(plan, total_notional_after, open_positions_after)
         if not decision.ok:
             return OrderResult(ok=False, status="rejected", error=decision.reason, raw={})
-        # actual ccxt placement happens in deployment/testnet (idempotent id below)
-        return OrderResult(ok=True, order_id=client_order_id(plan.symbol), status="open",
-                           raw={"note": "live placement is a deployment/testnet step"})
+        if plan.action is Action.NO_TRADE or self._ex is None:
+            return OrderResult(ok=True, order_id=client_order_id(plan.symbol), status="open",
+                               raw={"note": "no exchange bound — id reserved (idempotent)"})
+        side = "buy" if plan.action is Action.LONG else "sell"
+        amount = (plan.size_quote or 0.0) / plan.entry if plan.entry else 0.0
+        coid = client_order_id(plan.symbol)
+        try:
+            raw = self._ex.create_order(
+                plan.symbol, "limit", side, amount, plan.entry,
+                {"clientOrderId": coid},  # idempotent (§7.6)
+            )
+            return OrderResult(ok=True, order_id=str(raw.get("id", coid)),
+                               filled_qty=float(raw.get("filled", 0.0)),
+                               avg_price=raw.get("average"), status="open", raw=raw)
+        except Exception as exc:  # noqa: BLE001 — broker owns retries (§25.8)
+            return OrderResult(ok=False, status="rejected", error=str(exc), raw={})
+
+    def positions(self) -> list[dict]:
+        if self._ex is None:
+            return []
+        try:
+            return list(self._ex.fetch_positions())
+        except Exception:  # noqa: BLE001
+            return []
+
+    def cancel_all(self, symbol: str) -> None:
+        if self._ex is not None and hasattr(self._ex, "cancel_all_orders"):
+            try:
+                self._ex.cancel_all_orders(symbol)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def reconcile_on_start(self, journal_symbols: list[str]) -> Any:
+        """Diff exchange positions vs journal on startup (fail-closed, §23.5)."""
+        from aimos.runtime.reconciliation import reconcile_positions
+        ex_syms = [p.get("symbol") for p in self.positions() if p.get("symbol")]
+        return reconcile_positions(ex_syms, journal_symbols)
 
 
 __all__ = [

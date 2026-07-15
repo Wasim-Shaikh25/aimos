@@ -78,6 +78,10 @@ funding:                     # §5.7
 whale:                       # §5.8 (thresholds; detection in data/whale.py)
   flow_hist_window: 24       # windows for net-flow z
 
+onchain:                     # §5.9 (active when a provider supplies data)
+  active_addr_window: 30     # z-score window for active addresses
+  stablecoin_inflow_window: 30   # z-score window for stablecoin exchange inflow
+
 sentiment:                   # §5.10
   fear_extreme_low: 20       # F&G < this → bullish (contrarian)
   greed_extreme_high: 80     # F&G > this → bearish

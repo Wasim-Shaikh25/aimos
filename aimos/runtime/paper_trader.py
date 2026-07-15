@@ -82,6 +82,9 @@ async def run_paper(
     broker = PaperBroker(float(paper["starting_equity_usdt"]), cost_mod.from_config(costs_cfg))
     caps = _caps(params)
 
+    from aimos.runtime.watchdog import Heartbeat
+    heartbeat = Heartbeat(paper.get("heartbeat_path", "state/heartbeat"), clock=clock)
+
     sink: Optional[TelegramSink] = None
     if features["telegram_enabled"]:
         sink = TelegramSink()  # token from env; dry-run (logs) if no token
@@ -127,6 +130,7 @@ async def run_paper(
                      p_up=round(result.understanding.p_up, 3), action=result.plan.action.value)
         tick += 1
         summary.ticks = tick
+        heartbeat.beat()  # watchdog liveness (§23.5)
         if live_data and (ticks_limit == 0 or tick < ticks_limit):
             await asyncio.sleep(loop_seconds)
 

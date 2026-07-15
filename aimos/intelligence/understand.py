@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from aimos.core.normalize import PCT
 from aimos.core.schemas import EvidenceBundle, MarketUnderstanding
 from aimos.intelligence.bayes_engine import BayesEngine
 from aimos.intelligence.base import first_named
@@ -31,7 +32,10 @@ class IntelligenceLayer:
         self.behavior_likelihoods = params.behavior_likelihoods.model_dump()
         self.rule = RuleEngine(self.intel)
         self.bayes = BayesEngine(self.intel, self.behavior_likelihoods)
-        self.ml = MLEngine()
+        ml_model_path = self.intel.get("ml_model_path") or params.model_dump().get(
+            "learning", {}
+        ).get("ml", {}).get("model_path")
+        self.ml = MLEngine(model_path=ml_model_path)
         self.fusion = FusionEngine(self.intel)
 
     def understand(
@@ -44,7 +48,13 @@ class IntelligenceLayer:
         ctx = score_ctx or sc.ScoreContext()
         rule_op = self.rule.opine(bundle)
         bayes_op = self.bayes.opine(bundle)
-        ml_op = self.ml.opine(bundle)
+        # ML features include the rule engine's regime one-hot (§6.3)
+        rule_regime = self._argmax_regime(rule_op.regime_probs)
+        kl = self._key_levels(bundle)
+        atr = float(kl.get("atr", 0.0))
+        price = float(kl.get("price", 0.0))
+        atr_pct = (atr / price * PCT) if price > 0 else 0.0
+        ml_op = self.ml.opine(bundle, regime=rule_regime, atr_pct=atr_pct)
         fused = self.fusion.fuse([rule_op, bayes_op, ml_op], bundle)
 
         regime, regime_certainty = finalize_regime(fused.regime_probs)
@@ -94,6 +104,13 @@ class IntelligenceLayer:
             engine_votes={"rule": rule_op.p_up, "bayes": bayes_op.p_up, "ml": ml_op.p_up},
             reasons=reasons,
         )
+
+    @staticmethod
+    def _argmax_regime(regime_probs: dict) -> Optional[Any]:
+        from aimos.core.schemas import Regime
+        if not regime_probs:
+            return None
+        return Regime(max(regime_probs, key=lambda k: regime_probs[k]))
 
     @staticmethod
     def _trend_strength(bundle: EvidenceBundle) -> float:

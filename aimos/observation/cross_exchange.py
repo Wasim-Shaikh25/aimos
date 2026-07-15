@@ -2,7 +2,8 @@
 
 price_dislocation converts every venue mid to USD via live stable rates BEFORE
 computing dislocation (§16.1 B-3), so a stable/stable gap is not counted as
-profit. lead_lag and venue_divergence_volume are Phase-1 stubs (§5.11 rules 2-3).
+profit. lead_lag + venue_divergence_volume are computed from per-venue series/
+rel-vols when a provider supplies them (the streaming layer, §5.11 rules 2-3).
 """
 
 from __future__ import annotations
@@ -10,7 +11,9 @@ from __future__ import annotations
 from itertools import combinations
 from typing import Mapping, Optional
 
-from aimos.core.normalize import BPS
+import numpy as np
+
+from aimos.core.normalize import BPS, HALF
 from aimos.core.schemas import Direction, Evidence, MarketContext, Timeframe
 from aimos.observation.base import ObservationEngine
 
@@ -45,14 +48,67 @@ def compute_dislocation(
     return best_bps, best_pair
 
 
+def compute_lead_lag(
+    venue_series: Mapping[str, list[float]], lag: int = 1
+) -> tuple[str, Direction, float] | None:
+    """Identify the leading venue via lagged cross-correlation (§5.11 rule 2).
+
+    For each venue, correlate its lag-shifted returns against the pooled
+    consensus; the highest lead-correlation venue is the leader. If that leader
+    just moved, direction = its move. Returns (leader, direction, strength).
+    """
+    from aimos.core.indicators import correlation
+
+    returns: dict[str, np.ndarray] = {}
+    for v, series in venue_series.items():
+        arr = np.asarray(series, dtype=float)
+        if arr.size > lag + 2:
+            returns[v] = np.diff(arr) / arr[:-1]
+    if len(returns) < 2:
+        return None
+    consensus = np.mean([r[-min(len(x) for x in returns.values()):] for r in returns.values()], axis=0)
+    best_v, best_corr = "", 0.0
+    for v, r in returns.items():
+        n = min(len(r), len(consensus))
+        lead = correlation(r[-n:][:-lag] if lag else r[-n:], consensus[-n:][lag:] if lag else consensus[-n:])
+        if abs(lead) > abs(best_corr):
+            best_v, best_corr = v, lead
+    if not best_v:
+        return None
+    last_move = returns[best_v][-1]
+    if last_move == 0:
+        return None
+    direction = Direction.BULLISH if last_move > 0 else Direction.BEARISH
+    return best_v, direction, min(abs(best_corr), 1.0)
+
+
+def venue_divergence(rel_vols: Mapping[str, float], hi: float, lo: float) -> bool:
+    """One venue's rel_vol > hi while all others < lo → manipulation flag (§5.11 rule 3)."""
+    if len(rel_vols) < 2:
+        return False
+    vals = sorted(rel_vols.values(), reverse=True)
+    return vals[0] > hi and all(v < lo for v in vals[1:])
+
+
 class CrossExchangeEngine(ObservationEngine):
     name = "cross_exchange_engine"
 
+    def __init__(self, cfg, clock, reliability=HALF, venue_series_provider=None, venue_relvol_provider=None):
+        super().__init__(cfg, clock, reliability)
+        self.venue_series_provider = venue_series_provider  # base → {venue: [prices]}
+        self.venue_relvol_provider = venue_relvol_provider  # base → {venue: rel_vol}
+
     def observe(self, ctx: MarketContext) -> list[Evidence]:
+        cc = self.cfg["cross_exchange"]
+        out = self._dislocation(ctx, cc)
+        out.extend(self._lead_lag(ctx, cc))
+        out.extend(self._venue_divergence(ctx, cc))
+        return out
+
+    def _dislocation(self, ctx: MarketContext, cc) -> list[Evidence]:
         snap = ctx.venue_snapshot
         if len(snap) < 2:
             return []
-        cc = self.cfg["cross_exchange"]
         mids = {v: top.mid for v, top in snap.items()}
         result = compute_dislocation(mids)
         if result is None:
@@ -72,5 +128,37 @@ class CrossExchangeEngine(ObservationEngine):
             )
         ]
 
+    def _lead_lag(self, ctx: MarketContext, cc) -> list[Evidence]:
+        if self.venue_series_provider is None:
+            return []
+        series = self.venue_series_provider(ctx.symbol)
+        if not series:
+            return []
+        result = compute_lead_lag(series)
+        if result is None:
+            return []
+        leader, direction, strength = result
+        return [Evidence(
+            source=f"{self.name}.lead_lag", symbol=ctx.symbol, timeframe=Timeframe.M5,
+            timestamp=ctx.now, name="lead_lag", value=strength, direction=direction,
+            strength=self._clamp01(strength), reliability=self.reliability,
+            meta={"leader": leader},
+        )]
 
-__all__ = ["CrossExchangeEngine", "compute_dislocation"]
+    def _venue_divergence(self, ctx: MarketContext, cc) -> list[Evidence]:
+        if self.venue_relvol_provider is None:
+            return []
+        rel_vols = self.venue_relvol_provider(ctx.symbol)
+        if not rel_vols:
+            return []
+        if venue_divergence(rel_vols, float(cc["venue_div_rel_vol_hi"]), float(cc["venue_div_others_lo"])):
+            return [Evidence(
+                source=f"{self.name}.venue_divergence_volume", symbol=ctx.symbol,
+                timeframe=Timeframe.M5, timestamp=ctx.now, name="venue_divergence_volume",
+                value=max(rel_vols.values()), direction=Direction.NEUTRAL, strength=1.0,
+                reliability=self.reliability, meta={"manipulation_flag": True, "rel_vols": dict(rel_vols)},
+            )]
+        return []
+
+
+__all__ = ["CrossExchangeEngine", "compute_dislocation", "compute_lead_lag", "venue_divergence"]
