@@ -111,6 +111,12 @@ time:                        # §5.13
 
 sentiment_negation_cues: ["denies", "denied", "deny", "false", "fake", "rumor", "rumours", "rumors", "no", "not", "hoax"]
 
+sentiment_llm:                 # §19 LLM news sensor
+  shock_credibility_min: 0.6   # event_type∈shock + credibility≥ → headline_shock
+  shock_event_types: ["hack", "exploit", "bankruptcy", "delisting"]
+  unstable_flip_max: 2         # >N news_tone flips in the window → unstable_source
+  unstable_window_hours: 6
+
 streams:                     # §21.3
   liquidation_window_min: 5  # rolling liquidation notional z window
   liquidation_hist_window: 288   # samples for the z baseline

@@ -6,3 +6,7 @@ spread_fee_mult: 2.0         # quote spread ≥ N× fees
 inventory_target_pct: 50     # steer inventory back to 50/50 · percent
 inventory_bound_pct: 30      # ±% → one-sided quoting
 manipulation_withdraw_prob: 0.2   # MANIPULATION behavior prob > this → withdraw quotes
+# Avellaneda–Stoikov params (§21.2) — used when the book snapshot omits them
+gamma: 0.1                        # risk aversion
+k: 1.5                            # order-book liquidity
+time_to_horizon: 1.0              # normalized session time remaining

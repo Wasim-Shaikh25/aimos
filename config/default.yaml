@@ -140,4 +140,23 @@ data_quality:                       # §23.3 data quality gate
   cross_venue_max_deviation_pct: 3.0   # primary mid vs median of others → degraded · percent
   staleness_cadence_mult: 2.0       # feed older than N× cadence → stale · mult
 
+# --- Phase 6 learning (§6.3, §8.2-8.4, §23.7) ---
+learning:
+  triple_barrier:                   # §8.2
+    upper_atr: 1.5
+    lower_atr: 1.5
+    noise_atr: 0.3
+  ml:                               # §6.3, §8.3
+    min_labeled_samples: 2000       # before training is allowed
+    val_auc_min: 0.55               # promotion gate
+    shadow_weeks: 2                  # shadow-mode duration before weight raise
+    lgbm: {num_leaves: 31, n_estimators: 400, learning_rate: 0.05, min_child_samples: 50}
+  calibration:                      # §8.4
+    reliability_clamp: [0.2, 0.9]   # rel_new = clamp(2·hitrate − 0.5, lo, hi)
+    hitrate_move_atr: 0.5           # "moved beyond 0.5×ATR within horizon"
+  drift:                            # §23.7
+    psi_threshold: 0.25             # PSI > this on > frac of features → retrain proposal
+    psi_feature_frac: 0.20
+    brier_degradation: 0.20         # > this → auto-halve ML fusion weight
+
 mode: paper                         # paper | live — live requires §23.8 gate ladder
