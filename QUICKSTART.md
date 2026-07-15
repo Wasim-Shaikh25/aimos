@@ -5,6 +5,17 @@ fills against the simulated `PaperBroker`. The only optional secret is a Telegra
 bot token (for receiving alerts) and, if you enable it, an Anthropic key for the
 LLM news sensor.
 
+## 0. One command — full stack (backend + frontend), install → build → serve
+```bash
+./run.sh            # offline synthetic data (no keys, no network)
+./run.sh --live     # live PUBLIC candles (needs internet; still no API keys)
+```
+This creates the venv, installs the backend, builds the React dashboard, and
+serves **both the API and the dashboard on one port**. Open
+**http://localhost:8000** — the dashboard renders live paper-trading state from
+the background loop; the API is under `/api`. (Set `TELEGRAM_BOT_TOKEN` in `.env`
+first if you want alerts.) Everything below is the manual, piece-by-piece path.
+
 ## 1. Run it right now — fully offline, zero keys, zero network
 ```bash
 pip install -e .                 # base runtime (contracts + pipeline)
