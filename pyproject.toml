@@ -45,7 +45,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["aimos*"]
+include = ["aimos*", "vendor*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -56,7 +56,7 @@ filterwarnings = ["error::DeprecationWarning:aimos.*"]
 # import-linter: enforces the layer import direction (§0 rule 7, §18.1, §22.3).
 # ---------------------------------------------------------------------------
 [tool.importlinter]
-root_package = "aimos"
+root_packages = ["aimos", "vendor"]
 
 [[tool.importlinter.contracts]]
 name = "Layer direction: data -> observation -> intelligence -> execution"
@@ -85,3 +85,19 @@ name = "Intelligence must not import execution"
 type = "forbidden"
 source_modules = ["aimos.intelligence"]
 forbidden_modules = ["aimos.execution"]
+
+[[tool.importlinter.contracts]]
+name = "Universe must not import higher layers"
+type = "forbidden"
+source_modules = ["aimos.universe"]
+forbidden_modules = ["aimos.observation", "aimos.intelligence", "aimos.execution"]
+
+# §22.3 rule 3: the trading runtime may import vendor.vt_factors / hb_mm /
+# ft_protections / jesse_engine, but NOTHING from vendor.vt_research — that
+# research stack (langchain/langgraph) is reachable only via the
+# services/research process boundary. This preserves the §13 determinism guards.
+[[tool.importlinter.contracts]]
+name = "Runtime must not import vendor.vt_research"
+type = "forbidden"
+source_modules = ["aimos"]
+forbidden_modules = ["vendor.vt_research"]

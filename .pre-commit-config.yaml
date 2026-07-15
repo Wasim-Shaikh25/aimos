@@ -37,3 +37,11 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+      # GPL distribution tripwire reminder (§21.1) — informational.
+      - id: gpl-tripwire
+        name: GPL tripwire reminder
+        entry: python scripts/check_gpl_tripwire.py
+        language: system
+        pass_filenames: false
+        always_run: true

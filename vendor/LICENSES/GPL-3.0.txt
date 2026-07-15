@@ -1,0 +1,4 @@
+GPL-3.0 — full license text to be reproduced verbatim at vendoring time (§20.5,
+§22.1). Placeholder pending network access to fetch the canonical text from each
+upstream's LICENSE file. Attribution headers are already present in the vendored
+modules.
