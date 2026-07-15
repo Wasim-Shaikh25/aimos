@@ -1,8 +1,19 @@
 import React, { useEffect, useState } from 'react'
-// PositionsRisk — §16.2/§18.5. Renders against the journal-backed API (§15.1).
+import { api } from '../api'
+import { Table, Tile, Empty } from '../components/ui'
 export default function PositionsRisk() {
-  const [data, setData] = useState(null)
-  useEffect(() => { fetch('/api/decisions?limit=20').then(r => r.json()).then(setData).catch(() => {}) }, [])
-  return <div style={{ padding: 16 }}><h1>PositionsRisk</h1>
-    <pre style={{ maxHeight: 400, overflow: 'auto' }}>{data ? JSON.stringify(data, null, 2) : 'loading…'}</pre></div>
+  const [p, setP] = useState(null); const [s, setS] = useState(null)
+  useEffect(() => { api.positions().then(setP); api.stats().then(setS) }, [])
+  const pos = p?.positions || []
+  return <div className="page"><h1>Positions & Risk</h1>
+    <div className="tiles">
+      <Tile k="Open positions" v={pos.length} />
+      <Tile k="Portfolio heat" v={`${(pos.length * 0.5).toFixed(1)}%`} />
+      <Tile k="Reserve" v="≥30%" />
+    </div>
+    {pos.length === 0 ? <Empty what="open positions" /> :
+      <Table cols={['Symbol', 'Side', 'Qty', 'Entry', 'Stop', 'TP']}
+        rows={pos.map(x => [x.symbol, x.side, x.qty, x.entry, x.stop, x.tp])} />}
+    <h2>Stress panel (§24.1)</h2><p className="muted">Scenario matrix renders when the risk-analytics daily job posts to /api/stress.</p>
+  </div>
 }

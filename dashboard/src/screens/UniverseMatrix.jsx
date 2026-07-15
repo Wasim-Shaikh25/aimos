@@ -1,8 +1,15 @@
 import React, { useEffect, useState } from 'react'
-// UniverseMatrix — §16.2/§18.5. Renders against the journal-backed API (§15.1).
+import { api } from '../api'
+import { Empty } from '../components/ui'
 export default function UniverseMatrix() {
-  const [data, setData] = useState(null)
-  useEffect(() => { fetch('/api/decisions?limit=20').then(r => r.json()).then(setData).catch(() => {}) }, [])
-  return <div style={{ padding: 16 }}><h1>UniverseMatrix</h1>
-    <pre style={{ maxHeight: 400, overflow: 'auto' }}>{data ? JSON.stringify(data, null, 2) : 'loading…'}</pre></div>
+  const [m, setM] = useState(undefined)
+  useEffect(() => { api.matrix().then(setM) }, [])
+  if (m === undefined) return <div className="page">loading…</div>
+  if (!m || !Object.keys(m).length) return <div className="page"><h1>Universe & Venues</h1><Empty what="universe snapshot" /></div>
+  const venues = [...new Set(Object.values(m).flatMap(v => Object.keys(v)))]
+  return <div className="page"><h1>Universe & Venues</h1>
+    <table><thead><tr><th>Asset</th>{venues.map(v => <th key={v}>{v}</th>)}</tr></thead>
+    <tbody>{Object.entries(m).map(([base, row]) => <tr key={base}><td>{base}</td>
+      {venues.map(v => <td key={v}>{row[v] ? '✅' : row[v] === false ? '—' : ''}</td>)}</tr>)}</tbody></table>
+  </div>
 }

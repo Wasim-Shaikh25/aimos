@@ -32,6 +32,10 @@ class AppState:
     positions_provider: Any = None  # callable -> list[dict]
     equity_provider: Any = None  # callable -> list[float]
     latest_state: dict = field(default_factory=dict)  # symbol -> MarketUnderstanding dict
+    matrix_provider: Any = None  # callable -> universe matrix dict
+    effective_config: dict = field(default_factory=dict)  # §16.2 Screen 8
+    agents_provider: Any = None  # callable -> {"agents": [...]}
+    proposals_provider: Any = None  # callable -> {"proposals": [...]}
 
 
 def _decisions(journal: Journal, limit: int) -> list[dict]:
@@ -107,6 +111,27 @@ def create_app(state: AppState) -> FastAPI:
         if state.orchestrator:
             state.orchestrator.state.halted = True
         return {"ok": True, "halted": True}
+
+    @app.get("/api/markets")
+    def get_markets():
+        # latest MarketUnderstanding per symbol (Screen 1, §16.2)
+        return {"markets": [{"symbol": s, **v} for s, v in state.latest_state.items()]}
+
+    @app.get("/api/universe/matrix")
+    def get_matrix():
+        return state.matrix_provider() if state.matrix_provider else {}
+
+    @app.get("/api/config/effective")
+    def get_config():
+        return state.effective_config
+
+    @app.get("/api/agents")
+    def get_agents():
+        return state.agents_provider() if state.agents_provider else {"agents": []}
+
+    @app.get("/api/proposals")
+    def get_proposals():
+        return state.proposals_provider() if state.proposals_provider else {"proposals": []}
 
     @app.get("/metrics")
     def metrics():

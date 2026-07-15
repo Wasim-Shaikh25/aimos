@@ -1,8 +1,16 @@
 import React, { useEffect, useState } from 'react'
-// Agents — §16.2/§18.5. Renders against the journal-backed API (§15.1).
+import { api } from '../api'
+import { Table, Empty } from '../components/ui'
 export default function Agents() {
-  const [data, setData] = useState(null)
-  useEffect(() => { fetch('/api/decisions?limit=20').then(r => r.json()).then(setData).catch(() => {}) }, [])
-  return <div style={{ padding: 16 }}><h1>Agents</h1>
-    <pre style={{ maxHeight: 400, overflow: 'auto' }}>{data ? JSON.stringify(data, null, 2) : 'loading…'}</pre></div>
+  const [a, setA] = useState(undefined); const [p, setP] = useState(null)
+  useEffect(() => { api.agents().then(setA); api.proposals().then(setP) }, [])
+  return <div className="page"><h1>Agents</h1>
+    <h2>Roster</h2>
+    {a?.agents?.length ? <Table cols={['Agent', 'Status', 'Last run']}
+      rows={a.agents.map(x => [x.name, x.status, x.last_run])} /> :
+      <p className="muted">Agents (A1 Analyst · A2 Sentinel · A3 Ops) are Phase-6, feature-flagged off. Enable in config to populate.</p>}
+    <h2>Proposals</h2>
+    {p?.proposals?.length ? <Table cols={['ID', 'Title', 'Status']} rows={p.proposals.map(x => [x.proposal_id, x.title, x.status])} />
+      : <Empty what="proposals" />}
+  </div>
 }

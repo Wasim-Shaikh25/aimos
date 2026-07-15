@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from datetime import datetime, timezone
 
 import pytest
@@ -16,6 +17,7 @@ from aimos.telegram.notifier import Deduper, fmt_trade_opened
 from aimos.telegram.security import ChatWhitelist, NonceStore
 from tests.conftest import FakeClock, make_mu
 
+ROOT = Path(__file__).resolve().parents[1]
 TS = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
 
 
@@ -106,6 +108,26 @@ def test_api_metrics_endpoint():
     client = TestClient(create_app(_app_state()))
     r = client.get("/metrics")
     assert r.status_code == 200 and "aimos_decisions_total" in r.text
+
+
+def test_api_ui_endpoints_serve_dashboard():
+    # every endpoint the React dashboard calls responds (§16.2 screens)
+    state = _app_state()
+    state.effective_config = {"mode": "paper"}
+    state.matrix_provider = lambda: {"BTC": {"binance": True, "kraken": True}}
+    client = TestClient(create_app(state))
+    assert client.get("/api/markets").json()["markets"][0]["symbol"] == "SOL"
+    assert client.get("/api/universe/matrix").json()["BTC"]["binance"] is True
+    assert client.get("/api/config/effective").json()["mode"] == "paper"
+    assert "agents" in client.get("/api/agents").json()
+    assert "proposals" in client.get("/api/proposals").json()
+
+
+def test_dashboard_build_present_if_built():
+    # if the operator ran `npm run build`, dist/ exists; otherwise skip (Node build)
+    dist = ROOT / "dashboard" / "dist" / "index.html"
+    if dist.exists():
+        assert "root" in dist.read_text()
 
 
 # ---- ops reconciliation (P5-T8) ----

@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
-// The 8+1 screens from §16.2 / §18.5.
+import { api } from './api'
 import Markets from './screens/Markets.jsx'
 import AssetDetail from './screens/AssetDetail.jsx'
 import DecisionAnatomy from './screens/DecisionAnatomy.jsx'
@@ -11,28 +11,44 @@ import Performance from './screens/Performance.jsx'
 import ConfigViewer from './screens/ConfigViewer.jsx'
 import Agents from './screens/Agents.jsx'
 
-const SCREENS = [
-  ['/', 'Markets', Markets],
-  ['/asset/:base', 'Asset', AssetDetail],
-  ['/anatomy', 'Decision Anatomy', DecisionAnatomy],
-  ['/universe', 'Universe & Venues', UniverseMatrix],
-  ['/positions', 'Positions & Risk', PositionsRisk],
-  ['/decisions', 'Decisions', Decisions],
-  ['/performance', 'Performance', Performance],
-  ['/config', 'Config', ConfigViewer],
-  ['/agents', 'Agents', Agents],
+const NAV = [
+  ['/', 'Markets'], ['/anatomy', 'Decision Anatomy'], ['/universe', 'Universe'],
+  ['/positions', 'Positions & Risk'], ['/decisions', 'Decisions'],
+  ['/performance', 'Performance'], ['/config', 'Config'], ['/agents', 'Agents'],
 ]
+
+function Chrome() {
+  const [stats, setStats] = useState(null)
+  const [eq, setEq] = useState(null)
+  useEffect(() => { api.stats().then(setStats); api.equity().then(setEq) }, [])
+  const equity = eq?.equity?.length ? eq.equity[eq.equity.length - 1] : 10000
+  return (
+    <div className="chrome">
+      <span className="stat">Equity <b>${Number(equity).toFixed(0)}</b></span>
+      <span className="stat">Decisions <b>{stats?.n_decisions ?? '—'}</b></span>
+      <span className="stat">NO_TRADE rate <b>{stats ? (stats.no_trade_rate * 100).toFixed(0) + '%' : '—'}</b></span>
+      <span className="stat">Mode <b className="b-flat badge">paper</b></span>
+    </div>
+  )
+}
 
 export default function App() {
   return (
     <BrowserRouter>
-      <nav style={{ display: 'flex', gap: 12, padding: 8, borderBottom: '1px solid #ccc' }}>
-        {SCREENS.filter(([p]) => !p.includes(':')).map(([path, label]) => (
-          <NavLink key={path} to={path}>{label}</NavLink>
-        ))}
+      <Chrome />
+      <nav className="side">
+        {NAV.map(([p, l]) => <NavLink key={p} to={p} className={({ isActive }) => isActive ? 'active' : ''}>{l}</NavLink>)}
       </nav>
       <Routes>
-        {SCREENS.map(([path, , C]) => <Route key={path} path={path} element={<C />} />)}
+        <Route path="/" element={<Markets />} />
+        <Route path="/asset/:base" element={<AssetDetail />} />
+        <Route path="/anatomy" element={<DecisionAnatomy />} />
+        <Route path="/universe" element={<UniverseMatrix />} />
+        <Route path="/positions" element={<PositionsRisk />} />
+        <Route path="/decisions" element={<Decisions />} />
+        <Route path="/performance" element={<Performance />} />
+        <Route path="/config" element={<ConfigViewer />} />
+        <Route path="/agents" element={<Agents />} />
       </Routes>
     </BrowserRouter>
   )

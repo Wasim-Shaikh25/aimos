@@ -38,3 +38,8 @@ secrets.*
 
 # Runtime control files
 RUNTIME_HALT
+
+# Node / dashboard build artifacts
+node_modules/
+dashboard/dist/
+dashboard/package-lock.json

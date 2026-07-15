@@ -1,8 +1,14 @@
 import React, { useEffect, useState } from 'react'
-// AssetDetail — §16.2/§18.5. Renders against the journal-backed API (§15.1).
+import { useParams } from 'react-router-dom'
+import { api } from '../api'
+import { Badge, Gauge } from '../components/ui'
 export default function AssetDetail() {
-  const [data, setData] = useState(null)
-  useEffect(() => { fetch('/api/decisions?limit=20').then(r => r.json()).then(setData).catch(() => {}) }, [])
-  return <div style={{ padding: 16 }}><h1>AssetDetail</h1>
-    <pre style={{ maxHeight: 400, overflow: 'auto' }}>{data ? JSON.stringify(data, null, 2) : 'loading…'}</pre></div>
+  const { base } = useParams(); const [u, setU] = useState(null)
+  useEffect(() => { api.state(base).then(setU) }, [base])
+  if (!u) return <div className="page"><h1>{base}</h1><p className="muted">no state — /api/state/{base}</p></div>
+  return <div className="page"><h1>{base} <Badge dir={u.regime}>{u.regime}</Badge></h1>
+    <p>p_up <b>{u.p_up?.toFixed(3)}</b> · behavior {u.behavior} · bias {u.direction_bias}</p>
+    <div style={{ maxWidth: 320 }}>confidence<Gauge value={u.confidence} /></div>
+    <h2>Reasons</h2><ul className="mono">{(u.reasons || []).map((r, i) => <li key={i}>{r}</li>)}</ul>
+  </div>
 }
