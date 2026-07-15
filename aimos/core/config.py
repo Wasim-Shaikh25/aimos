@@ -169,6 +169,7 @@ class Params(BaseModel):
     # --- from the other config files (one field per file stem) ---
     weights: _Loose
     universe: _Loose
+    observation: _Loose  # §5 engine thresholds
     costs: CostsConfig
     capacity: _Loose
     ignition: _Loose
@@ -207,6 +208,7 @@ def _build_raw(config_dir: Path) -> dict[str, Any]:
     single_files = [
         "weights",
         "universe",
+        "observation",
         "costs",
         "capacity",
         "ignition",

@@ -1,0 +1,117 @@
+# Observation-engine thresholds (§5, §23.12). Every tunable in §5 is a key here
+# (initial values). SPEC-GAP: the §23.12 inventory has no observation.yaml; this
+# file is the simplest compliant home for §5's engine parameters.
+
+normalization:               # §5.0
+  z_cap: 3.0                 # |z| ≥ z_cap → strength 1
+  ratio_neutral: 1.0         # ratio == neutral → strength 0
+  ratio_cap: 3.0             # ratio saturates strength at this
+
+price_action:                # §5.1
+  swing_k: 3                 # swing high/low half-window (confirmed k bars late)
+  structure_swings: 4        # last N swing pairs for structure trend
+  fvg_proximity_atr: 0.5     # emit fvg_nearby within N×ATR of unfilled gap
+  range_lookback: 50         # bars for range detection
+  range_atr_mult: 2.5        # range if hi-lo < N×ATR(50)
+  bos_recency_bars: 3        # "BOS just fired" window (§25.3)
+  key_levels_count: 3        # last N swing highs/lows exported
+
+volume:                      # §5.2
+  rel_vol_sma: 20            # rel_vol = vol[-1] / SMA(vol, N)
+  rel_vol_spike: 2.0         # volume_spike when rel_vol > this
+  rel_vol_cap: 4.0           # ratio_to_strength cap for volume
+  accel_short_sma: 5         # SMA window for volume acceleration slope
+  buy_frac_window: 10        # volume-weighted buy-fraction window
+  buy_pressure_hi: 0.62      # > → bullish buy_pressure
+  buy_pressure_lo: 0.38      # < → bearish
+  buy_pressure_scale: 4.0    # |vw_mean-0.5| × N capped 1
+  absorption_atr_frac: 0.25  # |close-open| < N×ATR for absorption
+  absorption_rel_vol: 2.0    # and rel_vol > this
+  absorption_prior_bars: 5   # opposite of prior N-bar move
+
+momentum:                    # §5.3
+  rsi_period: 14
+  rsi_overbought: 70
+  rsi_oversold: 30
+  rsi_band_low: 45           # 45-55 → emit nothing
+  rsi_band_high: 55
+  rsi_strength_div: 30       # distance beyond threshold / N
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+  macd_hist_std_window: 100
+  roc_period: 10
+  roc_hist_window: 100
+  ema_period: 50
+  ema_slope_bars: 10
+  momentum_decay_bars: 3     # ROC magnitude declining N bars while trending
+
+volatility:                  # §5.4
+  atr_period: 14
+  atr_long_period: 100
+  compression_ratio: 0.6     # ATR14/ATR100 < this → compression
+  expansion_ratio: 1.5       # > this → expansion
+  shock_tr_mult: 3.0         # single-bar TR > N×ATR → shock
+
+liquidity:                   # §5.5
+  spread_hist_window: 1440   # snapshots (~24h at 1/min) for spread z
+  thin_book_percentile: 25   # depth below this pct of 24h → thin_book
+  zone_size_mult: 3.0        # level > N×median within zone_within_pct
+  zone_within_pct: 2.0
+  spread_z_risk: 2.0         # spread z above → risk flag
+
+orderbook:                   # §5.6
+  imbalance_window: 30       # snapshots for mean imbalance
+  wall_size_mult: 5.0        # level > N×median within wall_within_pct
+  wall_within_pct: 1.0
+  wall_strength_div: 10.0    # min(size / N×median, 1)
+  spoof_age_seconds: 60      # wall younger than this → spoof_suspect
+  absorption_drop_pct: 30    # wall size dropped < this% and price bounced
+
+funding:                     # §5.7
+  hist_window: 30            # periods for funding z (≈30d daily)
+  z_extreme: 2.0             # |z| > this → funding_extreme (contrarian)
+  trend_periods: 7           # slope window
+  trend_reliability_mult: 0.5
+  ls_hist_window: 30         # long/short ratio z window
+
+whale:                       # §5.8 (thresholds; detection in data/whale.py)
+  flow_hist_window: 24       # windows for net-flow z
+
+sentiment:                   # §5.10
+  fear_extreme_low: 20       # F&G < this → bullish (contrarian)
+  greed_extreme_high: 80     # F&G > this → bearish
+  fg_strength_div: 20        # distance beyond threshold / N
+  news_window_hours: 24      # lexicon window
+  headline_shock_window_min: 60
+  bull_terms: [approve, adoption, etf, partnership, upgrade, institutional, buy, accumulate, all-time high]
+  bear_terms: [hack, exploit, sec sues, ban, lawsuit, bankruptcy, liquidation, outage, delist]
+  shock_terms: [hack, exploit, bankruptcy, ban]
+
+cross_exchange:              # §5.11
+  fee_floor_bps: 8           # dislocation must exceed fee floor + extra
+  dislocation_extra_bps: 2
+  venue_div_rel_vol_hi: 3.0  # one venue rel_vol > this...
+  venue_div_others_lo: 1.5   # ...others below this → manipulation flag
+
+correlation:                 # §5.12
+  beta_window: 200
+  btc_pull_atr_mult: 1.0     # |BTC 1h return| > N×ATR% → btc_pull
+  decoupling_short_window: 20
+  decoupling_short_thresh: 0.3
+  decoupling_long_window: 200
+  decoupling_long_thresh: 0.7
+
+time:                        # §5.13
+  session_bounds: [0, 8, 14, 22]   # UTC hour boundaries asia/europe/us
+  funding_settlement_hours: [0, 8, 16]
+  funding_window_min: 30
+  weekend_risk_add: 5
+  weekend_weekdays: [5, 6]   # Sat, Sun (Python weekday())
+
+sentiment_negation_cues: ["denies", "denied", "deny", "false", "fake", "rumor", "rumours", "rumors", "no", "not", "hoax"]
+
+streams:                     # §21.3
+  liquidation_window_min: 5  # rolling liquidation notional z window
+  liquidation_hist_window: 288   # samples for the z baseline
+  stream_unhealthy_seconds: 10   # §17.2(3) auto-degrade
