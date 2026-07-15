@@ -1,0 +1,47 @@
+# AIMOS deployment (§23.5, card P5-T8). Paper mode by default; live requires the
+# §23.8 go-live ladder + mandate.yaml + withdrawal-disabled keys.
+services:
+  trading:
+    build: .
+    command: python -m aimos.runtime.paper_trader
+    env_file: [.env]
+    environment:
+      AIMOS__MODE: paper
+    volumes: ["./data:/app/data", "./state:/app/state", "./config:/app/config:ro"]
+    restart: unless-stopped
+
+  dashboard:
+    build: .
+    command: uvicorn aimos.api.server:app --host 0.0.0.0 --port 8000
+    ports: ["127.0.0.1:8000:8000"]   # never public — behind VPN/SSH tunnel (§23.4)
+    depends_on: [trading]
+    restart: unless-stopped
+
+  telegram:
+    build: .
+    command: python -m aimos.telegram.bot
+    env_file: [.env]
+    depends_on: [trading]
+    restart: unless-stopped
+
+  research:
+    build: ./services/research    # SEPARATE runtime (§22.2C) — own dep tree
+    profiles: ["research"]         # optional; not in the trading runtime env
+    restart: unless-stopped
+
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_DB: aimos
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    restart: unless-stopped
+
+  watchdog:
+    build: .
+    command: python -m aimos.runtime.watchdog   # heartbeat; 3× miss → restart + alert
+    depends_on: [trading]
+    restart: unless-stopped
+
+volumes:
+  pgdata:

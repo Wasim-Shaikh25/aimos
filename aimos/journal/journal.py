@@ -34,7 +34,9 @@ _TABLES = ["decisions", "outcomes", "evidence_snapshots", "agent_events", "manag
 
 class Journal:
     def __init__(self, db_path: Path | str = ":memory:") -> None:
-        self.conn = sqlite3.connect(str(db_path))
+        # check_same_thread=False: the FastAPI backend reads from a threadpool
+        # (§15.1). Writes remain single-threaded through the orchestrator lock.
+        self.conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self._init_schema()
 

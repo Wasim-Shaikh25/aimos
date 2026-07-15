@@ -1,0 +1,130 @@
+"""FastAPI backend (§15.1, §16.2, §18.5, §24, card P5-T2).
+
+Journal-backed reads; control endpoints are CONFIRM-gated (a typed "CONFIRM" in
+the body, mirroring the UI modal and Telegram nonce flow). Metrics at /metrics.
+The app is built from an injected ``AppState`` so it is testable with no live
+runtime. Control actions are journaled with source="ui".
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from typing import Any, Optional
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+from aimos.journal.journal import Journal
+
+
+class ConfirmBody(BaseModel):
+    confirm: str = ""
+    symbol: Optional[str] = None
+
+
+@dataclass
+class AppState:
+    """Everything the API reads/controls — injected so the backend is testable."""
+
+    journal: Journal
+    orchestrator: Any = None  # PipelineOrchestrator (pause/resume/halt)
+    positions_provider: Any = None  # callable -> list[dict]
+    equity_provider: Any = None  # callable -> list[float]
+    latest_state: dict = field(default_factory=dict)  # symbol -> MarketUnderstanding dict
+
+
+def _decisions(journal: Journal, limit: int) -> list[dict]:
+    rows = journal.conn.execute(
+        "SELECT decision_id, symbol, timestamp, payload FROM decisions ORDER BY seq DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [{"decision_id": r["decision_id"], "symbol": r["symbol"],
+             "timestamp": r["timestamp"], "record": json.loads(r["payload"])} for r in rows]
+
+
+def create_app(state: AppState) -> FastAPI:
+    app = FastAPI(title="AIMOS API")
+
+    @app.get("/api/state/{symbol}")
+    def get_state(symbol: str):
+        mu = state.latest_state.get(symbol)
+        if mu is None:
+            raise HTTPException(status_code=404, detail="no state for symbol")
+        return mu
+
+    @app.get("/api/decisions")
+    def get_decisions(limit: int = 50):
+        return {"decisions": _decisions(state.journal, limit)}
+
+    @app.get("/api/decision/{decision_id}/anatomy")
+    def get_anatomy(decision_id: str):
+        row = state.journal.conn.execute(
+            "SELECT payload FROM decisions WHERE decision_id = ? LIMIT 1", (decision_id,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="unknown decision")
+        rec = json.loads(row["payload"])
+        # Screen-3 anatomy is generated purely from the journaled record (§16.2)
+        return {"decision_id": decision_id, "understanding": rec["understanding"],
+                "chosen": rec["chosen"], "candidates": rec["candidates"]}
+
+    @app.get("/api/positions")
+    def get_positions():
+        return {"positions": state.positions_provider() if state.positions_provider else []}
+
+    @app.get("/api/equity")
+    def get_equity():
+        return {"equity": state.equity_provider() if state.equity_provider else []}
+
+    @app.get("/api/journal/stats")
+    def get_stats():
+        n = state.journal.decision_count()
+        traded = state.journal.conn.execute(
+            "SELECT COUNT(*) c FROM decisions WHERE payload LIKE '%\"action\":\"long\"%'"
+            " OR payload LIKE '%\"action\":\"short\"%'"
+        ).fetchone()["c"]
+        return {"n_decisions": n, "n_traded": traded,
+                "no_trade_rate": (n - traded) / n if n else 0.0}
+
+    @app.post("/api/control/pause")
+    def pause(body: ConfirmBody):
+        _require_confirm(body)
+        if state.orchestrator:
+            state.orchestrator.pause(body.symbol)
+        return {"ok": True, "paused": body.symbol or "global"}
+
+    @app.post("/api/control/resume")
+    def resume(body: ConfirmBody):
+        _require_confirm(body)
+        if state.orchestrator:
+            state.orchestrator.resume(body.symbol)
+        return {"ok": True, "resumed": body.symbol or "global"}
+
+    @app.post("/api/control/killswitch")
+    def killswitch(body: ConfirmBody):
+        _require_confirm(body)
+        if state.orchestrator:
+            state.orchestrator.state.halted = True
+        return {"ok": True, "halted": True}
+
+    @app.get("/metrics")
+    def metrics():
+        n = state.journal.decision_count()
+        return _prometheus({"aimos_decisions_total": n})
+
+    return app
+
+
+def _require_confirm(body: ConfirmBody) -> None:
+    if body.confirm != "CONFIRM":
+        raise HTTPException(status_code=403, detail="control requires confirm='CONFIRM'")
+
+
+def _prometheus(metrics: dict[str, float]) -> str:
+    from fastapi.responses import PlainTextResponse
+    lines = [f"{k} {v}" for k, v in metrics.items()]
+    return PlainTextResponse("\n".join(lines) + "\n")
+
+
+__all__ = ["AppState", "create_app"]

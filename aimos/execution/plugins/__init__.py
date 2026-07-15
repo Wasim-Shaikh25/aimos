@@ -11,9 +11,11 @@ from typing import Any
 
 from aimos.execution.base_plugin import ExecutionPlugin
 from aimos.execution.plugins.breakout import Breakout
+from aimos.execution.plugins.funding_rate import FundingRate
 from aimos.execution.plugins.mean_reversion import MeanReversion
 from aimos.execution.plugins.pullback import Pullback
 from aimos.execution.plugins.risk_off import RiskOff
+from aimos.execution.plugins.smart_dca import SmartDCA
 from aimos.execution.plugins.trend_following import TrendFollowing
 
 # plugin class → config/plugins/<key>.yaml
@@ -23,6 +25,8 @@ _CORE: list[tuple[type[ExecutionPlugin], str]] = [
     (Pullback, "pullback"),
     (Breakout, "breakout"),
     (MeanReversion, "mean_reversion"),
+    (SmartDCA, "smart_dca"),
+    (FundingRate, "funding_rate"),
 ]
 
 
@@ -40,9 +44,11 @@ def build_plugins(params: Any) -> list[ExecutionPlugin]:
 
 __all__ = [
     "Breakout",
+    "FundingRate",
     "MeanReversion",
     "Pullback",
     "RiskOff",
+    "SmartDCA",
     "TrendFollowing",
     "build_plugins",
 ]
