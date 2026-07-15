@@ -161,6 +161,9 @@ class Params(BaseModel):
     intelligence: IntelligenceConfig
     execution: ExecutionConfig
     runtime: _Loose
+    ratelimit: _Loose  # §23.2
+    data: _Loose  # §4
+    data_quality: _Loose  # §23.3
     mode: str = Field(pattern="^(paper|live)$")
 
     # --- from the other config files (one field per file stem) ---

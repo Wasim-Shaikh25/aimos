@@ -79,4 +79,32 @@ runtime:
   clock_drift_warn_ms: 500          # NTP drift warn (§23.3) · ms
   clock_drift_pause_ms: 2000        # NTP drift → pause new entries (§23.3) · ms
 
+# --- Phase 1 data infrastructure (§4, §23.2, §23.3) ---
+ratelimit:                          # §23.2 rate-limit budgeter
+  utilization_ceiling: 0.70         # start at % of published limit · (0, 1]
+  ceiling_halve_hours: 1            # halve ceiling for N h after 429/418 · hours
+  backoff_base_seconds: 1.0         # exponential backoff base · seconds
+  backoff_max_seconds: 60.0         # backoff cap · seconds
+  # priority: orders > position/balance > orderbook > candles > discovery
+  priority_classes: [orders, position, orderbook, candles, discovery]
+  default_window_seconds: 60        # token-bucket refill window · seconds
+
+data:                               # §4 fetch/store parameters
+  candle_page_limit: 1000           # OHLCV per fetch page · [1, 1500]
+  history_depth_candles: 2000       # default backfill depth · candles
+  book_depth_pct: 0.5               # depth measured within % of mid (§4.2) · percent
+  book_window_snapshots: 360        # rolling in-memory snapshots (1h at 10s) · count
+  large_print_min_usd: 250000       # single-print threshold (§5.8) · usd
+  large_print_window_minutes: 60    # net large-print flow window · minutes
+  fear_greed_url: "https://api.alternative.me/fng/?limit=30"   # §4.4
+  rss_feeds:                        # §4.4 headline sources
+    - "https://www.coindesk.com/arc/outboundfeeds/rss/"
+    - "https://cointelegraph.com/rss"
+
+data_quality:                       # §23.3 data quality gate
+  bad_tick_atr_mult: 8.0            # price dev > N×ATR from last valid → suspect · mult
+  second_venue_confirm_seconds: 2   # ...unconfirmed by 2nd venue within N s → quarantine
+  cross_venue_max_deviation_pct: 3.0   # primary mid vs median of others → degraded · percent
+  staleness_cadence_mult: 2.0       # feed older than N× cadence → stale · mult
+
 mode: paper                         # paper | live — live requires §23.8 gate ladder
