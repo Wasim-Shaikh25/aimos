@@ -164,6 +164,8 @@ class Params(BaseModel):
     ratelimit: _Loose  # §23.2
     data: _Loose  # §4
     data_quality: _Loose  # §23.3
+    features: _Loose  # deployment feature flags
+    paper: _Loose  # paper-loop settings
     mode: str = Field(pattern="^(paper|live)$")
 
     # --- from the other config files (one field per file stem) ---

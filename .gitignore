@@ -25,8 +25,11 @@ proposals/
 *.db
 llm_cache/
 
-# Secrets
+# Secrets — real env files ignored; *.example templates are committed
 .env
+.env.*
+!.env.example
+!.env.prod.example
 *.key
 secrets.*
 

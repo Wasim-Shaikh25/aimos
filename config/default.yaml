@@ -160,3 +160,23 @@ learning:
     brier_degradation: 0.20         # > this → auto-halve ML fusion weight
 
 mode: paper                         # paper | live — live requires §23.8 gate ladder
+
+# --- Deployment feature flags (toggle subsystems on/off) ---
+# Paper trading needs NO exchange API keys — it reads PUBLIC market data and
+# fills against the simulated PaperBroker. Only Telegram (optional) and the LLM
+# news sensor (optional) consume secrets, supplied via env vars (never in files).
+features:
+  telegram_enabled: false           # true + TELEGRAM_BOT_TOKEN env → send messages
+  llm_news_sensor: false            # §19 — needs ANTHROPIC_API_KEY when true
+  scalp_enabled: false              # §17 — mirror of scalp.yaml (post-only, T1 only)
+  live_data: true                   # true → fetch live PUBLIC candles (no keys);
+                                    # false → offline synthetic data (fully self-contained run)
+
+paper:
+  symbols: [BTC/USDT, ETH/USDT]     # what to paper-trade (dev set; universe manager owns live)
+  data_exchange: binance            # PUBLIC data venue (no API keys needed)
+  timeframe: 1h                     # candle timeframe for the loop
+  loop_seconds: 300                 # tick cadence · seconds
+  history_bars: 400                 # warmup candles fetched per tick
+  starting_equity_usdt: 10000
+  max_ticks: 0                      # 0 = run forever; >0 = stop after N ticks (for a bounded run)
