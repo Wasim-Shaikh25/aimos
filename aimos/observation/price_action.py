@@ -71,7 +71,7 @@ class PriceActionEngine(ObservationEngine):
         # key_levels ride in the structure evidence's meta — Layer 2 copies them
         # into MarketUnderstanding.key_levels (§5.1). Attach when we have one.
         if structure:
-            structure[0].meta["key_levels"] = self._key_levels(df, highs, lows)
+            structure[0].meta["key_levels"] = self._key_levels(df, highs, lows, close, atr_now)
         out.extend(structure)
         bos = self._bos(ctx, tf, ts, df, highs, lows, atr_now, close)
         out.extend(bos)
@@ -188,13 +188,15 @@ class PriceActionEngine(ObservationEngine):
             return [self._ev(ctx, tf, ts, "range_bound", width, Direction.NEUTRAL, strength)]
         return []
 
-    def _key_levels(self, df, highs, lows) -> dict:
+    def _key_levels(self, df, highs, lows, price, atr) -> dict:
         count = int(self._pa()["key_levels_count"])
         h = df["high"].values
         low = df["low"].values
         return {
             "swing_highs": [float(h[i]) for i in highs[-count:]],
             "swing_lows": [float(low[i]) for i in lows[-count:]],
+            "price": float(price),  # current mid for Layer-3 plugins (§7.2)
+            "atr": float(atr),
         }
 
 

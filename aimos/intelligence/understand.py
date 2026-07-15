@@ -39,6 +39,7 @@ class IntelligenceLayer:
         bundle: EvidenceBundle,
         engines_reporting: int,
         score_ctx: Optional[sc.ScoreContext] = None,
+        coverage_engines: Optional[int] = None,
     ) -> MarketUnderstanding:
         ctx = score_ctx or sc.ScoreContext()
         rule_op = self.rule.opine(bundle)
@@ -49,7 +50,8 @@ class IntelligenceLayer:
         regime, regime_certainty = finalize_regime(fused.regime_probs)
         behavior, _ = finalize_behavior(fused.behavior_probs)
 
-        coverage = evidence_coverage(engines_reporting, int(self.intel["coverage_engines"]))
+        denom = coverage_engines if coverage_engines is not None else int(self.intel["coverage_engines"])
+        coverage = evidence_coverage(engines_reporting, denom)
         confidence = compute_confidence(
             fused.disagreement, coverage, regime_certainty, fused.penalty_mult
         )
@@ -100,10 +102,14 @@ class IntelligenceLayer:
 
     @staticmethod
     def _key_levels(bundle: EvidenceBundle) -> dict:
+        # merge every engine's key_levels contributions (§5.1) — price_action
+        # provides swings/price/atr, momentum provides ema50, etc.
+        merged: dict = {}
         for e in bundle.evidences:
-            if "key_levels" in e.meta:
-                return dict(e.meta["key_levels"])
-        return {}
+            kl = e.meta.get("key_levels")
+            if isinstance(kl, dict):
+                merged.update(kl)
+        return merged
 
 
 __all__ = ["IntelligenceLayer"]

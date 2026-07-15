@@ -20,6 +20,43 @@ def reliability(engine_key: str) -> float:
     return float(rel.get(engine_key, 0.5))
 
 
+def make_mu(**over):
+    """A §25.9-style bullish TRENDING_UP MarketUnderstanding for execution tests."""
+    from aimos.core.schemas import Behavior, Direction, MarketUnderstanding, Regime
+
+    base = dict(
+        symbol="SOL", timestamp=datetime(2026, 7, 9, 14, 35, tzinfo=timezone.utc),
+        regime=Regime.TRENDING_UP, regime_probs={"trending_up": 0.7, "ranging": 0.3},
+        behavior=Behavior.CONTINUATION, behavior_probs={"continuation": 0.7},
+        direction_bias=Direction.BULLISH, p_up=0.766, horizon_minutes=240,
+        confidence=0.428, coin_health=74, opportunity_score=71, risk_score=38,
+        key_levels={"price": 150.0, "atr": 2.1, "swing_lows": [146.8], "swing_highs": [153.2]},
+    )
+    base.update(over)
+    return MarketUnderstanding(**base)
+
+
+def make_caps(**over):
+    from aimos.core.schemas import CapacityCaps
+
+    base = dict(max_equity_pct_per_asset=25, max_pct_of_24h_volume=0.1,
+                max_pct_of_book_depth=15, max_exit_slippage_bps=30, stress_exit_bps=100)
+    base.update(over)
+    return CapacityCaps(**base)
+
+
+def make_exec_ctx(equity=10_000.0, **over):
+    from aimos.core.schemas import ExecContext
+
+    base = dict(
+        equity_usdt=equity, open_positions=[], portfolio_heat_pct=0.0,
+        fee_taker_bps=7.5, fee_maker_bps=2.0, slippage_entry_bps=2.0, slippage_exit_bps=2.0,
+        venue="binance", caps=make_caps(),
+    )
+    base.update(over)
+    return ExecContext(**base)
+
+
 def make_candles(
     closes,
     start: datetime | None = None,

@@ -78,9 +78,11 @@ class MomentumEngine(ObservationEngine):
         # rule 4: EMA(50) slope / ATR
         ema_slope = self._ema_slope(df, m)
         if ema_slope is not None and ema_slope != 0:
+            ema_level = float(ema(close, int(m["ema_period"])).iloc[-1])
             out.append(self._ev(ctx, tf, ts, "ema_slope", ema_slope,
                                  Direction.BULLISH if ema_slope > 0 else Direction.BEARISH,
-                                 self._z_strength(ema_slope)))
+                                 self._z_strength(ema_slope),
+                                 {"key_levels": {"ema50": ema_level}}))
 
         # rule 5: momentum decay
         decay = self._decay(ctx, tf, ts, df, roc_series, m)

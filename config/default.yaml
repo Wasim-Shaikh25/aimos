@@ -96,6 +96,12 @@ execution:
   ev_norm_cap_r: 2.0                # ev_normalized saturation in R (§25.5) · [0.5, 10]
   cost_probe_size_usdt: 1000        # nominal size for plugin slippage probe (§25.4) · usd
   max_cost_fraction: 0.25           # reject if costs > frac × gross move (§23.9C) · [0, 1]
+  losing_trade_r: 1.0               # loss assumed in EV when SL hit (§7.3) · R
+  eval_weights:                     # §7.3 evaluator score composition · sum to 1
+    ev: 0.40
+    confidence: 0.25
+    opportunity: 0.20
+    risk: 0.15
 
 runtime:
   orderbook_poll_seconds: 10        # §4.2 book poll cadence · seconds · [1, 120]
