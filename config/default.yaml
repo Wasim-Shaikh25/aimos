@@ -48,10 +48,37 @@ intelligence:
     disagreement_threshold: 0.25    # max pairwise |p_up_i - p_up_j| · [0, 1]
     disagreement_conf_mult: 0.6     # confidence multiplier on disagreement · [0, 1]
     liquidity_conf_mult: 0.7        # confidence multiplier on poor liquidity · [0, 1]
+    liquidity_spread_z: 2.0         # spread z above → poor liquidity · z
     sentiment_book_shift: 0.15      # mass shifted to UNCLEAR on sentiment/book conflict · [0, 1]
     headline_shock_conf_mult: 0.5   # confidence multiplier on headline_shock · [0, 1]
     headline_shock_pull: 0.5        # fraction p_up pulled toward 0.5 · [0, 1]
     tf_conflict_disagreement: 0.3   # synthetic disagreement for cross-TF structure conflict · [0, 1]
+  bayes_prior: [0.34, 0.33, 0.33]   # §6.2 prior over (up, down, flat) · sums to 1
+  regime_tf: 1h                     # §6.1.2 regime rules evaluated on this TF's evidence
+  rule:                             # §6.1 rule-engine constants
+    regime_onehot_matched: 0.7      # prob mass on the matched regime (rest spread) · [0, 1]
+    behavior_matched: 0.7           # prob mass on matched behavior · [0, 1]
+    behavior_unclear_default: 0.6   # prob on UNCLEAR when nothing matches · [0, 1]
+    confidence_cap: 0.85            # rules never claim near-certainty · [0, 1]
+    fired_strength_min: 0.5         # rules with strength > this count toward confidence
+  coverage_engines: 13              # §25.7 evidence_coverage denominator (full profile)
+  explain_top_n: 8                  # §6.8 top-N reasons in MarketUnderstanding
+  scores:                           # §6.6 scorer inputs; history-dependent inputs
+                                    # default here when Layer 2 can't see candle
+                                    # history (§25.3) — pipeline may override.
+    manipulation_behavior_threshold: 0.3   # MANIPULATION prob > this → high manip risk
+    default_liquidity_q: 65         # depth percentile default (no 30d history) · [0,100]
+    thin_book_q: 20                 # liquidity_q when thin_book flagged · [0,100]
+    default_volume_q: 65            # 24h-volume percentile default · [0,100]
+    default_exchange_q: 90          # exchange_q when venue unknown · [0,100]
+    default_vol_percentile: 40      # ATR% percentile default · [0,100]
+    default_liquidity_risk: 30      # liquidity risk component default · [0,100]
+    default_portfolio_component: 0  # from Layer 3 (0 in isolated L2) · [0,100]
+    regime_alignment_agree: 100     # direction agrees regime trend · [0,100]
+    regime_alignment_ranging: 50    # ranging regime · [0,100]
+    regime_alignment_conflict: 0    # direction conflicts regime · [0,100]
+    rr_scale: 25                    # rr_potential = dist/ATR × scale, capped 100
+    spread_risk_z: 2.0              # spread z above → high liquidity risk
 
 execution:
   min_trade_score: 0.45             # winner below → NO_TRADE (§7.3) · [0, 1]
