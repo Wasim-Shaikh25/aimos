@@ -1,0 +1,118 @@
+# AIMOS BUILD TASKS — Phase-by-Phase Cards for Cursor Composer
+
+Format per card: **ID · Title** — Goal / Build (files) / Spec (§ refs in AIMOS_Implementation_Plan.md) / DoD (tests that must pass).
+`∥` = parallelizable with other `∥` cards in the same phase. Deps listed only when not simply "previous card".
+Execute phases in order. A phase is DONE only when every card is `[x]` and the phase gate passes.
+
+---
+
+## PHASE 0 — Bootstrap & Contracts (est. wk 1)
+
+- [x] **P0-T1 · Repo skeleton** — Create the full directory tree, `pyproject.toml` (trading runtime), `services/research/pyproject.toml` (empty stub for now), pytest + import-linter + structlog setup, pre-commit. Spec: §2, §22.1, §25.8(versions). DoD: `pytest` runs (0 tests ok); import-linter contract file exists with the 3 layer rules.
+- [x] **P0-T2 · Core schemas** — All pydantic contracts: Evidence, EvidenceBundle, MarketUnderstanding, TradePlan, DecisionRecord, EngineOpinion, OutcomeRecord, plus §25.1 set (MarketContext, ExecContext, OrderResult, Position, ManagementEvent, Headline, LargePrint, BookAggregate, VenueTop, CapacityCaps). Spec: §3, §6.0, §8.1, §25.1. DoD: `tests/test_schemas.py` — JSON round-trip every model; bounds rejected (strength=1.2, unknown regime); ±.
+- [x] **P0-T3 · Evidence-name registry** — Frozen enum of all evidence names (~55) with direction semantics; Evidence validator enforces membership. Spec: §25.6 (names harvested from §5, §19, §21.3, §23.11). DoD: emitting unregistered name raises; registry count test.
+- [x] **P0-T4 · Params loader (zero-hardcoding core)** — pydantic-settings tree over `config/*.yaml` inventory; range validation; env override; hot-reload whitelist; change journaling hook (stub). Write ALL config files with initial values from the plan (every threshold in §§5–24 becomes a key with comment: meaning/unit/range). Spec: §12, §23.12. DoD: loader validates; bad range fails startup; completeness test (every Params field referenced) is written (xfail until later phases consume keys); CI magic-number lint active on the three layer packages.
+- [x] **P0-T5 · Clock + event bus** — `LiveClock`/`BacktestClock` protocol; in-process pub/sub with topics enum, per-subscriber try/except. Spec: §4.5, §25.8. DoD: backtest clock injection test; a raising subscriber doesn't break publish; "no naive datetime / no utcnow in aimos/" grep test.
+
+**Phase gate:** all above green; `import aimos` clean. ✅ **DONE 2026-07-15** — 48 passed / 1 xfail; import-linter 3/3 contracts kept; both lints clean. SPEC-GAP decisions: (T3) registry ships 62 names incl. a `factor_*` family prefix for §20.1 dynamic factor ids; (T4) `default.yaml` top-level sections become `Params` top-level fields so `AIMOS__EXECUTION__BASE_RISK_PCT` maps naturally, and the `universe:` ref pointer is dropped in favor of `universe.yaml`; params loader uses plain pydantic + YAML + env-walk rather than pydantic-settings' own YAML source (same guarantees, simpler); completeness test is xfail per DoD.
+
+---
+
+## PHASE 1 — Data Infrastructure (est. wk 2–3)
+
+- [ ] **P1-T1 · Rate-limit budgeter** — Token buckets per (exchange, weight-class), 70% ceiling, priority classes, 429/418 backoff+halving, metrics counters. ALL REST goes through it. Spec: §23.2. DoD: bucket exhaustion queues low-priority; 429 simulation halves ceiling; order-class preempts candle-class.
+- [ ] **P1-T2 · Candle service** ∥ — ccxt OHLCV paging, gap-fill w/ `synthetic` flag, parquet store with dedup merge, local resampling 1m→5m/15m/1h. Spec: §4.1. DoD: fixture gap gets filled+flagged; resample matches pandas reference; CLI fetch produces gapless parquet (recorded fixture, no network in tests).
+- [ ] **P1-T3 · Order book / funding / large-print pollers** ∥ — book snapshots→BookAggregate (spread_bps, depth, imbalance), rolling window + 1m persistence; funding+OI series; large-print detector from trade feed. Spec: §4.2, §4.3, §5.8(phase-1 part). DoD: aggregate math unit tests on fixture books; imbalance ∈ [−1,1] property test.
+- [ ] **P1-T4 · Sentiment feeds** ∥ — Fear&Greed API adapter, RSS headline ingest with URL+title dedup, Headline store. Spec: §4.4. DoD: dedup test; F&G parse fixture.
+- [ ] **P1-T5 · Data quality gate + NTP** — Bad-tick quarantine (8×ATR + second-venue confirm), cross-venue sanity, staleness flags, NTP drift check hooks. Sits between fetch and store. Spec: §23.3. DoD: glitch-print fixture quarantined; degraded-venue switch flag emitted; stale feed blocks-new-entries flag set.
+- [ ] **P1-T6 · Recorded datasets** — Download & store 12mo BTC+ETH+SOL 1m/1h candles + funding (primary venue) as the canonical fixture set; start continuous recording of book aggregates + universe snapshots from now on. Spec: §4, §9, §16.4(survivorship). DoD: dataset integrity script passes (no gaps, UTC, deduped).
+
+**Phase gate:** 24h stability run of pollers on a testnet/live keyless feed without budget breach (manual check) + all tests.
+
+---
+
+## PHASE 1.5 — Universe Manager & Vendor Bootstrap (est. wk 3–4)
+
+- [ ] **P15-T1 · Discovery + stablecoin filters** — load_markets scan→MarketInfo; quote allowlist, min-volume/depth/spread/age, leveraged-token & stable-base exclusion; depeg guard poller wired to risk evidence + quote suspension. Spec: §16.1 A–B. DoD: EUR pair rejected; 3L token rejected; depeg sim (USDC 0.985) suspends quote + emits alert event.
+- [ ] **P15-T2 · Canonical registry + intersection matrix** — base→{venue: market} mapping; `common(min_venues)`; delist handling hooks. Spec: §16.1 B–C, §25.8(canonical). DoD: SOL/USDT + SOL/USDC map to SOL; intersection fixture returns expected set; delist event flags cross-venue positions.
+- [ ] **P15-T3 · Tier engine** — T1/T2/T3 with hysteresis, promotion on screener anomaly, journaled tier changes, `t1_provisional` slots reserved for ignition (§23.11 hookup later). Spec: §16.1 D. DoD: hysteresis unit tests (enter 65 / exit <50×3); caps enforced.
+- [ ] **P15-T4 · Vendor bootstrap** ∥ (agents can split per repo) — Execute §22 manifest: vt_factors, vt_validation, vt_research(separate runtime), hb_mm, ft_protections(+GPL_TRIPWIRE.md), jesse_engine; attribution headers; VENDOR.md; per-package smoke tests. Spec: §22, §21.1(license stance). DoD: each vendor package imports under `vendor.*`; smoke suites green; import-linter blocks `vendor.vt_research` from runtime; tripwire file populated.
+
+**Phase gate:** registry populates from ≥3 exchanges (recorded fixtures acceptable in CI); all vendor smokes green.
+
+---
+
+## PHASE 2 — Observation Layer (est. wk 4–7)
+
+- [ ] **P2-T1 · Engine base + normalization** — ObservationEngine ABC, z_to_strength/ratio_to_strength, reliability from weights.yaml, MarketContext builder in `data/`. Spec: §5.0, §25.1, §25.3(recency-inside-engine rule). DoD: base contract tests; context builder fixture.
+- [ ] **P2-T2 · Price Action engine** ∥ — swings(k, confirmed-late), structure trend, BOS, CHoCH, FVG tracking, range detection, key_levels meta. Spec: §5.1. DoD: one fixture per rule firing at exact spec conditions; no-lookahead swing test.
+- [ ] **P2-T3 · Volume + Momentum engines** ∥ — rel_vol/accel/buy-frac/absorption; RSI/MACD/ROC/EMA-slope/decay per rules. Spec: §5.2, §5.3. DoD: per-rule fixtures with expected strength ±0.01; synthetic-candle exclusion test.
+- [ ] **P2-T4 · Volatility + Liquidity + OrderBook engines** ∥ — ATR/compression/expansion/shock; spread/thin-book/zones/slippage-sim; imbalance/walls(spoof flag)/book-absorption. Spec: §5.4–5.6. DoD: per-rule fixtures; slippage sim vs hand-computed book.
+- [ ] **P2-T5 · Funding + Whale + Sentiment(lexicon) + Time engines** ∥ — funding z/trend/OI-divergence/LS-ratio; large-print flow; lexicon tone + headline_shock; sessions/weekend/funding-window. On-chain engine as registered stub. Spec: §5.7–5.10, §5.13, §5.9(stub). DoD: per-rule fixtures incl. hack-denial NOT triggering shock (lexicon limits documented).
+- [ ] **P2-T6 · Cross-exchange + Correlation engines** ∥ — dislocation (with stable-rate conversion §16.1B-3), venue-divergence flag, lead-lag stub; btc_beta/btc_pull/decoupling. Spec: §5.11, §5.12. DoD: dislocation math test incl. depeg-adjusted case.
+- [ ] **P2-T7 · cryptofeed stream layer** — Replace/underpin pollers for T1: L2 deltas, trades, funding, liquidations behind `StreamSource` protocol; `liquidation_cascade` evidence; health→auto-degrade. Spec: §21.3, §17.2(3). DoD: recorded-stream replay produces identical evidence; unhealthy-stream degrade test.
+
+**Phase gate:** full recorded BTC year through all engines — zero exceptions, all Evidence validates, per-engine suites green.
+
+---
+
+## PHASE 3 — Intelligence Layer (est. wk 7–9)
+
+- [ ] **P3-T1 · Rule engine** — directional scoring, regime rules (first-match), behavior rules, confidence, reasons. Spec: §6.1, §25.2(TF multipliers), §25.3. DoD: rule-table unit tests; reasons text snapshots.
+- [ ] **P3-T2 · Bayes engine** ∥ — log-space updating, correlation guard, behavior likelihood table from yaml, entropy confidence. Spec: §6.2. DoD: §25.9 step-3 numbers reproduce ±0.001; guard test (5 same-engine evidences ≈ 2.5 effective).
+- [ ] **P3-T3 · ML engine (inert) + fusion** — inert opinion; fusion weights×confidence, conflict penalties (disagreement, liquidity, sentiment-vs-book, headline_shock pull), direction thresholds. Spec: §6.3(inert), §6.4, §25.2. DoD: golden bundles (clear-bull/bear/conflict/illiquid/crash) hit expected ranges; penalty ordering test.
+- [ ] **P3-T4 · Regime/Behavior finalize + Health/Opportunity/Risk + Confidence + Explain** — all scorers per formulas; coverage denominator per §25.7 profile; templated explainability. Spec: §6.5–6.8, §25.7. DoD: score formula tests vs hand math; confidence < clear-case in conflict fixture; explain snapshot tests.
+- [ ] **P3-T5 · Golden integration test (partial)** — Wire pipeline through Layer 2 and assert §25.9 steps 1–6 to ±0.01. Spec: §25.9. DoD: green.
+
+**Phase gate:** golden-file suite + partial golden tick green.
+
+---
+
+## PHASE 4 — Execution, Journal, Backtester (est. wk 9–13)
+
+- [ ] **P4-T1 · Plugin base + evaluator + sizer order-of-ops** — ExecutionPlugin ABC, registry, evaluator scoring/EV/no-trade-baseline, cost-fraction gate, sizer AFTER selection, capacity MIN chain. Spec: §7.1, §7.3, §7.5, §23.9C, §23.10A, §25.4, §25.5. DoD: EV math tests; §25.9 step-7 numbers reproduce; capacity fixture ($50k→$8k by depth).
+- [ ] **P4-T2 · Core plugins P1–P5** ∥ — RiskOff, TrendFollowing, Pullback, Breakout, MeanReversion with exact geometry math. Spec: §7.2. DoD: per-plugin canned-MU tests verifying entry/SL/TP numerically.
+- [ ] **P4-T3 · Risk manager + protections + diversification** — Gates 1–12 (heat, positions, correlation buckets, daily stop, risk-score veto, kill file, T1 gate, intersection gate, protections §21.1, asset/bucket/reserve rules). Spec: §7.4, §16.4, §21.1, §23.10B. DoD: each gate has a veto test; hypothesis test: no random plan sequence breaches heat/reserve.
+- [ ] **P4-T4 · Trade manager** — breakeven/trail/partial/thesis-exit/time-stop/stale-cancel + exit-liquidity monitor with slice-exit. Spec: §23.1, §23.10C. DoD: price-path fixtures per rule; trail-never-widens property test.
+- [ ] **P4-T5 · Journal + labeling + hash chain** — decisions/outcomes/evidence_snapshots/agent_events/management tables; triple-barrier labeler; SHA-256 chain + verifier CLI. Spec: §8.1, §8.2, §24.5, §25.8(DDL rule). DoD: round-trip; verifier detects a tampered row; labeler fixtures (upper/lower/timeout-drop).
+- [ ] **P4-T6 · PaperBroker + costs** — next-tick fills, limit-cross logic, slippage/fee/funding cost model, equity ledger; funding applied 8-hourly. Spec: §7.6, §9.2, §23.9A-B(effective-fee read + funding-in-EV plumbing). DoD: fill rules tests; funding EV fixture (reject at +0.05%, accept at −0.05%).
+- [ ] **P4-T7 · Backtest engine + anti-lookahead** — event replay of the real pipeline with BacktestClock, engine profiles, poisoned-future test, next-bar-fill test, replay determinism (byte-identical journal). Spec: §9.1, §25.7, §13(5,7). DoD: all three anti-lookahead/determinism tests; 12-mo BTC/ETH run completes with NO_TRADE rate > 0.
+- [ ] **P4-T8 · Metrics + vendored validation + run cards** — §9.3 metrics, vt_validation wired (permutation p, bootstrap CI, benchmarks), run-card emission, HTML report. Spec: §9.3, §20.2. DoD: metrics vs hand-computed fixture; identical-hash runs → identical metrics; report renders.
+- [ ] **P4-T9 · FULL golden tick** — §25.9 end-to-end incl. NO_TRADE outcome, as permanent CI test. DoD: green ±0.01.
+
+**Phase gate:** full 12-month backtest report generated with validation stats; entire test tree green.
+
+---
+
+## PHASE 5 — Runtime, UI, Telegram, Ignition, Risk Analytics (est. wk 13–18)
+
+- [ ] **P5-T1 · Pipeline orchestrator + paper loop** — per-symbol asyncio ticks, PortfolioLock, per-engine isolation, scheduler, RUNTIME_HALT, pause flags (global/per-asset → forced NO_TRADE while observing). Spec: §10.1, §25.8, §15.2(/pause semantics). DoD: pause-forces-NO_TRADE test; engine-failure degradation test; lock serialization test.
+- [ ] **P5-T2 · FastAPI backend + WS** ∥ — all endpoints of §15.1 + §16.2 + §18.5 + §24 (/stress, /risk) with journal-backed reads; control endpoints CONFIRM-gated; metrics endpoint. Spec: §15.1, §16.2, §23.5(metrics). DoD: endpoint contract tests; control without confirm rejected.
+- [ ] **P5-T3 · React dashboard screens 1–9** ∥ — Markets(venue expand), Asset detail(param panel), Decision Anatomy(journal-driven flow), Universe matrix, Positions&Risk(+stress panel), Decisions, Performance(+run cards, calibration), Config viewer, Agent console(shell now, agents later). Spec: §16.2, §15.1, §18.5, §24.1(panel). DoD: renders against recorded fixture API; anatomy values = journal values snapshot test.
+- [ ] **P5-T4 · Telegram bot** ∥ — full §16.3 command set, notifier templates+dedupe, whitelist+nonce security, /stress /risk /proposals stubs. Spec: §15.2, §16.3. DoD: security tests (unknown chat silent, nonce expiry, confirm flow); notification-on-trade integration test; /pause e2e.
+- [ ] **P5-T5 · Ignition detector + MomentumIgnition plugin** — all-market miniTicker streams, trigger conditions, organic-vs-PnD classifier, T1-provisional fast-track, caged sub-book, entry-window/management overrides; blocked ignitions labeled. Spec: §23.11. DoD: trigger fixtures; each PnD block condition fixture; sub-book isolation test (ignition losses can't touch main budget).
+- [ ] **P5-T6 · Factor engine (Module 14)** ∥ — panel builder over T1+T2, IC selection job → factors_active.yaml, cross-sectional z evidence, correlation pre-clustering. Spec: §20.1. DoD: reference alpha reproduces vendored value; selection job on fixture panel picks expected survivors.
+- [ ] **P5-T7 · Risk analytics** — Scenario/stress engine + binding gate; counterparty caps/health/degrade ladder; VaR/ES + factor decomposition daily job; alpha/beta attribution. Spec: §24.1–24.4. DoD: scenario math fixture (beta propagation, stressed depth); venue-cap veto test; VaR historical-sim vs hand calc; attribution regression fixture.
+- [ ] **P5-T8 · Ops & accounting** — docker-compose all services + watchdog; backups + restore script; restart reconciliation (fail-closed); nightly fee/trade reconciliation + effective-fee sync; tax export CLI; RUNBOOK.md draft. Spec: §23.5, §23.6, §23.9A. DoD: reconciliation divergence alert test; adopt/close-unknown position tests; restore drill script runs.
+- [ ] **P5-T9 · Jesse cross-check + SmartDCA/Funding plugins** ∥ — second_opinion wrapper + divergence proposal; P6 SmartDCA (ladder) and P7 FundingRate plugins. Spec: §21.5, §7.2(P6,P7). DoD: parity-on-fixture-year within tolerance; ladder math tests.
+
+**Phase gate:** 4 continuous weeks of paper trading; replay of any paper day reproduces identical decisions; dashboard+Telegram verified against it. (Calendar time — run P6 prep meanwhile but deploy nothing live.)
+
+---
+
+## PHASE 6 — Learning, Agents, LLM Sensor, Go-Live (wk 18+)
+
+- [ ] **P6-T1 · ML training pipeline** — feature builder from registry, LightGBM walk-forward, isotonic calibration, shadow mode wiring, promotion checklist; MODELS.md register. Spec: §6.3, §8.3, §24.6. DoD: leakage test (random-split forbidden path); calibration report generated; shadow weight stays 0 until config change.
+- [ ] **P6-T2 · Calibration & drift jobs** ∥ — monthly sensor reliability recalibration with dated backups; plugin-confidence isotonic map into evaluator; PSI drift monitor + auto ML-weight halving; Optuna optimizer emitting proposals only. Spec: §8.4, §23.7, §21.4. DoD: recalibration math fixture; drift trigger test; optimizer output is a proposal file, never config write.
+- [ ] **P6-T3 · LLM news sensor** ∥ — trigger-on-headline batching, strict-JSON schema parse, injection defenses, cache-or-die replay mode, lexicon fallback, headline_shock mapping. Spec: §19. DoD: injection fixture neutralized; cache-replay determinism; malformed-JSON fallback; denial-headline negative test.
+- [ ] **P6-T4 · Agents A1–A3 + console live** — Research Analyst (proposals + VT sidecar MCP allowlist + hypothesis ids), Risk Sentinel (notify-only), Ops agent (action allowlist enum), agent_events journaling; Screen 9 + /proposals /approve flows live. Spec: §18.3, §18.5, §20.3. DoD: approve writes staging not live config; allowlist rejects unknown action; sentinel cannot mutate anything (no write API surface).
+- [ ] **P6-T5 · LiveBroker + mandate + go-live gates** — ccxt live adapter (idempotent client ids, reconcile-on-start), mandate.yaml fail-closed check, withdrawal-permission verification, testnet mode, paper-vs-live divergence tracker. Spec: §7.6, §20.4(mandate), §23.4(1), §23.8. DoD: testnet order lifecycle e2e (manual+scripted); mandate violation refuses; divergence tracker demotes a plugin in simulation.
+- [ ] **P6-T6 · Scalp fast loop** (optional, after live is stable) ∥ — two-loop context gating, micro-engines on streams, S1/S2 plugins, scalp risk caging, LOW_FIDELITY stamp rule. Spec: §17. DoD: context-gate tests; post-only enforcement; separate scalp PnL reporting.
+- [ ] **P6-T7 · MarketMaking P9 + IgnitionFade** (optional, last) ∥ — A-S math from hb_mm, inventory skew, min-capital refusal; fade variant only if ≥3mo labeled ignition data supports. Spec: §21.2, §23.11(B-last). DoD: A-S golden numbers; withdraw-quotes-on-manipulation test.
+
+**Phase gate = go-live ladder §23.8:** validated backtest → 4wk paper → 1wk testnet → security signoff + restore drill → 10% canary 2wk → divergence-gated scaling in 25% steps.
+
+---
+
+## Standing rules for every card
+1. Read the card's spec sections + §3 + §25 before coding. 2. All numbers from config (§23.12) — the lint will catch you. 3. Write the DoD tests IN the same session; red = not done. 4. `# SPEC-GAP:` any ambiguity. 5. Update VENDOR.md / MODELS.md / RUNBOOK.md when a card touches them. 6. Never modify `core/schemas.py` or the evidence registry without explicit human approval in the session.

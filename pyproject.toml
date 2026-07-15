@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aimos"
+version = "0.1.0"
+description = "AIMOS — AI Market Operating System (trading runtime)"
+requires-python = ">=3.11"
+# Pinned per §25.8 (no floating ranges in the trading runtime).
+dependencies = [
+    "pydantic==2.9.2",
+    "pydantic-settings==2.5.2",
+    "pyyaml==6.0.2",
+    "structlog==24.4.0",
+    "numpy==2.1.2",
+    "pandas==2.2.3",
+]
+
+[project.optional-dependencies]
+# Full data/runtime stack is pulled in as later phases consume it. Kept out of
+# the base install so Phase 0 (contracts) stays lean and fast to bootstrap.
+data = [
+    "ccxt==4.4.28",
+    "sqlalchemy==2.0.35",
+    "aiosqlite==0.20.0",
+    "ta==0.11.0",
+]
+runtime = [
+    "fastapi==0.115.2",
+    "uvicorn==0.32.0",
+    "apscheduler==3.10.4",
+    "websockets==13.1",
+]
+ml = [
+    "lightgbm==4.5.0",
+    "scikit-learn==1.5.2",
+]
+dev = [
+    "pytest==8.3.3",
+    "hypothesis==6.115.5",
+    "import-linter==2.1",
+    "pre-commit==4.0.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["aimos*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["error::DeprecationWarning:aimos.*"]
+
+# ---------------------------------------------------------------------------
+# import-linter: enforces the layer import direction (§0 rule 7, §18.1, §22.3).
+# ---------------------------------------------------------------------------
+[tool.importlinter]
+root_package = "aimos"
+
+[[tool.importlinter.contracts]]
+name = "Layer direction: observation -> intelligence -> execution"
+type = "layers"
+layers = [
+    "aimos.execution",
+    "aimos.intelligence",
+    "aimos.observation",
+]
+
+[[tool.importlinter.contracts]]
+name = "Observation must not import intelligence or execution"
+type = "forbidden"
+source_modules = ["aimos.observation"]
+forbidden_modules = ["aimos.intelligence", "aimos.execution"]
+
+[[tool.importlinter.contracts]]
+name = "Intelligence must not import execution"
+type = "forbidden"
+source_modules = ["aimos.intelligence"]
+forbidden_modules = ["aimos.execution"]

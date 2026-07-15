@@ -1,0 +1,26 @@
+# Minute-scale (scalping) fast-loop config (§17). Ships feature-flagged OFF.
+
+enabled: false
+base_risk_pct: 0.15            # smaller than swing (0.5) · percent
+max_concurrent: 2
+max_trades_per_hour: 6        # overtrading brake
+daily_scalp_stop_r: -3.0      # scalping halts for the day, swing unaffected · R
+consecutive_loss_pause: 3     # 3 straight losses → 2h scalp pause
+consecutive_loss_pause_hours: 2
+min_book_depth_usd: 150000    # stricter than universe filter · usd
+order_type: post_only         # never taker entries
+max_spread_bps: 4             # propose() returns None above this (§17.3) · bps
+
+context_gate:                 # §17.2 rule 1 — fast loop allowed only inside this
+  allowed_regimes: [trending_up, trending_down, ranging]
+  min_confidence: 0.5
+  max_risk_score: 60
+  stream_unhealthy_pause_seconds: 10   # §17.2 rule 3
+
+micro:
+  atr_period: 14              # ATR(1m,14) for scalp geometry
+  s1_book_imbalance_min: 0.35 # MomentumScalp trigger (§17.3)
+  s1_sl_atr_mult: 0.6
+  s1_tp_atr_range: [1.0, 1.4] # dynamic TP to keep rr ≥ 1.5 after costs
+  s1_min_rr: 1.5
+  s1_max_hold_min: 15

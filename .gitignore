@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Data & state (never commit market data, journals, secrets)
+data/
+state/
+runs/
+proposals/
+*.parquet
+*.sqlite
+*.db
+llm_cache/
+
+# Secrets
+.env
+*.key
+secrets.*
+
+# OS
+.DS_Store
+
+# Runtime control files
+RUNTIME_HALT

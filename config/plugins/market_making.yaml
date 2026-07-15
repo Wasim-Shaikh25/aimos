@@ -1,0 +1,8 @@
+# P9 MarketMaking (§21.2, Avellaneda–Stoikov). regimes: {ranging}. Phase 6.
+enabled: false
+min_coin_health: 70.0
+min_capital_usd: 5000        # refuses below (fees eat sub-$5k MM) · usd
+spread_fee_mult: 2.0         # quote spread ≥ N× fees
+inventory_target_pct: 50     # steer inventory back to 50/50 · percent
+inventory_bound_pct: 30      # ±% → one-sided quoting
+manipulation_withdraw_prob: 0.2   # MANIPULATION behavior prob > this → withdraw quotes

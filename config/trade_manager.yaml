@@ -1,0 +1,12 @@
+# Trade Management Engine defaults (§23.1). Plugins may override via
+# TradePlan.meta["management"]. Every action emits a ManagementEvent.
+
+breakeven_r: 1.0             # at +NR unrealized → SL to entry + costs · R
+trail_activate_r: 1.5        # trailing stop activates at +NR · R
+trail_atr_mult: 1.2          # trails by N×ATR, recomputed each tick, never widens
+partial_tp_r: 1.5            # at +NR close partial · R
+partial_tp_pct: 40           # · percent
+thesis_exit_confidence: 0.55 # direction flip with conf ≥ this → exit (§23.1.4)
+time_stop_hold_mult: 2.0     # beyond N× expected_hold with < +0.3R → exit
+time_stop_min_r: 0.3         # · R
+stale_cancel_candles: 3      # unfilled limit cancelled after N candles

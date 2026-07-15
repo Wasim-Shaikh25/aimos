@@ -1,0 +1,9 @@
+# Active cross-sectional factors (§20.1). Written by `python -m aimos.learning.factor_select`
+# (dated, reselected quarterly, journaled like proposals). Empty until Phase 5.
+
+selected_at: null            # ISO date of last selection · null until run
+ic_min: 0.03                 # keep alphas with |IC| ≥ this · unitless
+ir_min: 0.3                  # and IR ≥ this
+max_active: 20               # cap at top N by IC
+cluster_corr_max: 0.7        # pre-cluster: >this corr → keep highest-IC of cluster
+alphas: []                   # list of {id, zoo, ic_sign} — populated by selection job

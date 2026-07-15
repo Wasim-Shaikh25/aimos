@@ -1,0 +1,6 @@
+# P4 Breakout (§7.2). regimes: {breakout}.
+enabled: true
+min_confidence: 0.45
+min_coin_health: 40.0
+entry_atr_beyond: 0.1        # stop-order N×ATR beyond broken level
+book_imbalance_veto: 0.4     # invalidate if book imbalance opposes by > this

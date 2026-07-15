@@ -1,0 +1,26 @@
+# Universe Manager configuration (§16.1). Stablecoin-quoted pairs ONLY.
+
+quotes:
+  allowed: [USDT, USDC, FDUSD, DAI]   # order = preference · list
+  primary: USDT
+  treat_as_equivalent: true            # SOL/USDT and SOL/USDC = same asset SOL
+  depeg_guard_bps: 80                  # |stable/USD - 1| > 0.8% → suspend quote · bps
+
+filters:
+  min_24h_volume_usd: 2000000          # per venue · usd
+  min_book_depth_usd_0p5pct: 50000     # depth within 0.5% of mid · usd
+  max_spread_bps: 15                   # · bps
+  min_listing_age_days: 30             # no fresh listings (manipulation risk) · days
+  max_atr_pct_per_day: 15              # §21.1 VolatilityFilter — reject untradeably wild · percent
+  exclude_leveraged_tokens: true       # names matching 3L/3S/UP/DOWN/BULL/BEAR
+  exclude_bases: [USDT, USDC, DAI, FDUSD, TUSD, BUSD, EUR, GBP, TRY, BRL]
+
+intersection:
+  min_venues: 2                        # cross-venue plugins require ≥ this (§16.1C)
+
+discovery:
+  interval_hours: 6                    # rediscovery cadence + on startup · hours
+  depeg_poll_minutes: 5                # USDC/USDT, DAI/USDT poll · minutes
+
+# Manual watch overrides (§16.3 /watch) — bounded.
+manual_watch_max: 5

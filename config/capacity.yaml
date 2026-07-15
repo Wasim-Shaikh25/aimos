@@ -1,0 +1,17 @@
+# Capacity & diversification caps (§23.10). Final position size = MIN of all.
+
+max_equity_pct_per_asset: 25    # concentration cap · percent · (0, 100]
+max_pct_of_24h_volume: 0.10     # position ≤ % of venue 24h volume · percent
+max_pct_of_book_depth: 15       # position ≤ % of depth within 1% of mid · percent
+max_exit_slippage_bps: 30       # full-exit sim vs current book · bps
+stress_exit_bps: 100            # full-exit sim vs depth × 0.3 (panic haircut) · bps
+
+diversification:
+  max_bucket_pct: 40            # per correlation bucket ≤ % of equity notional · percent
+  stablecoin_reserve_floor_pct: 30   # ≥ % of equity always unallocated · percent
+
+exit_monitor:                   # §23.10C open-position liquidity decay
+  degrade_slippage_mult: 2.0    # exit slip > this × entry value → degrading
+  degrade_depth_percentile: 15  # depth percentile below → degrading
+  exit_now_depth_percentile: 5  # below → slice-exit now
+  slice_twap_minutes: [10, 20]  # TWAP window for forced slice exit · minutes

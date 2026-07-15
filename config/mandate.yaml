@@ -1,0 +1,11 @@
+# Live-trading mandate — fail-closed contract checked by LiveBroker (§20.4, §23.8).
+# The code REFUSES live mode unless this file is present and satisfied.
+
+enabled: false               # master switch; live mode also requires §23.8 gate ladder
+max_total_notional_usdt: 0   # 0 until go-live gates cleared · usd
+max_positions: 4
+max_risk_pct_per_trade: 0.5  # · percent
+max_leverage: 1              # spot-equivalent by default
+daily_loss_cap_pct: 2.0      # · percent
+allowed_quotes: [USDT, USDC, FDUSD, DAI]
+withdrawal_permission_required_disabled: true   # keys must have withdrawals OFF (§23.4)

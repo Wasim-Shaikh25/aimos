@@ -1,0 +1,20 @@
+# Counterparty (venue) risk framework (§24.2). Live-mode mandatory.
+
+max_equity_pct_per_exchange: 40     # hard cap incl. unrealized PnL · percent
+target_working_capital_pct: 60      # keep only working capital on venues · percent
+cold_wallet_sweep: manual_alert     # bot NEVER holds withdrawal-enabled keys (§23.4)
+withdrawal_drill_days: 30           # monthly small test withdrawal per venue · days
+venue_health_signals:
+  - reserve_attestations_page
+  - withdrawal_latency_reports
+  - spread_blowout_vs_peers
+  - funding_anomaly_vs_peers
+  - news_keywords
+degrade_actions:                    # ladder, journaled (§24.2)
+  watch:    {reduce_max_equity_pct: 25, no_new_positions: true}
+  alert:    {exit_positions_sliced: true, cancel_resting_orders: true}
+  critical: {flatten_market: true, halt_venue: true, telegram_alert: true}
+
+# §24.3 VaR/ES budget
+var_budget_pct: 3.0                 # 1-day 95% VaR budget · percent
+var_hist_days: 500                  # historical simulation window · days

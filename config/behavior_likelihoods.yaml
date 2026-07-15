@@ -1,0 +1,22 @@
+# Bayesian behavior likelihood table (§6.2). Maps evidence name → per-behavior
+# multiplicative tilt. Shipped with the §6.1.3 rule-engine mappings converted to
+# tilts of 1.3 (default tilt applied to the behaviors an evidence supports).
+
+default_tilt: 1.3            # tilt for a supporting (evidence, behavior) pair
+
+# evidence_name: [behaviors it tilts toward]
+supports:
+  absorption: [accumulation, distribution]
+  range_bound: [accumulation]
+  large_buys: [accumulation]
+  exchange_outflow: [accumulation]
+  large_sells: [distribution]
+  bos: [continuation]
+  volume_spike: [continuation]
+  decoupling: [manipulation]
+  venue_divergence_volume: [manipulation]
+  vol_shock: [capitulation, panic]
+  rsi_oversold: [capitulation]
+  rsi_overbought: [euphoria]
+  fear_greed: [capitulation, euphoria]   # direction disambiguates (§6.1.3)
+  funding_extreme: [euphoria]

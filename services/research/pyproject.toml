@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aimos-research"
+version = "0.1.0"
+description = "AIMOS research service (VT agent stack) — SEPARATE runtime (§22.2C)."
+requires-python = ">=3.11"
+# Intentionally empty stub for Phase 0. The research service runs in its own
+# interpreter/container; its langchain/langgraph dependency tree must NEVER
+# enter the trading runtime's environment (§22.3 rule 4: two lockfiles).
+dependencies = []

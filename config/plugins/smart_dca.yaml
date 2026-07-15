@@ -1,0 +1,8 @@
+# P6 SmartDCA (§7.2). regimes: {crash, recovery}; behavior {capitulation, panic}.
+enabled: true
+min_confidence: 0.45
+min_coin_health: 40.0
+tranche_atr_offsets: [0, -1, -2, -3]     # tranches at −N ATR from mid
+tranche_size_pct: [15, 20, 30, 35]       # size split · percent (sums to 100)
+basket_stop_pct: -12                     # SL = portfolio-level on tranche basket · percent
+tp_vwap_days: 30                         # TP = N-day VWAP

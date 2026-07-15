@@ -1,0 +1,3 @@
+# P1 RiskOff (§7.2). Always first, always enabled. Proposes NO_TRADE with the
+# evaluator baseline score (§7.3), making "do nothing" a first-class candidate.
+enabled: true

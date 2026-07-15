@@ -1,0 +1,5 @@
+# P5 MeanReversion / RangeTrading (§7.2). regimes: {ranging}.
+enabled: true
+min_confidence: 0.45
+min_coin_health: 55.0        # ranging + thin book = chop death
+sl_atr_beyond: 0.75          # SL = N×ATR beyond boundary

@@ -1,0 +1,15 @@
+# Scenario & stress engine library (§24.1). All parameters, zero hardcoding.
+
+max_scenario_loss_pct: 8         # binding_set scenario loss above → block new risk · percent
+binding_set: [btc_crash_30, stable_depeg, venue_freeze]
+
+scenarios:
+  btc_crash_30:    {shock: {BTC: -0.30}, propagate_by_beta: true, vol_mult: 2.5, depth_mult: 0.3}
+  btc_crash_50:    {shock: {BTC: -0.50}, propagate_by_beta: true, vol_mult: 3.0, depth_mult: 0.2}
+  alt_capitulation: {shock: {BTC: -0.15}, alt_extra: -0.25, vol_mult: 2.0, depth_mult: 0.3}
+  stable_depeg:    {usdt_usd: 0.93, vol_mult: 2.0, spread_mult: 5}
+  venue_freeze:    {frozen_exchange: primary, duration_h: 72}
+  funding_spike:   {funding_8h_bps: 30, duration_d: 3}
+  flash_crash:     {shock_pct: -0.20, recovery_pct: 0.15, window_min: 30}
+  bull_gap_up:     {shock: {BTC: 0.25}, propagate_by_beta: true}
+  historical: [may_2021_crash, ftx_nov_2022, mar_2020_covid]

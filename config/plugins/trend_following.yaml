@@ -1,0 +1,7 @@
+# P2 TrendFollowing (§7.2). regimes: {trending_up, trending_down}.
+enabled: true
+min_confidence: 0.45
+min_coin_health: 40.0
+sl_atr_buffer: 0.5           # SL = opposing swing − N×ATR buffer
+tp_rr: 2.5                   # TP = N×R
+hold_horizon_mult: 3         # expected hold = horizon × N

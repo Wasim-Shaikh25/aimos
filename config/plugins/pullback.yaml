@@ -1,0 +1,7 @@
+# P3 Pullback (§7.2). regimes: {trending_up, trending_down}; behavior CONTINUATION.
+enabled: true
+min_confidence: 0.45
+min_coin_health: 40.0
+ema_proximity_atr: 0.75      # price within N×ATR of EMA(50) to arm
+sl_atr_beyond: 1.0           # SL = N×ATR beyond entry
+min_rr: 1.8                  # require rr ≥ this else None

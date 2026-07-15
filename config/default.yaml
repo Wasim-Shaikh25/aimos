@@ -1,0 +1,82 @@
+# AIMOS runtime configuration (§12, §16.4, §23.12).
+# Every value here is an INITIAL value, not a constant to inline in code
+# (§23.12 retro-fit note). Each key: meaning · unit · sane range.
+
+# NOTE (v1.2): the static symbol list below is ONLY for Phases 0-4 (development,
+# engine fixtures, recorded-data backtests on deep markets). From Phase 1.5 the
+# live symbol set comes from the Universe Manager (§16.1). BTC/ETH remain the
+# canonical dev/backtest fixture assets.
+dev_symbols: [BTC/USDT, ETH/USDT]   # dev/backtest fixtures only · list
+base_timeframe: 5m                  # decision cadence · enum(1m,5m,15m,1h,4h,1d)
+analysis_timeframes: [5m, 15m, 1h, 4h]   # engines run on each · list
+horizon_minutes: 240                # forecast horizon · minutes · [5, 10080]
+
+universe:
+  ref: universe.yaml                # §16.1 — Universe Manager owns the live set
+
+exchanges:
+  primary: binance
+  secondary: [bybit, kraken]
+
+tiers:                              # §16.1D / §16.4
+  t1_max: 12                        # max Tier-1 active assets · [1, 24]
+  t2_max: 60                        # max Tier-2 watch assets · [1, 200]
+  t1_provisional_max: 3             # ignition fast-track slots (§23.11) · [0, 8]
+  promote: 65                       # opportunity_score to enter T1 · [0, 100]
+  demote: 50                        # opportunity_score to exit T1 · [0, 100]
+  demote_scans: 3                   # consecutive sub-threshold scans to demote · [1, 20]
+
+intelligence:
+  direction_bias:
+    bull: 0.58                      # p_up >= bull → BULLISH bias · [0.5, 1.0]
+    bear: 0.42                      # p_up <= bear → BEARISH bias · [0.0, 0.5]
+  min_confidence: 0.35              # below → evaluator forces NO_TRADE (§6.7) · [0, 1]
+  p_up_clip: [0.05, 0.95]           # rule-engine p_up clamp (§6.1) · sub-range of [0,1]
+  bayes_likelihood_lift: 0.35       # max multiplicative tilt per evidence (§6.2) · [0, 1]
+  correlation_guard_keep: 2         # strongest N same-engine evidences kept full (§6.2) · [1, 10]
+  fusion_weights:                   # base engine weights (§6.4) · each [0, 1]
+    rule: 0.45
+    bayes: 0.45
+    ml: 0.0                         # inert until §8 proves live calibration
+  tf_weights:                       # §25.2 timeframe reliability multipliers
+    1m: 0.6
+    5m: 0.6
+    15m: 0.8
+    1h: 1.0
+    4h: 1.1
+  conflict:                         # §6.4 conflict penalties
+    disagreement_threshold: 0.25    # max pairwise |p_up_i - p_up_j| · [0, 1]
+    disagreement_conf_mult: 0.6     # confidence multiplier on disagreement · [0, 1]
+    liquidity_conf_mult: 0.7        # confidence multiplier on poor liquidity · [0, 1]
+    sentiment_book_shift: 0.15      # mass shifted to UNCLEAR on sentiment/book conflict · [0, 1]
+    headline_shock_conf_mult: 0.5   # confidence multiplier on headline_shock · [0, 1]
+    headline_shock_pull: 0.5        # fraction p_up pulled toward 0.5 · [0, 1]
+    tf_conflict_disagreement: 0.3   # synthetic disagreement for cross-TF structure conflict · [0, 1]
+
+execution:
+  min_trade_score: 0.45             # winner below → NO_TRADE (§7.3) · [0, 1]
+  no_trade_baseline: 0.30           # RiskOff baseline score (§7.3) · [0, 1]
+  base_risk_pct: 0.5                # per-trade risk (§7.5) · percent · (0, 1.0]
+  confidence_scale_range: [0.5, 1.5]  # sizer confidence clamp (§7.5) · multiplier
+  confidence_scale_pivot: 0.6       # confidence/pivot → scale (§7.5) · [0, 1]
+  max_portfolio_heat_pct: 2.0       # Σ open-position risk cap (§7.4) · percent · (0, 10]
+  max_positions: 4                  # concurrent positions (§7.4) · [1, 50]
+  max_per_symbol: 1                 # positions per symbol (§7.4) · [1, 10]
+  max_correlated_bucket_pct: 1.0    # risk per corr>0.8 bucket (§7.4) · percent
+  correlation_bucket_threshold: 0.8 # pairwise 30-bar corr for one bucket · [0, 1]
+  daily_stop_pct: 2.0               # day PnL stop → NO_TRADE till next UTC day · percent
+  risk_score_veto: 80               # risk_score above → veto all but RiskOff/SmartDCA · [0, 100]
+  ev_norm_cap_r: 2.0                # ev_normalized saturation in R (§25.5) · [0.5, 10]
+  cost_probe_size_usdt: 1000        # nominal size for plugin slippage probe (§25.4) · usd
+  max_cost_fraction: 0.25           # reject if costs > frac × gross move (§23.9C) · [0, 1]
+
+runtime:
+  orderbook_poll_seconds: 10        # §4.2 book poll cadence · seconds · [1, 120]
+  funding_poll_minutes: 5           # §4.3 funding/OI cadence · minutes · [1, 60]
+  heavy_engine_cache_ticks: 3       # cache correlation/cross-exchange N ticks (§10.1) · [1, 20]
+  bos_recency_bars: 3               # "BOS just fired" window (§25.3) · bars · [1, 20]
+  compression_recency_bars: 10      # "vol_compression recent" window (§25.3) · bars · [1, 50]
+  clock_drift_warn_ms: 500          # NTP drift warn (§23.3) · ms
+  clock_drift_pause_ms: 2000        # NTP drift → pause new entries (§23.3) · ms
+
+mode: paper                         # paper | live — live requires §23.8 gate ladder

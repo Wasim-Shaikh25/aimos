@@ -1,0 +1,9 @@
+# Cost model (§9.2, §12, §23.9). Static defaults; effective fees (§23.9A) read
+# from state/effective_fees.yaml at runtime with these as fallback.
+
+taker_bps: 7.5          # taker fee · bps
+maker_bps: 2.0          # maker fee · bps
+slip_base_bps: 2.0      # base slippage · bps
+slip_k: 25              # slippage size sensitivity (§9.2) · unitless
+funding_interval_hours: 8   # perp funding applied every N hours · hours
+volume_proxy_depth_frac: 0.05   # depth ≈ frac × bar_volume_quote when no book (§9.2)

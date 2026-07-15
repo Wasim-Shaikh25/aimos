@@ -1,0 +1,39 @@
+# Pre-commit hooks for AIMOS (§22.1, §25.8).
+# Install with: pre-commit install
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+      - id: check-merge-conflict
+
+  - repo: local
+    hooks:
+      # Import-direction contract (§0 rule 7). Runs the project lockfile's
+      # import-linter against the configured contracts in pyproject.toml.
+      - id: import-linter
+        name: import-linter (layer contracts)
+        entry: lint-imports
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # No naive datetime / no datetime.utcnow() inside aimos/ (§4.5, §23.3).
+      - id: no-naive-datetime
+        name: no naive datetime in aimos/
+        entry: python scripts/check_no_naive_datetime.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # Zero-hardcoding lint on the three decision-path layers (§23.12).
+      - id: magic-number-lint
+        name: magic-number lint (decision-path layers)
+        entry: python scripts/check_magic_numbers.py
+        language: system
+        pass_filenames: false
+        always_run: true

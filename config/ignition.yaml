@@ -1,0 +1,28 @@
+# Ignition detection & momentum-ignition trading (§23.11).
+
+ignition:
+  ret_5m_z_min: 4.0             # 5m return z-score vs own 30d distribution
+  rel_vol_1m_min: 5.0          # 1m volume ≥ N× its 20-period average
+  persistence_bars: 3          # conditions hold ≥ N consecutive minutes
+  max_move_already_pct: 12     # already moved > % from 1h-ago → observe only · percent
+  min_listing_age_days: 90     # stricter than global 30 (§23.11 classifier) · days
+  corroboration_window_min: 10 # need news/funding/whale/sector within N min · minutes
+  cross_venue_min_frac: 0.40   # move must appear ≥ frac of magnitude on other venues
+
+# MomentumIgnition plugin — own risk sub-book (§23.11B).
+plugin:
+  entry_window_min: 15         # trade only within N min of ignition ts · minutes
+  ema9_atr_mult: 1.0           # price within N×ATR(5m) of 5m EMA9 to enter
+  breakeven_r: 0.7             # faster than default (§23.1)
+  trail_atr_mult: 1.0          # trail 1.0×ATR(5m)
+  partial_pct: 50              # partial 50% at +2R · percent
+  partial_at_r: 2.0
+  max_hold_min: 90             # hard time stop · minutes
+  fuel_gone_vol_mult: 1.5      # 1m vol below N× avg for 10 min → thesis exit
+
+ignition_book:                 # sub-book cage — losses never touch main budget
+  max_equity_pct: 5            # · percent
+  risk_pct_per_trade: 0.15     # · percent
+  max_concurrent: 2
+  max_attempts_per_day: 4
+  daily_stop_r: -2.0           # · R

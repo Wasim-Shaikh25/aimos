@@ -1,0 +1,67 @@
+# Sensor reliabilities, fusion weights, score compositions (§5.0, §6.4, §6.6).
+# Reliabilities are INITIAL priors; §8.4 recalibrates monthly with dated backups.
+
+reliability:                # per-engine prior reliability (§5.0) · each [0, 1]
+  price_action: 0.65
+  volume: 0.60
+  momentum: 0.55
+  volatility: 0.55          # direction-neutral context
+  liquidity: 0.60
+  orderbook: 0.50           # noisy, spoofable
+  funding: 0.60
+  whale: 0.45               # sparse
+  onchain: 0.45
+  sentiment: 0.40
+  sentiment_llm: 0.45       # §19 LLM news sensor prior
+  cross_exchange: 0.55
+  correlation: 0.60
+  time: 0.35
+  factor_engine: 0.55       # §20.1 vendored factor zoo
+  streams: 0.50             # §21.3 liquidation cascades
+  ignition: 0.50            # §23.11
+
+fusion_weights:             # mirror of intelligence.fusion_weights (§6.4)
+  rule: 0.45
+  bayes: 0.45
+  ml: 0.0
+
+# §6.6 score compositions — coin_health / risk_score / opportunity (0-100 sums).
+coin_health:
+  liquidity_q: 30
+  manipulation_inv: 25      # weight on (100 - manipulation_risk)
+  exchange_q: 15
+  volume_q: 15
+  trend_q: 15
+
+exchange_quality:           # static table (§6.6) · [0, 100]
+  binance: 95
+  bybit: 90
+  kraken: 90
+  okx: 85
+  kucoin: 75
+
+risk_score:
+  vol_component: 25
+  liquidity_component: 25
+  regime_component: 20
+  event_component: 15
+  portfolio_component: 15
+  regime_values:            # regime_component lookup (§6.6) · [0, 100]
+    crash: 100
+    breakout: 60
+    trending_up: 35
+    trending_down: 35
+    ranging: 30
+    recovery: 50
+  event_values:
+    headline_shock: 100
+    funding_window: 40
+    weekend: 30
+  vol_shock_floor: 80       # vol_shock forces vol_component >= this · [0, 100]
+
+opportunity:
+  edge: 40                  # 40·|p_up-0.5|·2·confidence
+  regime_alignment: 25
+  coin_health: 20
+  rr_potential: 15
+  rr_potential_cap: 100

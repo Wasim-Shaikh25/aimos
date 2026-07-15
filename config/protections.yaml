@@ -1,0 +1,20 @@
+# Protections — stateful guards that lock trading after bad patterns (§21.1).
+# Reimplemented from Freqtrade concepts (GPL — see vendor/GPL_TRIPWIRE.md).
+
+stoploss_guard:
+  trigger_count: 4            # ≥ N stop-losses across the book...
+  lookback_hours: 2          # ...within N hours →
+  lock_hours: 1              # global trade lock for N hours
+
+symbol_cooldown:
+  candles: 6                 # after any exit on a symbol → no re-entry for N candles
+
+low_profit_symbol:
+  lookback_trades: 20        # trailing N-trade profit factor...
+  min_profit_factor: 0.8     # ...below this →
+  lock_hours: 24             # symbol locked N hours
+
+max_drawdown_guard:
+  lookback_days: 7           # trailing N-day drawdown...
+  max_drawdown_pct: 10       # ...above this →
+  risk_pct_mult: 0.5         # halve risk_pct until recovery

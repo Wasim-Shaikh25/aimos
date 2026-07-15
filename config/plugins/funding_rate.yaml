@@ -1,0 +1,7 @@
+# P7 FundingRate (§7.2). any regime.
+enabled: true
+min_confidence: 0.45
+min_coin_health: 40.0
+funding_z_min: 2.5           # only when funding_extreme |z| > this and mu agrees
+tp_funding_z: 1.0            # TP at funding normalization (z < this)
+sl_atr_mult: 1.5             # SL = N×ATR
