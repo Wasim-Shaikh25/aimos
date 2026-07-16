@@ -52,8 +52,10 @@ so you can see exactly what would be sent.
 | `features.live_data` | `true` | `true` = live public candles (no keys); `false` = offline synthetic |
 | `features.llm_news_sensor` | `false` | §19 LLM sensor (needs `ANTHROPIC_API_KEY`) |
 | `features.scalp_enabled` | `false` | §17 minute-scale scalping |
+| `features.cross_exchange_enabled` | `false` | §5.11/§7.2 P8 cross-exchange arb (also enable `plugins/cross_exchange_arb.yaml`) |
 | `paper.symbols` | `[BTC/USDT, ETH/USDT]` | what to paper-trade |
 | `paper.data_exchange` | `binance` | public data venue (no keys) |
+| `paper.cross_venues` | `[binance, kraken]` | venues sampled for cross-exchange top-of-book |
 | `paper.max_ticks` | `0` | `0` = run forever; `>0` = bounded run |
 
 Any config key is env-overridable: `AIMOS__SECTION__KEY=value` (double-underscore

@@ -29,7 +29,13 @@ from aimos.core.clock import LiveClock
 from aimos.core.config import load_params
 from aimos.core.schemas import Action, CapacityCaps, ExecContext, Timeframe
 from aimos.data.context import build_context
-from aimos.data.live_source import CcxtPublicSource, SyntheticSource, base_of
+from aimos.data.live_source import (
+    CcxtPublicSource,
+    SyntheticSource,
+    base_of,
+    live_venue_snapshot,
+    synthetic_venue_snapshot,
+)
 from aimos.execution.broker.paper import PaperBroker
 from aimos.execution.position_sizer import SizingInputs
 from aimos.execution.risk_manager import RiskState
@@ -69,8 +75,10 @@ def build_app(offline: Optional[bool] = None):
                     if df.empty:
                         continue
                     now = df.index[-1].to_pydatetime().astimezone(timezone.utc)
-                    ctx = build_context(base_of(symbol), now, {Timeframe(tf): df}, peers={"BTC": btc})
                     last = df.iloc[-1]
+                    vsnap = _venue_snapshot(features, paper, symbol, float(last["close"]), now, live_data)
+                    ctx = build_context(base_of(symbol), now, {Timeframe(tf): df},
+                                        peers={"BTC": btc}, venue_snapshot=vsnap)
                     exec_ctx = ExecContext(
                         equity_usdt=broker.equity(), open_positions=broker.positions(),
                         portfolio_heat_pct=0.0, fee_taker_bps=float(costs_cfg["taker_bps"]),
@@ -134,6 +142,18 @@ def _mount_dashboard(app) -> None:
     def _spa(full_path: str):  # noqa: ANN202 — SPA fallback (client-side routes)
         f = DIST / full_path
         return FileResponse(str(f if f.is_file() else DIST / "index.html"))
+
+
+def _venue_snapshot(features, paper, symbol, mid, now, live_data):
+    """Cross-exchange top-of-book when enabled (§5.11): live books, else synthetic."""
+    if not features.get("cross_exchange_enabled"):
+        return None
+    venues = list(paper.get("cross_venues", []))
+    if len(venues) < 2:
+        return None
+    if live_data:
+        return live_venue_snapshot(symbol, now, venues)
+    return synthetic_venue_snapshot(symbol, mid, now, venues)
 
 
 def _make_source(live_data: bool, exchange: str):

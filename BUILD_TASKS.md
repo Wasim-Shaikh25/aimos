@@ -129,5 +129,25 @@ dashboard build (P5-T3), and the entire §23.8 go-live ladder (validated backtes
 
 ---
 
+## Addendum — P8 CrossExchangeArb (cross-platform trading) ✅ DONE 2026-07-16
+- [x] **P8 · CrossExchangeArb plugin + multi-venue wiring** — `execution/plugins/cross_exchange_arb.py`
+  consumes `price_dislocation` surfaced into `key_levels["dislocation"]` and proposes a
+  simultaneous buy(cheap)/sell(rich) capture when the USD-converted spread clears round-trip
+  costs + `extra_margin_bps`; geometry rr = net_capture/stop; `meta.cross_venue` carries both
+  legs for the router. `data/live_source.py` adds `synthetic_venue_snapshot` (offline,
+  deterministic dislocation) + `live_venue_snapshot` (public ccxt top-of-book, no keys) and the
+  paper/serve loops build `venue_snapshot` across `paper.cross_venues` when
+  `features.cross_exchange_enabled`. Spec: §5.11, §7.2 P8, §16.1(intersection, depeg-safe).
+  DoD: plugin economics + regime-agnostic + two-distinct-venue tests; disabled-by-default posture;
+  end-to-end observation→intelligence→plugin path (`tests/test_cross_exchange_arb.py`, 9 tests).
+  SPEC-GAP: (a) disabled by default — live cross-venue *fills* need dual-venue balances (§7.2 P8
+  Phase 3); enabling in paper mode exercises the full path against synthetic/public books.
+  (b) the "asset ∈ common(min_venues=2)" rule is enforced upstream — `compute_dislocation`
+  returns nothing for < 2 venues, so a dislocation naming two distinct venues *is* proof both
+  legs exist; the plugin contract carries no live `Registry` handle so it gates on that evidence
+  rather than re-querying `registry.venues(base)`.
+
+---
+
 ## Standing rules for every card
 1. Read the card's spec sections + §3 + §25 before coding. 2. All numbers from config (§23.12) — the lint will catch you. 3. Write the DoD tests IN the same session; red = not done. 4. `# SPEC-GAP:` any ambiguity. 5. Update VENDOR.md / MODELS.md / RUNBOOK.md when a card touches them. 6. Never modify `core/schemas.py` or the evidence registry without explicit human approval in the session.

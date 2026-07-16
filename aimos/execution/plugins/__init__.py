@@ -11,6 +11,7 @@ from typing import Any
 
 from aimos.execution.base_plugin import ExecutionPlugin
 from aimos.execution.plugins.breakout import Breakout
+from aimos.execution.plugins.cross_exchange_arb import CrossExchangeArb
 from aimos.execution.plugins.funding_rate import FundingRate
 from aimos.execution.plugins.mean_reversion import MeanReversion
 from aimos.execution.plugins.pullback import Pullback
@@ -27,6 +28,7 @@ _CORE: list[tuple[type[ExecutionPlugin], str]] = [
     (MeanReversion, "mean_reversion"),
     (SmartDCA, "smart_dca"),
     (FundingRate, "funding_rate"),
+    (CrossExchangeArb, "cross_exchange_arb"),
 ]
 
 
@@ -44,6 +46,7 @@ def build_plugins(params: Any) -> list[ExecutionPlugin]:
 
 __all__ = [
     "Breakout",
+    "CrossExchangeArb",
     "FundingRate",
     "MeanReversion",
     "Pullback",

@@ -126,6 +126,13 @@ class IntelligenceLayer:
             kl = e.meta.get("key_levels")
             if isinstance(kl, dict):
                 merged.update(kl)
+        # surface cross-exchange dislocation so the arb plugin (P8) can consume it
+        for e in bundle.evidences:
+            if e.name == "price_dislocation":
+                merged["dislocation"] = {"bps": e.meta.get("bps", e.value),
+                                         "buy_venue": e.meta.get("buy_venue"),
+                                         "sell_venue": e.meta.get("sell_venue")}
+                break
         return merged
 
 

@@ -92,6 +92,23 @@ Legend:
 - **How:** give `CrossExchangeEngine(..., venue_series_provider=, venue_relvol_provider=)`
   and it emits `lead_lag` / `venue_divergence_volume`.
 
+## 7b. Cross-exchange arbitrage (P8) — built, disabled by default
+- **What:** `price_dislocation` (USD-converted, depeg-safe §16.1 B-3) is surfaced
+  into `MarketUnderstanding.key_levels["dislocation"]`; the **`CrossExchangeArb`**
+  plugin (`plugins/cross_exchange_arb.py`) turns a spread that clears
+  round-trip costs + `extra_margin_bps` into a simultaneous **buy(cheap)/sell(rich)**
+  candidate (`meta.cross_venue`, `buy_venue`, `sell_venue`). Path is real and
+  tested end-to-end (`tests/test_cross_exchange_arb.py`).
+- **Why off:** true cross-venue execution needs **dual-venue balances** on both
+  legs (§7.2 P8, Phase 3) and a populated `venue_snapshot`. Enabling it in paper
+  mode exercises the full observation→intelligence→plugin→evaluator path against
+  either synthetic per-venue books (offline) or live PUBLIC top-of-book (no keys).
+- **How:** set `features.cross_exchange_enabled: true` **and**
+  `plugins/cross_exchange_arb.yaml enabled: true`. The paper/serve loop then builds
+  `venue_snapshot` across `paper.cross_venues` (live books when `live_data`, else a
+  deterministic synthetic dislocation). Live cross-venue *fills* still require the
+  §23.8 go-live ladder plus balances on each named venue.
+
 ## 8. Ignition trading — detector on, plugin gated
 - **Why gated:** the MomentumIgnition plugin trades violent repricings from a
   caged sub-book (§23.11B); it only fires inside a 15-min entry window on an
@@ -152,6 +169,7 @@ Legend:
 | `features.telegram_enabled` | `false` | Telegram alerts + commands |
 | `features.scalp_enabled` / `scalp.enabled` | `false` | minute-scale scalping |
 | `plugins/market_making.yaml enabled` | `false` | market-making P9 |
+| `features.cross_exchange_enabled` + `plugins/cross_exchange_arb.yaml enabled` | `false` | cross-exchange arbitrage P8 (needs dual-venue balances for live fills) |
 | `features.live_data` | `true` | live public candles vs offline synthetic |
 
 Everything else (all 13 observation engines, rule/bayes/fusion, execution,

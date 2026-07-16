@@ -171,10 +171,14 @@ features:
   scalp_enabled: false              # §17 — mirror of scalp.yaml (post-only, T1 only)
   live_data: true                   # true → fetch live PUBLIC candles (no keys);
                                     # false → offline synthetic data (fully self-contained run)
+  cross_exchange_enabled: false     # §5.11/§7.2 P8 — populate venue_snapshot across
+                                    # paper.cross_venues so price_dislocation + the
+                                    # CrossExchangeArb plugin (also enable it) run
 
 paper:
   symbols: [BTC/USDT, ETH/USDT]     # what to paper-trade (dev set; universe manager owns live)
   data_exchange: binance            # PUBLIC data venue (no API keys needed)
+  cross_venues: [binance, kraken]   # venues sampled for cross-exchange top-of-book (§5.11)
   timeframe: 1h                     # candle timeframe for the loop
   loop_seconds: 300                 # tick cadence · seconds
   history_bars: 400                 # warmup candles fetched per tick

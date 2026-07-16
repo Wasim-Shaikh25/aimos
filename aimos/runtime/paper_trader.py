@@ -29,7 +29,13 @@ from aimos.core.clock import LiveClock
 from aimos.core.config import Params, load_params
 from aimos.core.schemas import Action, CapacityCaps, ExecContext, Timeframe
 from aimos.data.context import build_context
-from aimos.data.live_source import CcxtPublicSource, SyntheticSource, base_of
+from aimos.data.live_source import (
+    CcxtPublicSource,
+    SyntheticSource,
+    base_of,
+    live_venue_snapshot,
+    synthetic_venue_snapshot,
+)
 from aimos.execution.broker.paper import PaperBroker
 from aimos.execution.position_sizer import SizingInputs
 from aimos.execution.risk_manager import RiskState
@@ -47,6 +53,18 @@ class PaperRunSummary:
     no_trades: int = 0
     final_equity: float = 0.0
     telegram_messages: list[str] = field(default_factory=list)
+
+
+def _venue_snapshot(features, paper, symbol, mid, now, live_data):
+    """Cross-exchange top-of-book when enabled (§5.11): live books, else synthetic."""
+    if not features.get("cross_exchange_enabled"):
+        return None
+    venues = list(paper.get("cross_venues", []))
+    if len(venues) < 2:
+        return None
+    if live_data:
+        return live_venue_snapshot(symbol, now, venues)
+    return synthetic_venue_snapshot(symbol, mid, now, venues)
 
 
 def _caps(params: Params) -> CapacityCaps:
@@ -102,8 +120,10 @@ async def run_paper(
             if df.empty:
                 continue
             now = df.index[-1].to_pydatetime().astimezone(timezone.utc)
-            ctx = build_context(base_of(symbol), now, {Timeframe(tf): df}, peers={"BTC": btc_df})
             last = df.iloc[-1]
+            venue_snapshot = _venue_snapshot(features, paper, symbol, float(last["close"]), now, live_data)
+            ctx = build_context(base_of(symbol), now, {Timeframe(tf): df},
+                                peers={"BTC": btc_df}, venue_snapshot=venue_snapshot)
             exec_ctx = ExecContext(
                 equity_usdt=broker.equity(), open_positions=broker.positions(),
                 portfolio_heat_pct=0.0, fee_taker_bps=float(costs_cfg["taker_bps"]),

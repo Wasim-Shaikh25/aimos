@@ -16,10 +16,11 @@ venv/
 env/
 
 # Data & state (never commit market data, journals, secrets)
-data/
-state/
-runs/
-proposals/
+# NOTE: anchored to repo root so they don't swallow the aimos/data/ source package.
+/data/
+/state/
+/runs/
+/proposals/
 *.parquet
 *.sqlite
 *.db
