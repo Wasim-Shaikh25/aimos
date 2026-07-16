@@ -1,17 +1,15 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
+import { usePoll } from '../hooks'
 import { Badge, Table, Empty } from '../components/ui'
 export default function Markets() {
-  const [rows, setRows] = useState(null)
-  useEffect(() => { api.decisions(50).then(d => {
-    if (!d) return setRows([])
-    const bySym = {}
-    for (const x of d.decisions) if (!bySym[x.symbol]) bySym[x.symbol] = x
-    setRows(Object.values(bySym))
-  }) }, [])
-  if (!rows) return <div className="page">loading…</div>
-  return <div className="page"><h1>Markets</h1>
+  const { data } = usePoll(() => api.decisions(400), 4000)
+  if (data === undefined) return <div className="page">loading…</div>
+  const bySym = {}
+  for (const x of (data?.decisions || [])) if (!bySym[x.symbol]) bySym[x.symbol] = x
+  const rows = Object.values(bySym).sort((a, b) => a.symbol.localeCompare(b.symbol))
+  return <div className="page"><h1>Markets <span className="muted" style={{ fontSize: 14 }}>({rows.length} assets)</span></h1>
     {rows.length === 0 ? <Empty what="decisions" /> :
       <Table cols={['Asset', 'Regime', 'p_up', 'Confidence', 'Opportunity', 'Risk', 'Action']}
         rows={rows.map(r => {

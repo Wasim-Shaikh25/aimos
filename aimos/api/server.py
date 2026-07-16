@@ -32,10 +32,13 @@ class AppState:
     positions_provider: Any = None  # callable -> list[dict]
     equity_provider: Any = None  # callable -> list[float]
     latest_state: dict = field(default_factory=dict)  # symbol -> MarketUnderstanding dict
-    matrix_provider: Any = None  # callable -> universe matrix dict
+    matrix_provider: Any = None  # callable -> universe payload {matrix,tiers,rejections,...}
     effective_config: dict = field(default_factory=dict)  # §16.2 Screen 8
     agents_provider: Any = None  # callable -> {"agents": [...]}
     proposals_provider: Any = None  # callable -> {"proposals": [...]}
+    evidence_provider: Any = None  # callable(symbol) -> {"evidences": [...]} (13 engines)
+    strategies_provider: Any = None  # callable -> {"strategies": [...]} (execution plugins)
+    models_provider: Any = None  # callable -> {"models": [...]} (rule/bayes/ml + learning)
 
 
 def _decisions(journal: Journal, limit: int) -> list[dict]:
@@ -124,6 +127,21 @@ def create_app(state: AppState) -> FastAPI:
     @app.get("/api/config/effective")
     def get_config():
         return state.effective_config
+
+    @app.get("/api/evidence/{symbol}")
+    def get_evidence(symbol: str):
+        # per-engine evidence for the latest tick (Engines screen, §5/§16.2)
+        return state.evidence_provider(symbol) if state.evidence_provider else {"evidences": []}
+
+    @app.get("/api/strategies")
+    def get_strategies():
+        # execution plugins: config + how often each was chosen (Strategies screen, §7)
+        return state.strategies_provider() if state.strategies_provider else {"strategies": []}
+
+    @app.get("/api/models")
+    def get_models():
+        # reasoning models rule/bayes/ml + learning status (Models screen, §6/§8)
+        return state.models_provider() if state.models_provider else {"models": []}
 
     @app.get("/api/agents")
     def get_agents():

@@ -53,9 +53,20 @@ so you can see exactly what would be sent.
 | `features.llm_news_sensor` | `false` | §19 LLM sensor (needs `ANTHROPIC_API_KEY`) |
 | `features.scalp_enabled` | `false` | §17 minute-scale scalping |
 | `features.cross_exchange_enabled` | `false` | §5.11/§7.2 P8 cross-exchange arb (also enable `plugins/cross_exchange_arb.yaml`) |
-| `paper.symbols` | `[BTC/USDT, ETH/USDT]` | what to paper-trade |
+| `paper.use_universe` | `true` | analyze the discovered/seeded universe (top-N by volume); `false` = just `symbols` |
+| `paper.max_symbols` | `40` | top-N assets analyzed per tick when `use_universe` |
+| `paper.symbols` | `[BTC/USDT, ETH/USDT]` | dev fallback set when `use_universe: false` |
 | `paper.data_exchange` | `binance` | public data venue (no keys) |
 | `paper.cross_venues` | `[binance, kraken]` | venues sampled for cross-exchange top-of-book |
+
+**Universe:** with live exchange access the runtime discovers Binance's real
+USDT-spot pairs (`load_markets`), filters them (stable-quote/liquidity/leveraged),
+and analyzes the top `max_symbols` by 24h volume. Offline (or when the network
+blocks the exchange) it falls back to a bundled seed of ~70 top pairs so the
+dashboard still shows a full multi-venue universe. The dashboard's **Universe**,
+**Engines**, **Strategies**, and **Models** screens surface the discovered
+universe, per-engine evidence, execution plugins, and the rule/bayes/ml models;
+the header shows a live "updated Ns ago" indicator (the UI polls every ~4s).
 | `paper.max_ticks` | `0` | `0` = run forever; `>0` = bounded run |
 
 Any config key is env-overridable: `AIMOS__SECTION__KEY=value` (double-underscore

@@ -176,7 +176,11 @@ features:
                                     # CrossExchangeArb plugin (also enable it) run
 
 paper:
-  symbols: [BTC/USDT, ETH/USDT]     # what to paper-trade (dev set; universe manager owns live)
+  use_universe: true                # true → analyze the discovered/seeded universe (top-N by
+                                    # volume); false → just the `symbols` dev set below
+  max_symbols: 40                   # top-N bases analyzed per tick when use_universe (§16.1 tiers)
+  universe_refresh_ticks: 60        # rebuild the universe every N ticks (rediscovery cadence)
+  symbols: [BTC/USDT, ETH/USDT]     # dev fallback set when use_universe: false
   data_exchange: binance            # PUBLIC data venue (no API keys needed)
   cross_venues: [binance, kraken]   # venues sampled for cross-exchange top-of-book (§5.11)
   timeframe: 1h                     # candle timeframe for the loop

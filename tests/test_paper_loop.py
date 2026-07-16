@@ -10,13 +10,29 @@ from aimos.runtime.paper_trader import run_paper
 from aimos.telegram.sink import TelegramSink
 
 
+def _universe_size() -> int:
+    from aimos.data.universe_source import build_universe
+    p = load_params().model_dump()
+    uni = build_universe(p["paper"]["data_exchange"], p["universe"],
+                         live_data=False, max_symbols=int(p["paper"]["max_symbols"]))
+    return len(uni.selected)
+
+
 def test_paper_loop_runs_offline_no_keys():
-    # fully offline (synthetic data), no exchange/telegram keys → completes
+    # fully offline (synthetic data), no exchange/telegram keys → completes.
+    # use_universe is on by default, so the loop analyzes the top-N universe.
     summary = asyncio.run(run_paper(offline=True, max_ticks=3))
     assert summary.ticks == 3
-    assert summary.decisions == 6  # 2 dev symbols × 3 ticks
+    assert summary.decisions == _universe_size() * 3  # N universe symbols × 3 ticks
     assert summary.decisions == summary.trades_opened + summary.no_trades
     assert summary.final_equity > 0
+
+
+def test_paper_loop_dev_set_when_universe_disabled():
+    params = load_params()
+    params.paper.use_universe = False  # fall back to the 2-symbol dev set
+    summary = asyncio.run(run_paper(params=params, offline=True, max_ticks=3))
+    assert summary.decisions == 6  # 2 dev symbols × 3 ticks
 
 
 def test_paper_loop_is_deterministic_offline():

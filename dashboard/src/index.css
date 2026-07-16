@@ -6,6 +6,12 @@ a { color:var(--blue); text-decoration:none; } a:hover { text-decoration:underli
 .chrome { display:flex; gap:18px; align-items:center; padding:10px 16px; background:var(--panel);
   border-bottom:1px solid var(--line); font-size:13px; }
 .chrome .stat b { color:var(--text); } .chrome .stat { color:var(--muted); }
+.chrome .live { margin-left:auto; display:inline-flex; align-items:center; gap:6px; }
+.chrome .live .dot { width:8px; height:8px; border-radius:50%; background:var(--green);
+  box-shadow:0 0 0 0 rgba(46,194,126,.6); animation:pulse 1.6s infinite; }
+@keyframes pulse { 0% { box-shadow:0 0 0 0 rgba(46,194,126,.5); } 70% { box-shadow:0 0 0 6px rgba(46,194,126,0); } 100% { box-shadow:0 0 0 0 rgba(46,194,126,0); } }
+select { background:#222836; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
+summary::-webkit-details-marker { color:var(--muted); }
 nav.side { display:flex; gap:6px; flex-wrap:wrap; padding:8px 16px; background:var(--panel);
   border-bottom:1px solid var(--line); }
 nav.side a { padding:6px 10px; border-radius:6px; color:var(--muted); }

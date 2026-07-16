@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { api } from '../api'
+import { usePoll } from '../hooks'
 import { Table, Tile, Empty } from '../components/ui'
 export default function PositionsRisk() {
-  const [p, setP] = useState(null); const [s, setS] = useState(null)
-  useEffect(() => { api.positions().then(setP); api.stats().then(setS) }, [])
+  const { data: p } = usePoll(api.positions, 4000)
   const pos = p?.positions || []
   return <div className="page"><h1>Positions & Risk</h1>
     <div className="tiles">

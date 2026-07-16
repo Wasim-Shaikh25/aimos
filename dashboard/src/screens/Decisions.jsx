@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { api } from '../api'
+import { usePoll } from '../hooks'
 import { Badge, Table, Empty } from '../components/ui'
 export default function Decisions() {
-  const [d, setD] = useState(null)
-  useEffect(() => { api.decisions(50).then(setD) }, [])
-  if (!d) return <div className="page">loading…</div>
-  if (!d.decisions?.length) return <div className="page"><h1>Decisions</h1><Empty what="decisions" /></div>
+  const { data: d } = usePoll(() => api.decisions(100), 4000)
+  if (d === undefined) return <div className="page">loading…</div>
+  if (!d?.decisions?.length) return <div className="page"><h1>Decisions</h1><Empty what="decisions" /></div>
   return <div className="page"><h1>Decisions</h1>
     <Table cols={['Time', 'Symbol', 'Regime', 'p_up', 'Plugin', 'Action', 'Score']}
       rows={d.decisions.map(x => { const u = x.record.understanding, c = x.record.chosen

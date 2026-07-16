@@ -61,14 +61,26 @@ def build_app(offline: Optional[bool] = None):
     caps = _caps(params)
     source = _make_source(live_data, paper["data_exchange"])
 
-    holder = {"latest": {}, "equity": [broker.equity()]}
+    universe = _build_universe(params, live_data)
+    holder = {
+        "latest": {},          # base -> MarketUnderstanding dict (Markets/Anatomy)
+        "evidence": {},        # base -> list[Evidence dict] (Engines screen)
+        "equity": [broker.equity()],
+        "universe": universe,  # Universe object (matrix/tiers/rejections)
+        "chosen": {},          # plugin name -> times chosen (Strategies screen)
+        "updated": None,       # ISO timestamp of the last completed tick (live badge)
+        "tick": 0,
+    }
 
     async def loop() -> None:
-        symbols = list(paper["symbols"])
         tf = paper["timeframe"]
         bars = int(paper["history_bars"])
+        refresh = int(paper.get("universe_refresh_ticks", 60))
         while True:
             try:
+                if refresh > 0 and holder["tick"] > 0 and holder["tick"] % refresh == 0:
+                    holder["universe"] = _build_universe(params, live_data)
+                symbols = _loop_symbols(holder["universe"], paper)
                 btc = source.fetch("BTC/USDT", tf, bars)
                 for symbol in symbols:
                     df = source.fetch(symbol, tf, bars)
@@ -96,9 +108,13 @@ def build_app(offline: Optional[bool] = None):
                     )
                     if res.plan.action is not Action.NO_TRADE:
                         broker.place(res.plan)
+                        holder["chosen"][res.plan.plugin] = holder["chosen"].get(res.plan.plugin, 0) + 1
                     broker.step(base_of(symbol), last.to_dict(), now)
                     holder["latest"][base_of(symbol)] = res.understanding.model_dump(mode="json")
+                    holder["evidence"][base_of(symbol)] = [e.model_dump(mode="json") for e in res.evidences]
                 holder["equity"].append(broker.equity())
+                holder["updated"] = clock.now().isoformat()
+                holder["tick"] += 1
                 heartbeat.beat()
             except Exception:  # noqa: BLE001 — the loop must never die
                 log.exception("serve_loop_error")
@@ -107,7 +123,8 @@ def build_app(offline: Optional[bool] = None):
     @asynccontextmanager
     async def lifespan(app):
         task = asyncio.create_task(loop())
-        log.info("serve_started", live_data=live_data, dashboard=DIST.exists())
+        log.info("serve_started", live_data=live_data, dashboard=DIST.exists(),
+                 universe=holder["universe"].source, symbols=len(holder["universe"].selected))
         yield
         task.cancel()
 
@@ -116,11 +133,102 @@ def build_app(offline: Optional[bool] = None):
         positions_provider=lambda: [p.model_dump(mode="json") for p in broker.positions()],
         equity_provider=lambda: holder["equity"],
         latest_state=holder["latest"], effective_config=params.model_dump(),
+        matrix_provider=lambda: _universe_payload(holder["universe"], paper, holder),
+        evidence_provider=lambda sym: {"evidences": holder["evidence"].get(base_of(sym), [])},
+        strategies_provider=lambda: _strategies_payload(params, holder["chosen"]),
+        models_provider=lambda: _models_payload(params, holder["latest"]),
     )
     app = create_app(state)
     app.router.lifespan_context = lifespan
     _mount_dashboard(app)
     return app
+
+
+def _build_universe(params, live_data: bool):
+    """Build the trading universe, or a 2-symbol dev Universe when disabled."""
+    from aimos.data.universe_source import Universe, build_universe
+    paper = params.paper.model_dump()
+    if not paper.get("use_universe", True):
+        bases = [base_of(s) for s in paper["symbols"]]
+        reg = None
+        from aimos.universe.registry import Registry
+        from aimos.universe.discovery import MarketInfo
+        reg = Registry(primary_exchange=paper["data_exchange"])
+        for b in bases:
+            reg.add_market(MarketInfo(exchange=paper["data_exchange"], symbol=f"{b}/USDT",
+                                      base=b, quote="USDT", type="spot", active=True,
+                                      min_notional=5.0, lot_step=0.0, taker_bps=7.5, maker_bps=2.0))
+        return Universe(registry=reg, order=bases, selected=bases,
+                        symbols=list(paper["symbols"]), source="dev-set",
+                        total_discovered=len(bases),
+                        tiers={b: "t1" for b in bases})
+    return build_universe(paper["data_exchange"], params.universe.model_dump(),
+                          live_data=live_data, max_symbols=int(paper.get("max_symbols", 40)))
+
+
+def _loop_symbols(universe, paper) -> list:
+    return universe.symbols if universe.symbols else list(paper["symbols"])
+
+
+def _universe_payload(universe, paper, holder) -> dict:
+    return {
+        "matrix": universe.matrix(),
+        "tiers": universe.tiers,
+        "rejections": universe.rejections,
+        "source": universe.source,
+        "total_discovered": universe.total_discovered,
+        "selected": universe.selected,
+        "cross_venues": list(paper.get("cross_venues", [])),
+        "cross_venue_bases": sorted(universe.cross_venue_bases(
+            int(paper.get("min_venues", 2)) if paper.get("min_venues") else 2)),
+        "updated": holder.get("updated"),
+    }
+
+
+def _strategies_payload(params, chosen: dict) -> dict:
+    """Every execution plugin: config + how often it was chosen this run (§7)."""
+    from aimos.execution.plugins import _CORE
+    plugin_cfgs = params.plugins
+    rows = []
+    for cls, key in _CORE:
+        raw = plugin_cfgs.get(key)
+        cfg = raw.model_dump() if hasattr(raw, "model_dump") else (raw or {})
+        regimes = sorted(r.value for r in getattr(cls, "required_regimes", set())) or ["any"]
+        rows.append({
+            "name": cls.name, "key": key,
+            "enabled": bool(cfg.get("enabled", True)),
+            "regimes": regimes,
+            "min_confidence": cfg.get("min_confidence", 0),
+            "min_coin_health": cfg.get("min_coin_health", 0),
+            "chosen": chosen.get(cls.name, 0),
+            "config": cfg,
+        })
+    return {"strategies": rows}
+
+
+def _models_payload(params, latest: dict) -> dict:
+    """The three reasoning models (rule/bayes/ml) + learning/fusion status (§6/§8)."""
+    intel = params.intelligence.model_dump()
+    learning = params.model_dump().get("learning", {})
+    weights = intel.get("fusion_weights", {}) or {}
+    votes = {}
+    for base, mu in latest.items():
+        for eng, p in (mu.get("engine_votes") or {}).items():
+            votes.setdefault(eng, []).append(p)
+    avg = {k: (sum(v) / len(v) if v else None) for k, v in votes.items()}
+    ml_path = intel.get("ml_model_path") or learning.get("ml", {}).get("model_path")
+    import os
+    ml_loaded = bool(ml_path) and os.path.exists(ml_path)
+    return {"models": [
+        {"name": "RuleEngine", "kind": "deterministic rules", "fusion_weight": weights.get("rule"),
+         "avg_p_up": avg.get("rule"), "status": "active"},
+        {"name": "BayesEngine", "kind": "naive-Bayes behavior likelihoods",
+         "fusion_weight": weights.get("bayes"), "avg_p_up": avg.get("bayes"), "status": "active"},
+        {"name": "MLEngine", "kind": "logistic (learned)", "fusion_weight": weights.get("ml"),
+         "avg_p_up": avg.get("ml"),
+         "status": "loaded" if ml_loaded else ("shadow (weight 0)" if not weights.get("ml") else "active"),
+         "model_path": ml_path, "loaded": ml_loaded},
+    ], "fusion_weights": weights, "learning": learning}
 
 
 def _mount_dashboard(app) -> None:

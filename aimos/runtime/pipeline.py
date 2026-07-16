@@ -56,6 +56,7 @@ class TickResult:
     plan: TradePlan
     decision_id: str
     forced_no_trade: bool
+    evidences: list = field(default_factory=list)  # raw Evidence for the engines view
 
 
 class PipelineOrchestrator:
@@ -133,7 +134,7 @@ class PipelineOrchestrator:
             if plan.action is not Action.NO_TRADE:
                 self.bus.publish(Topic.TRADE_OPENED, {"symbol": symbol, "plan": plan.plugin})
 
-        return TickResult(mu, plan, decision_id, forced)
+        return TickResult(mu, plan, decision_id, forced, list(bundle.evidences))
 
     @staticmethod
     def _forced_no_trade(mu: MarketUnderstanding) -> TradePlan:

@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { api } from '../api'
+import { usePoll } from '../hooks'
 import { Tile, Spark, Empty } from '../components/ui'
 export default function Performance() {
-  const [eq, setEq] = useState(null); const [s, setS] = useState(null)
-  useEffect(() => { api.equity().then(setEq); api.stats().then(setS) }, [])
+  const { data: eq } = usePoll(api.equity, 4000)
+  const { data: s } = usePoll(api.stats, 4000)
   const curve = eq?.equity || []
   return <div className="page"><h1>Performance</h1>
     <div className="tiles">

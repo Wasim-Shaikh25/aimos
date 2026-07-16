@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { api } from '../api'
+import { usePoll } from '../hooks'
 import { Table, Empty } from '../components/ui'
 export default function Agents() {
-  const [a, setA] = useState(undefined); const [p, setP] = useState(null)
-  useEffect(() => { api.agents().then(setA); api.proposals().then(setP) }, [])
+  const { data: a } = usePoll(api.agents, 6000)
+  const { data: p } = usePoll(api.proposals, 6000)
   return <div className="page"><h1>Agents</h1>
     <h2>Roster</h2>
     {a?.agents?.length ? <Table cols={['Agent', 'Status', 'Last run']}

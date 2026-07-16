@@ -90,7 +90,15 @@ async def run_paper(
 
     live_data = features["live_data"] if offline is None else (not offline)
     ticks_limit = max_ticks if max_ticks is not None else int(paper["max_ticks"])
-    symbols = list(paper["symbols"])
+    if paper.get("use_universe", True):
+        from aimos.data.universe_source import build_universe
+        uni = build_universe(paper["data_exchange"], params.universe.model_dump(),
+                             live_data=live_data, max_symbols=int(paper.get("max_symbols", 40)))
+        symbols = uni.symbols or list(paper["symbols"])
+        log.info("universe_built", source=uni.source, discovered=uni.total_discovered,
+                 analyzing=len(symbols))
+    else:
+        symbols = list(paper["symbols"])
     tf = paper["timeframe"]
     bars = int(paper["history_bars"])
     loop_seconds = float(paper["loop_seconds"])
