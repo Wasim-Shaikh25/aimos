@@ -99,8 +99,14 @@ def _live_markets(exchange_id: str, quote: str) -> tuple[list[MarketInfo], list[
 
 def build_universe(
     exchange_id: str, universe_cfg: dict, *, live_data: bool, max_symbols: int,
+    prefer_cross_venue: bool = False, min_venues: int = 2,
 ) -> Universe:
-    """Assemble the tradable universe (live discovery or seed fallback)."""
+    """Assemble the tradable universe (live discovery or seed fallback).
+
+    ``prefer_cross_venue`` biases the top-N toward assets that trade on
+    ≥ ``min_venues`` venues (stable within volume rank) — used when cross-exchange
+    arb is enabled so we don't spend arb slots on single-venue coins.
+    """
     quotes = universe_cfg.get("quotes", {})
     primary = str(quotes.get("primary", "USDT")).upper()
     allowed = {q.upper() for q in quotes.get("allowed", ["USDT", "USDC"])}
@@ -138,10 +144,15 @@ def build_universe(
             rejections[res.reason] = rejections.get(res.reason, 0) + 1
 
     ranked = [b for b in order if b.upper() in kept]
-    selected = ranked[: max(1, int(max_symbols))]
-    # tiering: the first t1_max ranked bases are majors (T1), the rest T2 (§16.1)
+    # tiering stays by volume rank: first t1_max ranked bases are majors (§16.1)
     t1_max = int(universe_cfg.get("tiers", {}).get("t1_max", 12))
     tiers = {b: ("t1" if i < t1_max else "t2") for i, b in enumerate(ranked)}
+
+    ordered = ranked
+    if prefer_cross_venue:  # multi-venue coins first, volume order kept within group
+        cross = {c.upper() for c in common(registry, min_venues=min_venues)}
+        ordered = sorted(ranked, key=lambda b: 0 if b.upper() in cross else 1)
+    selected = ordered[: max(1, int(max_symbols))]
 
     return Universe(
         registry=registry, order=ranked, selected=selected,
@@ -151,4 +162,38 @@ def build_universe(
     )
 
 
-__all__ = ["Universe", "build_universe"]
+def _dev_universe(paper: dict) -> Universe:
+    """A Universe over just the 2-symbol dev set (use_universe: false)."""
+    from aimos.universe.registry import Registry
+    bases = [s.split("/")[0] for s in paper["symbols"]]
+    quote = (paper["symbols"][0].split("/")[1] if "/" in paper["symbols"][0] else "USDT")
+    reg = Registry(primary_exchange=paper["data_exchange"])
+    for b in bases:
+        reg.add_market(MarketInfo(exchange=paper["data_exchange"], symbol=f"{b}/{quote}",
+                                  base=b, quote=quote, type="spot", active=True,
+                                  min_notional=5.0, lot_step=0.0, taker_bps=7.5, maker_bps=2.0))
+    return Universe(registry=reg, order=bases, selected=bases, symbols=list(paper["symbols"]),
+                    source="dev-set", total_discovered=len(bases),
+                    tiers={b: "t1" for b in bases})
+
+
+def runtime_universe(params, live_data: bool) -> Universe:
+    """Universe for the live loop — shared by serve + paper_trader.
+
+    Real top-N when ``paper.use_universe``, else the dev set. Biases toward
+    multi-venue coins when cross-exchange arb is enabled (features flag).
+    """
+    paper = params.paper.model_dump()
+    if not paper.get("use_universe", True):
+        return _dev_universe(paper)
+    ucfg = params.universe.model_dump()
+    features = params.features.model_dump()
+    return build_universe(
+        paper["data_exchange"], ucfg, live_data=live_data,
+        max_symbols=int(paper.get("max_symbols", 40)),
+        prefer_cross_venue=bool(features.get("cross_exchange_enabled")),
+        min_venues=int(ucfg.get("intersection", {}).get("min_venues", 2)),
+    )
+
+
+__all__ = ["Universe", "build_universe", "runtime_universe"]

@@ -103,9 +103,15 @@ Legend:
   legs (§7.2 P8, Phase 3) and a populated `venue_snapshot`. Enabling it in paper
   mode exercises the full observation→intelligence→plugin→evaluator path against
   either synthetic per-venue books (offline) or live PUBLIC top-of-book (no keys).
+- **Per-coin venues:** the loop reads each coin's *actual* venues from the
+  universe registry (`registry.venues(base)`), so BTC is checked on all of
+  binance/kraken/coinbase and a single-venue coin is skipped (no arb possible) —
+  not a fixed 2-venue list. When arb is enabled, universe selection also **biases
+  toward multi-venue coins** so top-N slots aren't spent on un-arbitrageable ones.
 - **How:** set `features.cross_exchange_enabled: true` **and**
   `plugins/cross_exchange_arb.yaml enabled: true`. The paper/serve loop then builds
-  `venue_snapshot` across `paper.cross_venues` (live books when `live_data`, else a
+  `venue_snapshot` from each coin's registry venues (or `paper.cross_venues` in the
+  dev set) — live books when `live_data`, else a
   deterministic synthetic dislocation). Live cross-venue *fills* still require the
   §23.8 go-live ladder plus balances on each named venue.
 

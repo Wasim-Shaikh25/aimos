@@ -33,8 +33,7 @@ from aimos.data.live_source import (
     CcxtPublicSource,
     SyntheticSource,
     base_of,
-    live_venue_snapshot,
-    synthetic_venue_snapshot,
+    venue_snapshot_for,
 )
 from aimos.execution.broker.paper import PaperBroker
 from aimos.execution.position_sizer import SizingInputs
@@ -53,18 +52,6 @@ class PaperRunSummary:
     no_trades: int = 0
     final_equity: float = 0.0
     telegram_messages: list[str] = field(default_factory=list)
-
-
-def _venue_snapshot(features, paper, symbol, mid, now, live_data):
-    """Cross-exchange top-of-book when enabled (§5.11): live books, else synthetic."""
-    if not features.get("cross_exchange_enabled"):
-        return None
-    venues = list(paper.get("cross_venues", []))
-    if len(venues) < 2:
-        return None
-    if live_data:
-        return live_venue_snapshot(symbol, now, venues)
-    return synthetic_venue_snapshot(symbol, mid, now, venues)
 
 
 def _caps(params: Params) -> CapacityCaps:
@@ -90,15 +77,13 @@ async def run_paper(
 
     live_data = features["live_data"] if offline is None else (not offline)
     ticks_limit = max_ticks if max_ticks is not None else int(paper["max_ticks"])
-    if paper.get("use_universe", True):
-        from aimos.data.universe_source import build_universe
-        uni = build_universe(paper["data_exchange"], params.universe.model_dump(),
-                             live_data=live_data, max_symbols=int(paper.get("max_symbols", 40)))
-        symbols = uni.symbols or list(paper["symbols"])
-        log.info("universe_built", source=uni.source, discovered=uni.total_discovered,
-                 analyzing=len(symbols))
-    else:
-        symbols = list(paper["symbols"])
+    refresh = int(paper.get("universe_refresh_ticks", 60))
+
+    from aimos.data.universe_source import runtime_universe
+    universe = runtime_universe(params, live_data)
+    symbols = universe.symbols or list(paper["symbols"])
+    log.info("universe_built", source=universe.source, discovered=universe.total_discovered,
+             analyzing=len(symbols))
     tf = paper["timeframe"]
     bars = int(paper["history_bars"])
     loop_seconds = float(paper["loop_seconds"])
@@ -122,6 +107,9 @@ async def run_paper(
     summary = PaperRunSummary()
     tick = 0
     while ticks_limit == 0 or tick < ticks_limit:
+        if refresh > 0 and tick > 0 and tick % refresh == 0:  # rediscover/re-rank (§16.1)
+            universe = runtime_universe(params, live_data)
+            symbols = universe.symbols or list(paper["symbols"])
         btc_df = source.fetch("BTC/USDT", tf, bars)  # peer for the correlation engine
         for symbol in symbols:
             df = source.fetch(symbol, tf, bars)
@@ -129,7 +117,8 @@ async def run_paper(
                 continue
             now = df.index[-1].to_pydatetime().astimezone(timezone.utc)
             last = df.iloc[-1]
-            venue_snapshot = _venue_snapshot(features, paper, symbol, float(last["close"]), now, live_data)
+            venue_snapshot = venue_snapshot_for(features, paper, universe.registry,
+                                                symbol, float(last["close"]), now, live_data)
             ctx = build_context(base_of(symbol), now, {Timeframe(tf): df},
                                 peers={"BTC": btc_df}, venue_snapshot=venue_snapshot)
             exec_ctx = ExecContext(

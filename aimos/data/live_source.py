@@ -127,7 +127,36 @@ def live_venue_snapshot(
     return snap
 
 
+def venue_snapshot_for(
+    features: Mapping, paper: Mapping, registry, symbol: str, mid: float,
+    now: datetime, live_data: bool,
+):
+    """Cross-exchange top-of-book for one coin, using ITS actual venues (§5.11).
+
+    When a ``Registry`` is available we look up the venues this specific base
+    trades on (``registry.venues(base)`` — respects delist/quote-suspension) so a
+    coin on binance/kraken/coinbase is checked on all three, and a single-venue
+    coin is skipped (no cross-venue arb possible). Without a registry (dev mode)
+    we fall back to the configured ``cross_venues``. Returns None when disabled or
+    fewer than 2 venues are available.
+    """
+    if not features.get("cross_exchange_enabled"):
+        return None
+    base = base_of(symbol)
+    if registry is not None and registry.bases():
+        venues = registry.venues(base)
+        if len(venues) < 2:
+            return None  # coin trades on < 2 venues → nothing to arbitrage
+    else:
+        venues = list(paper.get("cross_venues", []))
+        if len(venues) < 2:
+            return None
+    if live_data:
+        return live_venue_snapshot(symbol, now, venues)
+    return synthetic_venue_snapshot(symbol, mid, now, venues)
+
+
 __all__ = [
     "CcxtPublicSource", "DataSource", "SyntheticSource", "base_of",
-    "live_venue_snapshot", "synthetic_venue_snapshot",
+    "live_venue_snapshot", "synthetic_venue_snapshot", "venue_snapshot_for",
 ]

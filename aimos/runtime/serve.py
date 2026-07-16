@@ -33,8 +33,7 @@ from aimos.data.live_source import (
     CcxtPublicSource,
     SyntheticSource,
     base_of,
-    live_venue_snapshot,
-    synthetic_venue_snapshot,
+    venue_snapshot_for,
 )
 from aimos.execution.broker.paper import PaperBroker
 from aimos.execution.position_sizer import SizingInputs
@@ -88,7 +87,8 @@ def build_app(offline: Optional[bool] = None):
                         continue
                     now = df.index[-1].to_pydatetime().astimezone(timezone.utc)
                     last = df.iloc[-1]
-                    vsnap = _venue_snapshot(features, paper, symbol, float(last["close"]), now, live_data)
+                    vsnap = venue_snapshot_for(features, paper, holder["universe"].registry,
+                                               symbol, float(last["close"]), now, live_data)
                     ctx = build_context(base_of(symbol), now, {Timeframe(tf): df},
                                         peers={"BTC": btc}, venue_snapshot=vsnap)
                     exec_ctx = ExecContext(
@@ -145,25 +145,9 @@ def build_app(offline: Optional[bool] = None):
 
 
 def _build_universe(params, live_data: bool):
-    """Build the trading universe, or a 2-symbol dev Universe when disabled."""
-    from aimos.data.universe_source import Universe, build_universe
-    paper = params.paper.model_dump()
-    if not paper.get("use_universe", True):
-        bases = [base_of(s) for s in paper["symbols"]]
-        reg = None
-        from aimos.universe.registry import Registry
-        from aimos.universe.discovery import MarketInfo
-        reg = Registry(primary_exchange=paper["data_exchange"])
-        for b in bases:
-            reg.add_market(MarketInfo(exchange=paper["data_exchange"], symbol=f"{b}/USDT",
-                                      base=b, quote="USDT", type="spot", active=True,
-                                      min_notional=5.0, lot_step=0.0, taker_bps=7.5, maker_bps=2.0))
-        return Universe(registry=reg, order=bases, selected=bases,
-                        symbols=list(paper["symbols"]), source="dev-set",
-                        total_discovered=len(bases),
-                        tiers={b: "t1" for b in bases})
-    return build_universe(paper["data_exchange"], params.universe.model_dump(),
-                          live_data=live_data, max_symbols=int(paper.get("max_symbols", 40)))
+    """Trading universe for the loop (real top-N or dev set) — shared helper."""
+    from aimos.data.universe_source import runtime_universe
+    return runtime_universe(params, live_data)
 
 
 def _loop_symbols(universe, paper) -> list:
@@ -250,18 +234,6 @@ def _mount_dashboard(app) -> None:
     def _spa(full_path: str):  # noqa: ANN202 — SPA fallback (client-side routes)
         f = DIST / full_path
         return FileResponse(str(f if f.is_file() else DIST / "index.html"))
-
-
-def _venue_snapshot(features, paper, symbol, mid, now, live_data):
-    """Cross-exchange top-of-book when enabled (§5.11): live books, else synthetic."""
-    if not features.get("cross_exchange_enabled"):
-        return None
-    venues = list(paper.get("cross_venues", []))
-    if len(venues) < 2:
-        return None
-    if live_data:
-        return live_venue_snapshot(symbol, now, venues)
-    return synthetic_venue_snapshot(symbol, mid, now, venues)
 
 
 def _make_source(live_data: bool, exchange: str):
