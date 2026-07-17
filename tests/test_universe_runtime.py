@@ -93,3 +93,29 @@ def test_serve_exposes_full_universe_and_backend_richness():
         assert ml["fusion_weight"] in (0, 0.0)
         ev = c.get("/api/evidence/BTC").json()["evidences"]
         assert ev and all("name" in e and "reliability" in e for e in ev)
+
+
+def test_serve_per_venue_analysis_and_price_matrix():
+    import os
+    os.environ["AIMOS__FEATURES__CROSS_EXCHANGE_ENABLED"] = "true"
+    try:
+        app = build_app(offline=True)
+        with TestClient(app) as c:
+            time.sleep(3)
+            # §3.1 full analysis per venue → each coin decided on every venue it trades on
+            pm = c.get("/api/prices/matrix").json()
+            assert set(pm["venues"]) >= {"binance", "kraken", "coinbase"}
+            btc = next(r for r in pm["rows"] if r["base"] == "BTC")
+            assert set(btc["venues"]) >= {"binance", "kraken", "coinbase"}  # per-venue mids
+            # realistic dislocation (bps, not tens of %)
+            assert 0 < btc["dislocation_bps"] < 200
+            assert btc["cheap"] != btc["rich"]
+            # per-venue decision present for each venue
+            vs = c.get("/api/venue_state/BTC").json()
+            assert set(vs) >= {"binance", "kraken", "coinbase"}
+            assert all("action" in d and "regime" in d for d in vs.values())
+            # per-venue evidence selectable
+            ek = c.get("/api/evidence/BTC?venue=kraken").json()
+            assert ek["evidences"] and "kraken" in ek["venues"]
+    finally:
+        os.environ.pop("AIMOS__FEATURES__CROSS_EXCHANGE_ENABLED", None)

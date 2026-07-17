@@ -27,7 +27,7 @@ from aimos.api.server import AppState, create_app
 from aimos.backtest import costs as cost_mod
 from aimos.core.clock import LiveClock
 from aimos.core.config import load_params
-from aimos.core.schemas import Action, CapacityCaps, ExecContext, Timeframe
+from aimos.core.schemas import Action, CapacityCaps, ExecContext, Timeframe, VenueTop
 from aimos.data.context import build_context
 from aimos.data.live_source import (
     CcxtPublicSource,
@@ -62,7 +62,12 @@ def build_app(offline: Optional[bool] = None):
     broker = PaperBroker(float(paper["starting_equity_usdt"]), cost_mod.from_config(costs_cfg))
     heartbeat = Heartbeat("state/heartbeat", clock=clock)
     caps = _caps(params)
-    source = _make_source(live_data, paper["data_exchange"])
+    sources: dict = {}  # venue -> DataSource (lazy, per-venue)
+
+    def src(venue: str):
+        if venue not in sources:
+            sources[venue] = _make_source(live_data, venue, seed_salt=_venue_seed(venue))
+        return sources[venue]
 
     # Telegram: same process as the dashboard + loop (one deployable). Dry-run
     # (logs, never sends) when no token, so this is safe with the flag off too.
@@ -75,12 +80,14 @@ def build_app(offline: Optional[bool] = None):
 
     universe = _build_universe(params, live_data)
     holder = {
-        "latest": {},          # base -> MarketUnderstanding dict (Markets/Anatomy)
-        "evidence": {},        # base -> list[Evidence dict] (Engines screen)
+        "latest": {},          # base -> primary-venue MarketUnderstanding (Markets/Anatomy)
+        "evidence": {},        # base -> {venue: [Evidence dict]} (Engines screen, per venue)
+        "venue_state": {},     # base -> {venue: {regime,p_up,confidence,action,plugin}} (§3.1)
+        "prices": {},          # base -> {venues:{v:mid}, dislocation_bps, cheap, rich}
         "equity": [broker.equity()],
-        "universe": universe,  # Universe object (matrix/tiers/rejections)
-        "chosen": {},          # plugin name -> times chosen (Strategies screen)
-        "updated": None,       # ISO timestamp of the last completed tick (live badge)
+        "universe": universe,
+        "chosen": {},
+        "updated": None,
         "tick": 0,
     }
 
@@ -88,43 +95,52 @@ def build_app(offline: Optional[bool] = None):
         tf = paper["timeframe"]
         bars = int(paper["history_bars"])
         refresh = int(paper.get("universe_refresh_ticks", 60))
+        primary_venue = paper["data_exchange"]
         while True:
             try:
                 if refresh > 0 and holder["tick"] > 0 and holder["tick"] % refresh == 0:
                     holder["universe"] = _build_universe(params, live_data)
+                registry = holder["universe"].registry
                 symbols = _loop_symbols(holder["universe"], paper)
-                btc = source.fetch("BTC/USDT", tf, bars)
+                btc = src(primary_venue).fetch("BTC/USDT", tf, bars)
                 for symbol in symbols:
-                    df = source.fetch(symbol, tf, bars)
-                    if df.empty:
+                    base = base_of(symbol)
+                    coin_venues = registry.venues(base) or [primary_venue]
+                    # 1) per-venue candles: real per venue when live; offline a shared
+                    #    walk perturbed a few bps per venue (realistic, §3.1)
+                    venue_df = _fetch_venue_candles(src, primary_venue, coin_venues,
+                                                    symbol, tf, bars, live_data)
+                    if not venue_df:
                         continue
-                    now = df.index[-1].to_pydatetime().astimezone(timezone.utc)
-                    last = df.iloc[-1]
-                    vsnap = venue_snapshot_for(features, paper, holder["universe"].registry,
-                                               symbol, float(last["close"]), now, live_data)
-                    ctx = build_context(base_of(symbol), now, {Timeframe(tf): df},
-                                        peers={"BTC": btc}, venue_snapshot=vsnap)
-                    exec_ctx = ExecContext(
-                        equity_usdt=broker.equity(), open_positions=broker.positions(),
-                        portfolio_heat_pct=0.0, fee_taker_bps=float(costs_cfg["taker_bps"]),
-                        fee_maker_bps=float(costs_cfg["maker_bps"]),
-                        slippage_entry_bps=float(costs_cfg["slip_base_bps"]),
-                        slippage_exit_bps=float(costs_cfg["slip_base_bps"]),
-                        venue=paper["data_exchange"], caps=caps,
-                    )
-                    depth = float(costs_cfg["volume_proxy_depth_frac"]) * float(last["volume"]) * float(last["close"])
-                    res = await orch.tick(
-                        ctx, exec_ctx,
-                        SizingInputs(volume_24h_usd=float(last["volume"]) * float(last["close"]),
-                                     book_depth_1pct_usd=depth),
-                        RiskState(open_positions=len(broker.positions())),
-                    )
-                    if res.plan.action is not Action.NO_TRADE:
-                        broker.place(res.plan)
-                        holder["chosen"][res.plan.plugin] = holder["chosen"].get(res.plan.plugin, 0) + 1
-                    broker.step(base_of(symbol), last.to_dict(), now)
-                    holder["latest"][base_of(symbol)] = res.understanding.model_dump(mode="json")
-                    holder["evidence"][base_of(symbol)] = [e.model_dump(mode="json") for e in res.evidences]
+                    primary = primary_venue if primary_venue in venue_df else next(iter(venue_df))
+                    now = venue_df[primary].index[-1].to_pydatetime().astimezone(timezone.utc)
+                    # 2) cross-venue snapshot from the per-venue mids (for §5.11 engine)
+                    vsnap = _snapshot_from_mids(venue_df, now, features)
+                    # 3) analyze on EVERY venue (primary journaled/traded; others display)
+                    per_venue, prices = {}, {}
+                    for v, d in venue_df.items():
+                        last = d.iloc[-1]
+                        exec_ctx = _exec_ctx(broker, costs_cfg, caps, v)
+                        ctx = build_context(base, now, {Timeframe(tf): d},
+                                            peers={"BTC": btc}, venue_snapshot=vsnap)
+                        depth = float(costs_cfg["volume_proxy_depth_frac"]) * float(last["volume"]) * float(last["close"])
+                        sizing = SizingInputs(volume_24h_usd=float(last["volume"]) * float(last["close"]),
+                                              book_depth_1pct_usd=depth)
+                        risk = RiskState(open_positions=len(broker.positions()))
+                        if v == primary:
+                            res = await orch.tick(ctx, exec_ctx, sizing, risk)
+                            if res.plan.action is not Action.NO_TRADE:
+                                broker.place(res.plan)
+                                holder["chosen"][res.plan.plugin] = holder["chosen"].get(res.plan.plugin, 0) + 1
+                            broker.step(base, last.to_dict(), now)
+                            holder["latest"][base] = res.understanding.model_dump(mode="json")
+                        else:
+                            res = orch.analyze(ctx, exec_ctx, sizing, risk)
+                        holder["evidence"].setdefault(base, {})[v] = [e.model_dump(mode="json") for e in res.evidences]
+                        per_venue[v] = _venue_summary(res)
+                        prices[v] = float(last["close"])
+                    holder["venue_state"][base] = per_venue
+                    holder["prices"][base] = _price_row(prices)
                 holder["equity"].append(broker.equity())
                 holder["updated"] = clock.now().isoformat()
                 holder["tick"] += 1
@@ -151,9 +167,14 @@ def build_app(offline: Optional[bool] = None):
         equity_provider=lambda: holder["equity"],
         latest_state=holder["latest"], effective_config=params.model_dump(),
         matrix_provider=lambda: _universe_payload(holder["universe"], paper, holder),
-        evidence_provider=lambda sym: {"evidences": holder["evidence"].get(base_of(sym), [])},
+        evidence_provider=lambda sym, venue=None: {
+            "evidences": _pick_evidence(holder["evidence"].get(base_of(sym), {}), venue),
+            "venues": sorted(holder["evidence"].get(base_of(sym), {})),
+        },
         strategies_provider=lambda: _strategies_payload(params, holder["chosen"]),
         models_provider=lambda: _models_payload(params, holder["latest"]),
+        prices_provider=lambda: _prices_payload(holder),
+        venue_state_provider=lambda sym: holder["venue_state"].get(base_of(sym), {}),
     )
     app = create_app(state)
     app.router.lifespan_context = lifespan
@@ -232,6 +253,95 @@ def _models_payload(params, latest: dict) -> dict:
     ], "fusion_weights": weights, "learning": learning}
 
 
+# -- multi-venue helpers (§3.1, Phase A) -------------------------------------
+
+
+def _venue_seed(venue: str) -> int:
+    return abs(hash(venue)) % 997  # per-venue deterministic offset for synthetic data
+
+
+def _fetch_venue_candles(src, primary_venue, venues, symbol, tf, bars, live_data):
+    """Per-venue OHLCV. Real per-venue candles when a live source is available;
+    otherwise (synthetic — offline OR ccxt-absent fallback) one shared walk
+    perturbed a few bps per venue, so per-venue prices stay realistically close."""
+    from aimos.data.live_source import SyntheticSource, perturb_for_venue
+    primary_src = src(primary_venue)
+    if isinstance(primary_src, SyntheticSource):
+        base = primary_src.fetch(symbol, tf, bars)
+        if base.empty:
+            return {}
+        return {v: perturb_for_venue(base, v) for v in venues}
+    out = {}
+    for v in venues:
+        d = src(v).fetch(symbol, tf, bars)
+        if not d.empty:
+            out[v] = d
+    return out
+
+
+def _exec_ctx(broker, costs_cfg, caps, venue):
+    return ExecContext(
+        equity_usdt=broker.equity(), open_positions=broker.positions(),
+        portfolio_heat_pct=0.0, fee_taker_bps=float(costs_cfg["taker_bps"]),
+        fee_maker_bps=float(costs_cfg["maker_bps"]),
+        slippage_entry_bps=float(costs_cfg["slip_base_bps"]),
+        slippage_exit_bps=float(costs_cfg["slip_base_bps"]),
+        venue=venue, caps=caps,
+    )
+
+
+def _snapshot_from_mids(venue_df, now, features):
+    """VenueTop per venue from each venue's last close (feeds the §5.11 engine)."""
+    if not features.get("cross_exchange_enabled") or len(venue_df) < 2:
+        return None
+    from aimos.core.normalize import BPS
+    half = float(features.get("venue_spread_bps", 2.0)) / 2.0 / BPS
+    snap = {}
+    for v, d in venue_df.items():
+        mid = float(d.iloc[-1]["close"])
+        snap[v] = VenueTop(exchange=v, best_bid=mid * (1 - half), best_ask=mid * (1 + half),
+                           mid=mid, timestamp=now)
+    return snap
+
+
+def _venue_summary(res) -> dict:
+    mu = res.understanding
+    return {"regime": mu.regime.value, "p_up": round(mu.p_up, 4),
+            "confidence": round(mu.confidence, 4), "action": res.plan.action.value,
+            "plugin": res.plan.plugin}
+
+
+def _price_row(prices: dict) -> dict:
+    """Per-venue mids + max pairwise dislocation (cheap→rich) for the price matrix."""
+    from aimos.observation.cross_exchange import compute_dislocation
+    row = {"venues": {v: round(m, 4) for v, m in prices.items()}}
+    if len(prices) >= 2:
+        result = compute_dislocation(prices)
+        if result:
+            bps, (cheap, rich) = result
+            row.update(dislocation_bps=round(bps, 2), cheap=cheap, rich=rich)
+    return row
+
+
+def _pick_evidence(by_venue: dict, venue):
+    if not by_venue:
+        return []
+    if venue and venue in by_venue:
+        return by_venue[venue]
+    return next(iter(by_venue.values()))  # default: first venue (primary)
+
+
+def _prices_payload(holder) -> dict:
+    rows = []
+    for base in sorted(holder["prices"]):
+        vstate = holder["venue_state"].get(base, {})
+        decisions = {v: {"regime": s["regime"], "action": s["action"], "p_up": s["p_up"]}
+                     for v, s in vstate.items()}
+        rows.append({"base": base, **holder["prices"][base], "decisions": decisions})
+    venues = sorted({v for r in rows for v in r.get("venues", {})})
+    return {"venues": venues, "rows": rows, "updated": holder.get("updated")}
+
+
 def _mount_dashboard(app) -> None:
     if not DIST.exists():
         log.warning("dashboard_not_built", hint="cd dashboard && npm install && npm run build")
@@ -253,16 +363,20 @@ def _mount_dashboard(app) -> None:
         return FileResponse(str(f if f.is_file() else DIST / "index.html"))
 
 
-def _make_source(live_data: bool, exchange: str):
-    """Live public source when requested + ccxt available, else synthetic."""
+def _make_source(live_data: bool, exchange: str, seed_salt: int = 0):
+    """Live public source per venue when available, else per-venue synthetic.
+
+    ``seed_salt`` makes each venue's synthetic candles differ (so per-venue prices
+    and decisions genuinely diverge offline), while staying replay-stable.
+    """
     if not live_data:
-        return SyntheticSource()
+        return SyntheticSource(seed=seed_salt)
     try:
         import ccxt  # noqa: F401 - availability probe
         return CcxtPublicSource(exchange)
     except Exception:  # noqa: BLE001
         log.warning("ccxt_unavailable_fallback_synthetic", hint="pip install -e '.[data]'")
-        return SyntheticSource()
+        return SyntheticSource(seed=seed_salt)
 
 
 def _caps(params) -> CapacityCaps:

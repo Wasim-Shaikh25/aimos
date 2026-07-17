@@ -36,9 +36,11 @@ class AppState:
     effective_config: dict = field(default_factory=dict)  # §16.2 Screen 8
     agents_provider: Any = None  # callable -> {"agents": [...]}
     proposals_provider: Any = None  # callable -> {"proposals": [...]}
-    evidence_provider: Any = None  # callable(symbol) -> {"evidences": [...]} (13 engines)
+    evidence_provider: Any = None  # callable(symbol, venue) -> {"evidences": [...]} (13 engines)
     strategies_provider: Any = None  # callable -> {"strategies": [...]} (execution plugins)
     models_provider: Any = None  # callable -> {"models": [...]} (rule/bayes/ml + learning)
+    prices_provider: Any = None  # callable -> {"venues": [...], "rows": [...]} (price matrix)
+    venue_state_provider: Any = None  # callable(symbol) -> {venue: {regime,p_up,action,...}}
 
 
 def _decisions(journal: Journal, limit: int) -> list[dict]:
@@ -129,9 +131,19 @@ def create_app(state: AppState) -> FastAPI:
         return state.effective_config
 
     @app.get("/api/evidence/{symbol}")
-    def get_evidence(symbol: str):
-        # per-engine evidence for the latest tick (Engines screen, §5/§16.2)
-        return state.evidence_provider(symbol) if state.evidence_provider else {"evidences": []}
+    def get_evidence(symbol: str, venue: Optional[str] = None):
+        # per-engine evidence for the latest tick, per venue (Engines screen, §5/§16.2)
+        return state.evidence_provider(symbol, venue) if state.evidence_provider else {"evidences": []}
+
+    @app.get("/api/prices/matrix")
+    def get_prices():
+        # per-coin per-venue mids + dislocation (multi-platform price matrix, §5.1)
+        return state.prices_provider() if state.prices_provider else {"venues": [], "rows": []}
+
+    @app.get("/api/venue_state/{symbol}")
+    def get_venue_state(symbol: str):
+        # per-venue regime/p_up/action for one coin (§3.1 per-venue decisions)
+        return state.venue_state_provider(symbol) if state.venue_state_provider else {}
 
     @app.get("/api/strategies")
     def get_strategies():

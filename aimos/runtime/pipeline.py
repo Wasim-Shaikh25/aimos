@@ -113,9 +113,7 @@ class PipelineOrchestrator:
     ) -> TickResult:
         symbol = ctx.symbol
         # observation + intelligence run outside the lock (parallel-safe)
-        bundle = run_all(self.obs_engines, ctx)  # per-engine isolation
-        reporting = len(engines_reporting(bundle))
-        mu = self.intel.understand(bundle, reporting)
+        bundle, mu = self._observe_understand(ctx)
 
         forced = False
         async with self.lock:  # portfolio-global stage serialized
@@ -135,6 +133,28 @@ class PipelineOrchestrator:
                 self.bus.publish(Topic.TRADE_OPENED, {"symbol": symbol, "plan": plan.plugin})
 
         return TickResult(mu, plan, decision_id, forced, list(bundle.evidences))
+
+    def _observe_understand(self, ctx: MarketContext):
+        bundle = run_all(self.obs_engines, ctx)  # per-engine isolation (§10.1)
+        reporting = len(engines_reporting(bundle))
+        return bundle, self.intel.understand(bundle, reporting)
+
+    def analyze(
+        self,
+        ctx: MarketContext,
+        exec_ctx: ExecContext,
+        sizing_inputs: Optional[SizingInputs] = None,
+        risk_state: Optional[RiskState] = None,
+    ) -> TickResult:
+        """Observe → understand → decide WITHOUT journaling (for per-venue display).
+
+        Same reasoning as ``tick`` but no lock/pause/halt/journal — used to compute
+        a per-venue MarketUnderstanding + action for the dashboard columns without
+        colliding decision ids or double-journaling (§3.1 multi-venue).
+        """
+        bundle, mu = self._observe_understand(ctx)
+        plan = self.execution.decide(mu, exec_ctx, sizing_inputs, risk_state)
+        return TickResult(mu, plan, "", False, list(bundle.evidences))
 
     @staticmethod
     def _forced_no_trade(mu: MarketUnderstanding) -> TradePlan:

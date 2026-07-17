@@ -80,21 +80,22 @@ each venue with a configured key, run a **read-only preflight**:
 
 ## 3. Multi-venue observation & decision loops
 
-**3.1 What runs per platform.** For every analyzed coin:
-- **Deep TA** (candles/indicators/structure) runs on the coin's **primary venue**
-  (fetching full history from every venue each tick is wasteful and the
-  candles are ~identical). *Recommended default.*
-- **Per-venue overlay**: live top-of-book (mid/bid/ask/spread) is fetched from
-  **every venue the coin trades on**, feeding the cross-exchange engine
-  (dislocation, lead-lag, venue-divergence).
-- Result: one `MarketUnderstanding` per coin **plus** per-venue price/spread data
-  and cross-venue evidence.
+**3.1 What runs per platform.** **DECISION: full analysis per venue** — whatever
+we do today for Binance, we do the same for Kraken and Coinbase. For every
+analyzed coin, on **each venue it trades on**:
+- fetch that venue's candles, run the full 13-engine observation → intelligence →
+  a per-venue `MarketUnderstanding` and a per-venue decision;
+- the cross-exchange engine additionally consumes the per-venue tops
+  (dislocation / lead-lag / venue-divergence).
+- Result: **one MarketUnderstanding + decision per (coin, venue)**, surfaced in the
+  dashboard columns, plus the cross-venue signals.
+- Live execution stays **coordinated at the coin level** (the multi-venue router /
+  portfolio layer, §4) so the same signal isn't blindly opened on all three venues;
+  per-venue decisions are what you *see*, the router decides what actually trades.
 
-**3.2 Acceptance.** For each top-N coin the dashboard can show: its per-venue
-prices, every engine's observation values, and the resulting decision + reason.
-
-> Open decision (see §9): deep TA **primary-only + overlay** (recommended) vs.
-> **independent full analysis per venue** (heavier, rarely different signal).
+**3.2 Acceptance.** For each top-N coin the dashboard shows: its per-venue
+prices, each engine's observation values per venue, and the per-venue decision +
+reason.
 
 ---
 
@@ -197,16 +198,15 @@ A feature ships only when **all** are true:
 
 ---
 
-## 9. Open decisions to confirm before building
-1. **Per-venue analysis depth:** primary-venue deep TA + per-venue price overlay
-   (recommended) — or full independent analysis per venue?
-2. **Initial venues:** binance + kraken + coinbase — confirm the set.
-3. **Secret storage:** a mounted `secrets.yaml` file (recommended) vs. individual
-   env vars vs. a vault?
-4. **Build order:** simulated multi-venue first (visible now, no keys), then live
-   path gated (recommended) — or live path first?
-5. **Arb capital model:** fixed per-venue inventory, or dynamic rebalance? (affects
-   the BalanceManager scope)
+## 9. Decisions (confirmed 2026-07-17)
+1. **Per-venue analysis depth:** ✅ **Full analysis per venue** — same pipeline on
+   every platform (§3.1).
+2. **Initial venues:** ✅ **binance + kraken + coinbase**.
+3. **Secret storage:** ✅ **Support both** — a mounted `secrets.yaml`
+   (`AIMOS_SECRETS_FILE`) takes precedence, individual env vars as fallback (§2.3).
+4. **Build order:** ✅ **Simulated first, then live** (§10 Phase A→D).
+5. **Arb capital model:** deferred to Phase D (BalanceManager starts with fixed
+   per-venue inventory; dynamic rebalance is a later option).
 
 ---
 
