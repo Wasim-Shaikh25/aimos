@@ -55,12 +55,14 @@ class CommandRouter:
         orchestrator: Optional[Any] = None,
         journal: Optional[Any] = None,
         positions_provider: Optional[Any] = None,
+        feature_controller: Optional[Any] = None,
     ) -> None:
         self.whitelist = whitelist
         self.nonce = nonce_store
         self.orch = orchestrator
         self.journal = journal
         self.positions_provider = positions_provider
+        self.features = feature_controller
 
     def handle(self, chat_id: int, text: str) -> Optional[str]:
         if not self.whitelist.is_allowed(chat_id):
@@ -83,6 +85,7 @@ class CommandRouter:
             "/pnl": self._pnl,
             "/pause": lambda: self._pause(args),
             "/resume": lambda: self._resume(args),
+            "/features": self._features,
         }.get(cmd)
         if handler is None:
             return f"unknown command {cmd}\n{_HELP}"
@@ -110,6 +113,8 @@ class CommandRouter:
             if self.orch:
                 self.orch.pause(sym)  # stop new entries; broker flatten wired at deploy
             return f"flatten {sym} requested"
+        if cmd in ("/enable", "/disable"):
+            return self._set_feature(parts[1:], cmd == "/enable")
         return f"executed: {command}"
 
     # -- info commands -------------------------------------------------------
@@ -142,6 +147,24 @@ class CommandRouter:
         if self.orch:
             self.orch.resume(sym)
         return f"resumed {sym or 'global'}"
+
+    def _features(self) -> str:
+        if self.features is None:
+            return "feature control not available"
+        snap = self.features.snapshot()
+        on = ", ".join(f"{k}={'on' if v else 'off'}" for k, v in snap["features"].items())
+        return (f"features: {on}\ntoggleable: {', '.join(snap['toggleable'])}\n"
+                f"locked (go-live ladder): {', '.join(snap['locked'])}\n"
+                f"use: /enable <name> · /disable <name>")
+
+    def _set_feature(self, args: list[str], value: bool) -> str:
+        if self.features is None:
+            return "feature control not available"
+        if not args:
+            return f"usage: /{'enable' if value else 'disable'} <feature>"
+        res = self.features.set(args[0], value)
+        return (f"✅ {res['feature']} {'enabled' if res['enabled'] else 'disabled'}"
+                if res.get("ok") else f"⚠️ {res.get('error')}")
 
 
 class TelegramBot:

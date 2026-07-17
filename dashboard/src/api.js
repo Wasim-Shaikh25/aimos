@@ -24,6 +24,11 @@ export const api = {
   balances: () => j('/api/balances'),
   performance: () => j('/api/performance'),
   connections: () => j('/api/connections'),
+  features: () => j('/api/features'),
+  setFeature: (name, enabled) => j('/api/control/feature', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirm: 'CONFIRM', name, enabled }),
+  }),
   strategies: () => j('/api/strategies'),
   models: () => j('/api/models'),
   config: () => j('/api/config/effective'),

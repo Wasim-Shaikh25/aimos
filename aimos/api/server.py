@@ -23,6 +23,12 @@ class ConfirmBody(BaseModel):
     symbol: Optional[str] = None
 
 
+class FeatureBody(BaseModel):
+    confirm: str = ""
+    name: str = ""
+    enabled: bool = False
+
+
 @dataclass
 class AppState:
     """Everything the API reads/controls — injected so the backend is testable."""
@@ -46,6 +52,8 @@ class AppState:
     performance_provider: Any = None  # callable -> perf metrics dict
     graph_provider: Any = None  # callable(decision_id) -> {"nodes": [...], "edges": [...]}
     connections_provider: Any = None  # callable -> {"venues": [...]} (Phase D preflight)
+    features_provider: Any = None  # callable -> {"features": {...}, "toggleable", "locked"}
+    feature_setter: Any = None  # callable(name, value) -> {"ok", ...} (runtime toggle)
 
 
 def _decisions(journal: Journal, limit: int) -> list[dict]:
@@ -174,6 +182,22 @@ def create_app(state: AppState) -> FastAPI:
     def get_connections():
         # per-venue read-only preflight status (Phase D §2.4) — never exposes secrets
         return state.connections_provider() if state.connections_provider else {"venues": []}
+
+    @app.get("/api/features")
+    def get_features():
+        # current runtime flags + which are toggleable vs locked
+        return state.features_provider() if state.features_provider else {"features": {}}
+
+    @app.post("/api/control/feature")
+    def set_feature(body: FeatureBody):
+        # runtime feature toggle — CONFIRM-gated; refuses locked (live/funded) flags
+        _require_confirm(body)
+        if not state.feature_setter:
+            raise HTTPException(status_code=503, detail="feature control unavailable")
+        res = state.feature_setter(body.name, body.enabled)
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("error", "toggle rejected"))
+        return res
 
     @app.get("/api/strategies")
     def get_strategies():

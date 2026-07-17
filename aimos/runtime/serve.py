@@ -99,7 +99,20 @@ def build_app(offline: Optional[bool] = None):
         "chosen": {},
         "updated": None,
         "tick": 0,
+        "features": features,  # mutable — the loop reads this so runtime toggles apply
     }
+
+    def _rebuild_orch() -> None:  # after a runtime feature toggle (§ features.py)
+        from aimos.execution.decide import ExecutionLayer
+        from aimos.observation.runner import build_engines
+        orch.obs_engines = build_engines(params, clock)
+        orch.execution = ExecutionLayer(params)
+        holder["features"] = params.features.model_dump()
+        log.info("features_rebuilt", scalp=holder["features"].get("scalp_enabled"),
+                 cross_exchange=holder["features"].get("cross_exchange_enabled"))
+
+    from aimos.runtime.features import FeatureController
+    feature_ctl = FeatureController(params, _rebuild_orch)
 
     async def loop() -> None:
         tf = paper["timeframe"]
@@ -125,7 +138,7 @@ def build_app(offline: Optional[bool] = None):
                     primary = primary_venue if primary_venue in venue_df else next(iter(venue_df))
                     now = venue_df[primary].index[-1].to_pydatetime().astimezone(timezone.utc)
                     # 2) cross-venue snapshot from the per-venue mids (for §5.11 engine)
-                    vsnap = _snapshot_from_mids(venue_df, now, features)
+                    vsnap = _snapshot_from_mids(venue_df, now, holder["features"])
                     # 3) analyze on EVERY venue (primary journaled/traded; others display)
                     per_venue, prices, primary_res = {}, {}, None
                     for v, d in venue_df.items():
@@ -165,13 +178,28 @@ def build_app(offline: Optional[bool] = None):
                 log.exception("serve_loop_error")
             await asyncio.sleep(float(paper["loop_seconds"]))
 
+    async def telegram_inbound() -> None:
+        """Poll Telegram for commands (/enable, /pause, /status …) in this process."""
+        bot = _build_telegram_bot(holder["features"], orch, broker, feature_ctl, clock)
+        if bot is None:
+            return
+        log.info("telegram_inbound_started")
+        while True:
+            try:
+                await asyncio.to_thread(bot.poll_once)
+            except Exception:  # noqa: BLE001 — network hiccup shouldn't kill the poller
+                log.exception("telegram_inbound_error")
+            await asyncio.sleep(3.0)
+
     @asynccontextmanager
     async def lifespan(app):
         task = asyncio.create_task(loop())
+        tg_task = asyncio.create_task(telegram_inbound())
         log.info("serve_started", live_data=live_data, dashboard=DIST.exists(),
                  universe=holder["universe"].source, symbols=len(holder["universe"].selected))
         yield
         task.cancel()
+        tg_task.cancel()
 
     state = AppState(
         journal=orch.journal, orchestrator=orch,
@@ -193,11 +221,34 @@ def build_app(offline: Optional[bool] = None):
                                       "any_live": any(c.get("connected") for c in connections.values())},
         performance_provider=lambda: _performance_payload(broker, sim, holder["equity"]),
         graph_provider=lambda did: _decision_graph(orch.journal, did, params),
+        features_provider=feature_ctl.snapshot,
+        feature_setter=feature_ctl.set,
     )
     app = create_app(state)
     app.router.lifespan_context = lifespan
     _mount_dashboard(app)
     return app
+
+
+def _build_telegram_bot(features, orch, broker, feature_ctl, clock):
+    """Inbound Telegram command bot for this process, or None when not usable."""
+    import os
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    if not (features.get("telegram_enabled") and token):
+        return None
+    try:
+        from aimos.telegram.bot import CommandRouter, HttpTransport, TelegramBot
+        from aimos.telegram.security import ChatWhitelist, NonceStore
+        ids = {int(x) for x in os.environ.get("TELEGRAM_ALLOWED_IDS", "").split(",") if x.strip()}
+        router = CommandRouter(
+            ChatWhitelist(ids), NonceStore(clock), orchestrator=orch, journal=orch.journal,
+            positions_provider=lambda: [p.model_dump(mode="json") for p in broker.positions()],
+            feature_controller=feature_ctl,
+        )
+        return TelegramBot(HttpTransport(token), router)
+    except Exception:  # noqa: BLE001
+        log.exception("telegram_inbound_build_failed")
+        return None
 
 
 def _build_universe(params, live_data: bool):
