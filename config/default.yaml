@@ -188,3 +188,7 @@ paper:
   history_bars: 400                 # warmup candles fetched per tick
   starting_equity_usdt: 10000
   max_ticks: 0                      # 0 = run forever; >0 = stop after N ticks (for a bounded run)
+  journal_path: ""                  # "" = in-memory; set a path (e.g. state/aimos.sqlite) to
+                                    # persist decisions across restarts (deployments)
+  telegram_status_ticks: 0          # >0 → send a Telegram status summary every N ticks
+                                    # (trade-open/close/risk alerts fire regardless when enabled)

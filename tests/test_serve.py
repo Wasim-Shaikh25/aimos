@@ -23,6 +23,18 @@ def test_serve_app_full_stack_offline():
         assert client.post("/api/control/pause", json={}).status_code == 403
 
 
+def test_serve_wires_telegram_and_persists_journal(tmp_path, monkeypatch):
+    # telegram_enabled + status ticks + a file journal → all wired in one process.
+    monkeypatch.setenv("AIMOS__FEATURES__TELEGRAM_ENABLED", "true")
+    monkeypatch.setenv("AIMOS__PAPER__TELEGRAM_STATUS_TICKS", "1")
+    monkeypatch.setenv("AIMOS__PAPER__JOURNAL_PATH", str(tmp_path / "aimos.sqlite"))
+    app = build_app(offline=True)  # no token → Telegram dry-run (never networks)
+    with TestClient(app) as client:
+        time.sleep(1.5)
+        assert client.get("/api/journal/stats").json()["n_decisions"] >= 1
+    assert (tmp_path / "aimos.sqlite").exists()  # decisions persisted to disk
+
+
 def test_serve_serves_built_dashboard_if_present():
     app = build_app(offline=True)
     with TestClient(app) as client:

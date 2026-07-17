@@ -37,6 +37,8 @@ from aimos.data.live_source import (
 )
 from aimos.execution.broker.paper import PaperBroker
 from aimos.execution.position_sizer import SizingInputs
+from aimos.journal.journal import Journal
+from aimos.telegram.sink import TelegramSink
 from aimos.execution.risk_manager import RiskState
 from aimos.runtime.pipeline import PipelineOrchestrator
 from aimos.runtime.watchdog import Heartbeat
@@ -54,11 +56,22 @@ def build_app(offline: Optional[bool] = None):
 
     Path("state").mkdir(exist_ok=True)
     clock = LiveClock()
-    orch = PipelineOrchestrator(params, clock=clock)  # in-memory journal
+    # persistent journal when paper.journal_path is set (deployments), else in-memory
+    jpath = paper.get("journal_path") or ":memory:"
+    orch = PipelineOrchestrator(params, clock=clock, journal=Journal(jpath))
     broker = PaperBroker(float(paper["starting_equity_usdt"]), cost_mod.from_config(costs_cfg))
     heartbeat = Heartbeat("state/heartbeat", clock=clock)
     caps = _caps(params)
     source = _make_source(live_data, paper["data_exchange"])
+
+    # Telegram: same process as the dashboard + loop (one deployable). Dry-run
+    # (logs, never sends) when no token, so this is safe with the flag off too.
+    sink = None
+    if features.get("telegram_enabled"):
+        sink = TelegramSink()  # token/allowed-ids from env
+        sink.attach(orch.bus)  # → trade-opened / risk-alert messages
+        sink.send("🤖 AIMOS paper server started — analyzing the universe.")
+    status_every = int(paper.get("telegram_status_ticks", 0))
 
     universe = _build_universe(params, live_data)
     holder = {
@@ -116,6 +129,10 @@ def build_app(offline: Optional[bool] = None):
                 holder["updated"] = clock.now().isoformat()
                 holder["tick"] += 1
                 heartbeat.beat()
+                if sink and status_every > 0 and holder["tick"] % status_every == 0:
+                    n = orch.journal.decision_count()
+                    sink.send(f"📊 AIMOS status: {holder['tick']} ticks, {n} decisions, "
+                              f"{len(broker.positions())} open, equity {broker.equity():.0f} USDT")
             except Exception:  # noqa: BLE001 — the loop must never die
                 log.exception("serve_loop_error")
             await asyncio.sleep(float(paper["loop_seconds"]))

@@ -1,27 +1,32 @@
 # AIMOS deployment (§23.5, card P5-T8). Paper mode by default; live requires the
 # §23.8 go-live ladder + mandate.yaml + withdrawal-disabled keys.
+#
+# The `aimos` service is ONE process that runs the dashboard + the paper-trading
+# loop + Telegram alerts together, sharing one persistent journal. The loop
+# auto-starts with the server (FastAPI lifespan) — nothing else to enable.
+#   cp .env.example .env   # set TELEGRAM_BOT_TOKEN + features.telegram_enabled=true
+#   docker compose up -d   # dashboard on 127.0.0.1:8000, paper loop running, alerts on
 services:
-  trading:
+  aimos:
     build: .
-    command: python -m aimos.runtime.paper_trader
+    command: python -m aimos.runtime.serve   # dashboard + paper loop + Telegram (one process)
     env_file: [.env]
     environment:
-      AIMOS__MODE: paper
+      AIMOS__PAPER__JOURNAL_PATH: state/aimos.sqlite   # persist decisions across restarts
+      AIMOS_HOST: 0.0.0.0
+      AIMOS_PORT: "8000"
+    ports: ["127.0.0.1:8000:8000"]   # never public — behind VPN/SSH tunnel (§23.4)
     volumes: ["./data:/app/data", "./state:/app/state", "./config:/app/config:ro"]
     restart: unless-stopped
 
-  dashboard:
-    build: .
-    command: uvicorn aimos.api.server:app --host 0.0.0.0 --port 8000
-    ports: ["127.0.0.1:8000:8000"]   # never public — behind VPN/SSH tunnel (§23.4)
-    depends_on: [trading]
-    restart: unless-stopped
-
-  telegram:
+  # INBOUND Telegram commands (/status, /pause) — optional; alerts already come
+  # from the `aimos` service above. Enable with: docker compose --profile commands up -d
+  telegram-commands:
     build: .
     command: python -m aimos.telegram.bot
     env_file: [.env]
-    depends_on: [trading]
+    profiles: ["commands"]
+    depends_on: [aimos]
     restart: unless-stopped
 
   research:
@@ -40,7 +45,8 @@ services:
   watchdog:
     build: .
     command: python -m aimos.runtime.watchdog   # heartbeat; 3× miss → restart + alert
-    depends_on: [trading]
+    depends_on: [aimos]
+    volumes: ["./state:/app/state"]
     restart: unless-stopped
 
 volumes:

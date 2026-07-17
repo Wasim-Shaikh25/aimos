@@ -84,15 +84,31 @@ Real `.env*` files are git-ignored; only the `*.example` templates are committed
 templates; they only apply to live mode after the §23.8 gates (and must have
 withdrawals disabled, §23.4).
 
-## Docker (all services)
+## Deploy: one process = dashboard + paper loop + Telegram (auto-starts)
+`python -m aimos.runtime.serve` runs **everything in one process**: the API +
+dashboard, the paper-trading loop, and Telegram alerts. **The loop starts
+automatically** when the server boots (FastAPI lifespan) — you don't enable
+anything extra to make it trade; it begins analyzing the universe on startup.
+
 ```bash
 cp .env.example .env
-docker compose up -d      # trading runtime + dashboard (:8000) + telegram + postgres + watchdog
+#   in .env:  AIMOS__FEATURES__TELEGRAM_ENABLED=true
+#             TELEGRAM_BOT_TOKEN=123:ABC          (from @BotFather)
+#             TELEGRAM_ALLOWED_IDS=111111         (your numeric chat id)
+#             AIMOS__PAPER__JOURNAL_PATH=state/aimos.sqlite   (persist across restarts)
+#             AIMOS__PAPER__TELEGRAM_STATUS_TICKS=20          (periodic status ping; 0=off)
+docker compose up -d          # → dashboard on 127.0.0.1:8000 + paper loop + Telegram, always-on
 ```
+**What you get on Telegram:** a startup message, a trade alert on every
+open/close, risk alerts, and (if `telegram_status_ticks>0`) a periodic summary.
+Trade-open/close/risk alerts fire whenever `telegram_enabled` is set — no token →
+**dry-run** (logged, never sent), so it's safe to leave on. Inbound commands
+(`/status`, `/pause`) are the optional `commands` profile:
+`docker compose --profile commands up -d`.
 
 ## Can I run the whole thing end-to-end with just a Telegram key?
-**Yes** — that is exactly what `paper_trader.py` does: public data (no exchange
-keys) → the tested pipeline → PaperBroker → Telegram alerts. The dashboard
-(`uvicorn aimos.api.server:app`) and the Node frontend build (`dashboard/`) are
-separate optional surfaces. What still needs real credentials is only **live
-trading** (Phase 6 go-live ladder), never paper.
+**Yes.** Run `python -m aimos.runtime.serve` (or `./run.sh`): public data (no
+exchange keys) → the tested pipeline → PaperBroker → dashboard + Telegram, with
+the loop auto-started. `paper_trader.py` is the same loop headless (no dashboard).
+What still needs real credentials is only **live trading** (§23.8 go-live ladder),
+never paper.
