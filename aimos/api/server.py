@@ -29,6 +29,12 @@ class FeatureBody(BaseModel):
     enabled: bool = False
 
 
+class GoLiveBody(BaseModel):
+    confirm: str = ""
+    gate: str = ""
+    passed: bool = True
+
+
 @dataclass
 class AppState:
     """Everything the API reads/controls — injected so the backend is testable."""
@@ -54,6 +60,8 @@ class AppState:
     connections_provider: Any = None  # callable -> {"venues": [...]} (Phase D preflight)
     features_provider: Any = None  # callable -> {"features": {...}, "toggleable", "locked"}
     feature_setter: Any = None  # callable(name, value) -> {"ok", ...} (runtime toggle)
+    golive_provider: Any = None  # callable -> go-live ladder status
+    golive_setter: Any = None  # callable(gate, passed) -> {"ok", ...}
 
 
 def _decisions(journal: Journal, limit: int) -> list[dict]:
@@ -187,6 +195,22 @@ def create_app(state: AppState) -> FastAPI:
     def get_features():
         # current runtime flags + which are toggleable vs locked
         return state.features_provider() if state.features_provider else {"features": {}}
+
+    @app.get("/api/golive")
+    def get_golive():
+        # go-live ladder progress (§23.8)
+        return state.golive_provider() if state.golive_provider else {"gates": [], "percent": 0}
+
+    @app.post("/api/control/golive")
+    def set_golive(body: GoLiveBody):
+        # operator sign-off on a go-live gate — CONFIRM-gated
+        _require_confirm(body)
+        if not state.golive_setter:
+            raise HTTPException(status_code=503, detail="go-live control unavailable")
+        res = state.golive_setter(body.gate, body.passed)
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("error", "rejected"))
+        return res
 
     @app.post("/api/control/feature")
     def set_feature(body: FeatureBody):

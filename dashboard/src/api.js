@@ -29,6 +29,11 @@ export const api = {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ confirm: 'CONFIRM', name, enabled }),
   }),
+  golive: () => j('/api/golive'),
+  setGolive: (gate, passed) => j('/api/control/golive', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirm: 'CONFIRM', gate, passed }),
+  }),
   strategies: () => j('/api/strategies'),
   models: () => j('/api/models'),
   config: () => j('/api/config/effective'),

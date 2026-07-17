@@ -114,6 +114,9 @@ def build_app(offline: Optional[bool] = None):
     from aimos.runtime.features import FeatureController
     feature_ctl = FeatureController(params, _rebuild_orch)
 
+    from aimos.runtime.golive import GoLiveLadder
+    ladder = GoLiveLadder(journal=orch.journal)
+
     async def loop() -> None:
         tf = paper["timeframe"]
         bars = int(paper["history_bars"])
@@ -223,6 +226,8 @@ def build_app(offline: Optional[bool] = None):
         graph_provider=lambda did: _decision_graph(orch.journal, did, params),
         features_provider=feature_ctl.snapshot,
         feature_setter=feature_ctl.set,
+        golive_provider=ladder.status,
+        golive_setter=lambda gate, passed: ladder.mark(gate) if passed else ladder.unmark(gate),
     )
     app = create_app(state)
     app.router.lifespan_context = lifespan
