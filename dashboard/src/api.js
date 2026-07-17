@@ -11,6 +11,7 @@ export const api = {
   decisions: (n = 50) => j(`/api/decisions?limit=${n}`),
   state: (sym) => j(`/api/state/${sym}`),
   anatomy: (id) => j(`/api/decision/${id}/anatomy`),
+  graph: (id) => j(`/api/decision/${id}/graph`),
   positions: () => j('/api/positions'),
   equity: () => j('/api/equity'),
   stats: () => j('/api/journal/stats'),

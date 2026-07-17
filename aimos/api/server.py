@@ -44,6 +44,7 @@ class AppState:
     trades_provider: Any = None  # callable -> {"trades": [...]} (trade history)
     balances_provider: Any = None  # callable -> {"venues": [...]} (per-venue balances)
     performance_provider: Any = None  # callable -> perf metrics dict
+    graph_provider: Any = None  # callable(decision_id) -> {"nodes": [...], "edges": [...]}
 
 
 def _decisions(journal: Journal, limit: int) -> list[dict]:
@@ -68,6 +69,11 @@ def create_app(state: AppState) -> FastAPI:
     @app.get("/api/decisions")
     def get_decisions(limit: int = 50):
         return {"decisions": _decisions(state.journal, limit)}
+
+    @app.get("/api/decision/{decision_id}/graph")
+    def get_graph(decision_id: str):
+        # mind-map node/edge graph of one decision (§5.3)
+        return state.graph_provider(decision_id) if state.graph_provider else {"nodes": [], "edges": []}
 
     @app.get("/api/decision/{decision_id}/anatomy")
     def get_anatomy(decision_id: str):

@@ -17,10 +17,11 @@ import Models from './screens/Models.jsx'
 import Prices from './screens/Prices.jsx'
 import Trades from './screens/Trades.jsx'
 import Balances from './screens/Balances.jsx'
+import MindMap from './screens/MindMap.jsx'
 
 const NAV = [
-  ['/', 'Markets'], ['/prices', 'Prices'], ['/anatomy', 'Decision Anatomy'], ['/engines', 'Engines'],
-  ['/strategies', 'Strategies'], ['/models', 'Models'], ['/universe', 'Universe'],
+  ['/', 'Markets'], ['/prices', 'Prices'], ['/anatomy', 'Decision Anatomy'], ['/mindmap', 'Mind-map'],
+  ['/engines', 'Engines'], ['/strategies', 'Strategies'], ['/models', 'Models'], ['/universe', 'Universe'],
   ['/positions', 'Positions & Risk'], ['/trades', 'Trade History'], ['/balances', 'Balances'],
   ['/decisions', 'Decisions'], ['/performance', 'Performance'], ['/config', 'Config'], ['/agents', 'Agents'],
 ]
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="/prices" element={<Prices />} />
         <Route path="/asset/:base" element={<AssetDetail />} />
         <Route path="/anatomy" element={<DecisionAnatomy />} />
+        <Route path="/mindmap" element={<MindMap />} />
         <Route path="/engines" element={<Engines />} />
         <Route path="/strategies" element={<Strategies />} />
         <Route path="/models" element={<Models />} />

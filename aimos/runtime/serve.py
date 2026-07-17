@@ -189,6 +189,7 @@ def build_app(offline: Optional[bool] = None):
         trades_provider=lambda: _trades_payload(broker, sim),
         balances_provider=lambda: _balances_payload(broker, sim),
         performance_provider=lambda: _performance_payload(broker, sim, holder["equity"]),
+        graph_provider=lambda did: _decision_graph(orch.journal, did, params),
     )
     app = create_app(state)
     app.router.lifespan_context = lifespan
@@ -316,6 +317,56 @@ def _snapshot_from_mids(venue_df, now, features):
         snap[v] = VenueTop(exchange=v, best_bid=mid * (1 - half), best_ask=mid * (1 + half),
                            mid=mid, timestamp=now)
     return snap
+
+
+def _decision_graph(journal, decision_id: str, params) -> dict:
+    """Node/edge mind-map of one journaled decision (§5.3): engines → fusion →
+    regime → eligible strategies → chosen. Built purely from the journal record."""
+    import json as _json
+    from aimos.execution.plugins import _CORE
+    row = journal.conn.execute(
+        "SELECT payload FROM decisions WHERE decision_id = ? LIMIT 1", (decision_id,)
+    ).fetchone()
+    if row is None:
+        return {"nodes": [], "edges": []}
+    rec = _json.loads(row["payload"])
+    mu, chosen = rec["understanding"], rec["chosen"]
+    nodes, edges = [], []
+
+    def node(nid, layer, label, sub="", kind="", highlight=False):
+        nodes.append({"id": nid, "layer": layer, "label": str(label), "sub": sub,
+                      "kind": kind, "highlight": highlight})
+
+    votes = mu.get("engine_votes", {})
+    for eng in ("rule", "bayes", "ml"):
+        node(f"eng_{eng}", 0, eng.upper(), f"p_up {float(votes.get(eng, 0.0)):.2f}", "engine")
+        edges.append({"from": f"eng_{eng}", "to": "fusion"})
+    node("fusion", 1, "Fusion", f"p_up {float(mu['p_up']):.2f} · conf {float(mu['confidence']) * 100:.0f}%", "fusion")
+    edges.append({"from": "fusion", "to": "regime"})
+    node("regime", 2, mu["regime"], f"{mu.get('behavior', '')} · bias {mu.get('direction_bias', '')}", "regime")
+
+    reg = mu["regime"]
+    chosen_plugin = chosen.get("plugin")
+    plugin_cfgs = params.plugins
+    for cls, key in _CORE:
+        raw = plugin_cfgs.get(key)
+        cfg = raw.model_dump() if hasattr(raw, "model_dump") else (raw or {})
+        if not cfg.get("enabled", True):
+            continue
+        regimes = {r.value for r in getattr(cls, "required_regimes", set())}
+        if regimes and reg not in regimes:
+            continue  # not eligible in this regime
+        hl = cls.name == chosen_plugin
+        node(f"strat_{key}", 3, cls.name, "✓ chosen" if hl else "eligible", "strategy", hl)
+        edges.append({"from": "regime", "to": f"strat_{key}"})
+        edges.append({"from": f"strat_{key}", "to": "decision"})
+
+    action = chosen.get("action", "no_trade")
+    score = chosen.get("score")
+    sub = f"{chosen_plugin}" + (f" · score {float(score):.2f}" if score is not None else "")
+    node("decision", 4, action, sub, "decision", True)
+    return {"nodes": nodes, "edges": edges, "symbol": rec.get("symbol"),
+            "reasons": mu.get("reasons", []), "decision_id": decision_id}
 
 
 def _maybe_arb(sim, primary_res, base, prices, now, paper, holder) -> None:

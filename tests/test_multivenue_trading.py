@@ -39,6 +39,23 @@ def test_performance_aggregates_by_strategy_and_venue():
     assert p["max_drawdown_pct"] > 0  # 10003 → 10001
 
 
+def test_decision_graph_has_engine_to_chosen_path():
+    app = build_app(offline=True)
+    with TestClient(app) as c:
+        time.sleep(2)
+        did = c.get("/api/decisions?limit=1").json()["decisions"][0]["decision_id"]
+        g = c.get(f"/api/decision/{did}/graph").json()
+        kinds = {n["kind"] for n in g["nodes"]}
+        assert {"engine", "fusion", "regime", "strategy", "decision"} <= kinds
+        assert {n["layer"] for n in g["nodes"]} == {0, 1, 2, 3, 4}  # full left→right path
+        # exactly one chosen node highlighted at the decision layer
+        chosen = [n for n in g["nodes"] if n["kind"] == "decision"]
+        assert len(chosen) == 1 and chosen[0]["highlight"]
+        # every edge references real nodes
+        ids = {n["id"] for n in g["nodes"]}
+        assert all(e["from"] in ids and e["to"] in ids for e in g["edges"])
+
+
 def test_serve_executes_arb_and_serves_trade_history():
     import os
     os.environ["AIMOS__FEATURES__CROSS_EXCHANGE_ENABLED"] = "true"
