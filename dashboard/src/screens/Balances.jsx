@@ -16,9 +16,10 @@ export default function Balances() {
       <Tile k="Directional cash" v={`$${Number(data?.directional_cash ?? 0).toFixed(2)}`} />
     </div>
     {venues.length === 0 ? <Empty what="balances" /> :
-      <Table cols={['Venue', 'USDT', 'Other assets']}
+      <Table cols={['Venue', 'Source', 'USDT', 'Other assets']}
         rows={venues.map(v => [
           v.venue,
+          v.source === 'live' ? '🔑 live' : 'simulated',
           `$${Number(v.usdt).toFixed(2)}`,
           Object.keys(v.assets || {}).length
             ? Object.entries(v.assets).map(([a, q]) => `${a}: ${q}`).join(', ') : '—',

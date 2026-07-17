@@ -92,6 +92,12 @@ sentiment:                   # §5.10
   bear_terms: [hack, exploit, sec sues, ban, lawsuit, bankruptcy, liquidation, outage, delist]
   shock_terms: [hack, exploit, bankruptcy, ban]
 
+scalp_micro:                 # §17 — proxy fast-loop micro context (feature-flagged)
+  window: 20                 # bars for the volume-spike baseline
+  atr_period: 14             # ATR period for scalp geometry
+  nominal_spread_bps: 3      # synthetic top-of-book spread for the proxy
+  vol_spike_mult: 1.3        # last volume > mean × this → volume_spike
+
 cross_exchange:              # §5.11
   fee_floor_bps: 8           # dislocation must exceed fee floor + extra
   dislocation_extra_bps: 2

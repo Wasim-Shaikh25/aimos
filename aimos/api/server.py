@@ -45,6 +45,7 @@ class AppState:
     balances_provider: Any = None  # callable -> {"venues": [...]} (per-venue balances)
     performance_provider: Any = None  # callable -> perf metrics dict
     graph_provider: Any = None  # callable(decision_id) -> {"nodes": [...], "edges": [...]}
+    connections_provider: Any = None  # callable -> {"venues": [...]} (Phase D preflight)
 
 
 def _decisions(journal: Journal, limit: int) -> list[dict]:
@@ -168,6 +169,11 @@ def create_app(state: AppState) -> FastAPI:
     def get_performance():
         # realized PnL / win-rate / per-strategy / per-venue (Performance, §5.6)
         return state.performance_provider() if state.performance_provider else {}
+
+    @app.get("/api/connections")
+    def get_connections():
+        # per-venue read-only preflight status (Phase D §2.4) — never exposes secrets
+        return state.connections_provider() if state.connections_provider else {"venues": []}
 
     @app.get("/api/strategies")
     def get_strategies():

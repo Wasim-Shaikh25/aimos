@@ -32,7 +32,11 @@ llm_cache/
 !.env.example
 !.env.prod.example
 *.key
-secrets.*
+/secrets.*                     # root-level real secret files only (anchored so it does
+!secrets.example.yaml          # not catch aimos/account/secrets.py); template committed
+
+# stray heartbeat if the server is run from a subdir
+dashboard/state/
 
 # OS
 .DS_Store

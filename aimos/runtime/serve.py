@@ -88,6 +88,7 @@ def build_app(offline: Optional[bool] = None):
     sim = MultiVenueSim(venues=analysis_venues,
                         start_usdt_total=float(paper["starting_equity_usdt"]),
                         taker_bps=float(costs_cfg["taker_bps"]))
+    connections = _run_preflight(params, analysis_venues)  # Phase D read-only self-check
     holder = {
         "latest": {},          # base -> primary-venue MarketUnderstanding (Markets/Anatomy)
         "evidence": {},        # base -> {venue: [Evidence dict]} (Engines screen, per venue)
@@ -187,7 +188,9 @@ def build_app(offline: Optional[bool] = None):
         prices_provider=lambda: _prices_payload(holder),
         venue_state_provider=lambda sym: holder["venue_state"].get(base_of(sym), {}),
         trades_provider=lambda: _trades_payload(broker, sim),
-        balances_provider=lambda: _balances_payload(broker, sim),
+        balances_provider=lambda: _balances_payload(broker, sim, connections),
+        connections_provider=lambda: {"venues": list(connections.values()),
+                                      "any_live": any(c.get("connected") for c in connections.values())},
         performance_provider=lambda: _performance_payload(broker, sim, holder["equity"]),
         graph_provider=lambda did: _decision_graph(orch.journal, did, params),
     )
@@ -239,6 +242,15 @@ def _strategies_payload(params, chosen: dict) -> dict:
             "min_coin_health": cfg.get("min_coin_health", 0),
             "chosen": chosen.get(cls.name, 0),
             "config": cfg,
+        })
+    feats = params.features.model_dump()
+    if feats.get("scalp_enabled"):  # §17 — appended dynamically in build_plugins
+        scfg = params.scalp.model_dump() if hasattr(params.scalp, "model_dump") else {}
+        rows.append({
+            "name": "MomentumScalp", "key": "scalp", "enabled": True,
+            "regimes": scfg.get("context_gate", {}).get("allowed_regimes", ["any"]),
+            "min_confidence": scfg.get("context_gate", {}).get("min_confidence", 0),
+            "min_coin_health": 0, "chosen": chosen.get("MomentumScalp", 0), "config": scfg,
         })
     return {"strategies": rows}
 
@@ -361,6 +373,14 @@ def _decision_graph(journal, decision_id: str, params) -> dict:
         edges.append({"from": "regime", "to": f"strat_{key}"})
         edges.append({"from": f"strat_{key}", "to": "decision"})
 
+    if params.features.model_dump().get("scalp_enabled"):  # §17
+        allowed = params.scalp.model_dump().get("context_gate", {}).get("allowed_regimes", [])
+        if reg in allowed:
+            hl = chosen_plugin == "MomentumScalp"
+            node("strat_scalp", 3, "MomentumScalp", "✓ chosen" if hl else "eligible", "strategy", hl)
+            edges.append({"from": "regime", "to": "strat_scalp"})
+            edges.append({"from": "strat_scalp", "to": "decision"})
+
     action = chosen.get("action", "no_trade")
     score = chosen.get("score")
     sub = f"{chosen_plugin}" + (f" · score {float(score):.2f}" if score is not None else "")
@@ -391,11 +411,42 @@ def _trades_payload(broker, sim) -> dict:
     return {"trades": trades[:200], "n_arb": len(sim.trades)}
 
 
-def _balances_payload(broker, sim) -> dict:
-    """Per-venue simulated balances + directional cash on the primary venue (§5.4)."""
-    return {"venues": sim.balances_rows(), "total_usdt": round(sim.total_usdt(), 2),
-            "directional_cash": round(broker.cash(), 2),
-            "note": "simulated — live balances need read-only keys (Phase D preflight)"}
+def _run_preflight(params, venues) -> dict:
+    """Phase D read-only self-check: load secrets, verify each venue connects.
+    Empty (skipped) when no keys are configured — the safe, keyless default."""
+    from aimos.account.preflight import preflight_check
+    from aimos.account.secrets import load_secrets
+    pd = params.model_dump()
+    account = pd.get("account", {}) or {}
+    secrets_file = (pd.get("secrets", {}) or {}).get("file", "")
+    creds = load_secrets(secrets_file, venues=venues)
+    if not creds or not account.get("preflight_on_start", True):
+        return {}
+    return preflight_check(venues, creds)  # authenticates + fetch_balance, NO orders
+
+
+def _balances_payload(broker, sim, connections=None) -> dict:
+    """Per-venue balances: LIVE (from the read-only preflight) when a venue's key is
+    connected, else the simulated sheet. Directional cash on the primary venue (§5.4)."""
+    connections = connections or {}
+    rows = []
+    live_any = False
+    sim_rows = {r["venue"]: r for r in sim.balances_rows()}
+    for venue in sorted(set(sim_rows) | set(connections)):
+        conn = connections.get(venue, {})
+        if conn.get("connected"):
+            live_any = True
+            rows.append({"venue": venue, "usdt": conn.get("usdt_free", 0.0),
+                         "assets": {}, "source": "live",
+                         "can_trade": conn.get("can_trade", False)})
+        else:
+            base = sim_rows.get(venue, {"venue": venue, "usdt": 0.0, "assets": {}})
+            rows.append({**base, "source": "simulated"})
+    total = sum(r["usdt"] for r in rows)
+    return {"venues": rows, "total_usdt": total, "directional_cash": broker.cash(),
+            "live": live_any,
+            "note": ("live balances from read-only keys" if live_any
+                     else "simulated — add read-only keys for live balances (Phase D preflight)")}
 
 
 def _performance_payload(broker, sim, equity) -> dict:

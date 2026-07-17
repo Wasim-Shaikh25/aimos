@@ -41,6 +41,13 @@ def build_plugins(params: Any) -> list[ExecutionPlugin]:
         cfg = raw.model_dump() if hasattr(raw, "model_dump") else (raw or {})
         if cfg.get("enabled", True):
             out.append(cls(cfg))
+    # Scalp (§17) — appended only when feature-flagged on. Needs the fast-loop
+    # micro-context (key_levels['scalp']); the ScalpMicroEngine supplies it.
+    feats = params.features.model_dump() if hasattr(params.features, "model_dump") else {}
+    if feats.get("scalp_enabled"):
+        from aimos.execution.plugins.momentum_scalp import MomentumScalp
+        scalp_cfg = params.scalp.model_dump() if hasattr(params.scalp, "model_dump") else (getattr(params, "scalp", {}) or {})
+        out.append(MomentumScalp(scalp_cfg))
     return out
 
 

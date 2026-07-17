@@ -23,6 +23,7 @@ export const api = {
   trades: () => j('/api/trades'),
   balances: () => j('/api/balances'),
   performance: () => j('/api/performance'),
+  connections: () => j('/api/connections'),
   strategies: () => j('/api/strategies'),
   models: () => j('/api/models'),
   config: () => j('/api/config/effective'),

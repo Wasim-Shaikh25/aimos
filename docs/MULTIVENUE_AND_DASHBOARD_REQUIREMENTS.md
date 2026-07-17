@@ -210,16 +210,21 @@ A feature ships only when **all** are true:
 
 ---
 
-## 10. Proposed phased delivery
-- **Phase A — Multi-venue observation + price matrix + observation values**
-  (keyless, demonstrable immediately).
-- **Phase B — Simulated multi-venue trading** (`PaperMultiVenueBroker`) +
-  **Trade History** + **Balances (simulated)** + **real Performance**.
-- **Phase C — Decision mind-map.**
-- **Phase D — Live multi-venue execution (implemented, gated)** + key preflight
-  self-check + real Balance UI.
+## 10. Phased delivery
+- ✅ **Phase A — Multi-venue observation + price matrix + observation values.**
+- ✅ **Phase B — Simulated multi-venue trading + Trade History + Balances + real Performance.**
+- ✅ **Phase C — Decision mind-map.**
+- ✅ **Phase D — Live multi-venue execution (implemented, GATED off) + read-only key
+  preflight self-check + Connections panel + real Balance UI.** Secrets load from a
+  file (`AIMOS_SECRETS_FILE`) or env vars; the preflight authenticates read-only,
+  verifies withdrawals disabled, and reports per venue — no orders. Live arb routes
+  through `MultiVenueLiveRouter` (per-venue `LiveBroker`, mandate + withdrawal
+  gated), unit-tested against a mock ccxt.
+- ✅ **Scalp (§17) enabled** — `MomentumScalp` + a proxy micro-engine registered when
+  `features.scalp_enabled`; fires on volume-spike + book-imbalance + direction
+  agreement.
 
-Each phase ends green (tests + lints) and with screenshots of the working UI.
+All phases green (tests + lints) with working-UI screenshots.
 
 ---
 

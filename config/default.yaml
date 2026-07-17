@@ -168,12 +168,23 @@ mode: paper                         # paper | live — live requires §23.8 gate
 features:
   telegram_enabled: false           # true + TELEGRAM_BOT_TOKEN env → send messages
   llm_news_sensor: false            # §19 — needs ANTHROPIC_API_KEY when true
-  scalp_enabled: false              # §17 — mirror of scalp.yaml (post-only, T1 only)
+  scalp_enabled: true               # §17 — minute-scale scalping (post-only). Registers
+                                    # MomentumScalp + the proxy micro-engine; fires only on
+                                    # volume-spike + book-imbalance + direction agreement
   live_data: true                   # true → fetch live PUBLIC candles (no keys);
                                     # false → offline synthetic data (fully self-contained run)
   cross_exchange_enabled: false     # §5.11/§7.2 P8 — populate venue_snapshot across
                                     # paper.cross_venues so price_dislocation + the
                                     # CrossExchangeArb plugin (also enable it) run
+  multi_venue_live: false           # Phase D — route arb legs to LIVE per-venue brokers
+                                    # (needs mandate + per-venue keys; §23.8 go-live ladder)
+
+# Phase D — account access. Keys are ONLY used here (never for analysis). See §2.
+account:
+  preflight_on_start: true          # read-only connectivity self-check at startup (no orders)
+  require_withdrawal_disabled: true # refuse to trade a venue whose key can withdraw (§23.4)
+secrets:
+  file: ""                          # AIMOS_SECRETS_FILE path (yaml); env vars are the fallback
 
 paper:
   use_universe: true                # true → analyze the discovered/seeded universe (top-N by

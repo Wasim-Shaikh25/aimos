@@ -58,6 +58,12 @@ def build_engines(params: Any, clock: Clock) -> list[ObservationEngine]:
     engines: list[ObservationEngine] = []
     for cls, key in _ENGINE_SPECS:
         engines.append(cls(cfg=obs_cfg, clock=clock, reliability=float(reliabilities.get(key, HALF))))
+    # Scalp proxy micro-engine — only when scalping is feature-flagged on (§17)
+    feats = params.features.model_dump() if hasattr(params.features, "model_dump") else {}
+    if feats.get("scalp_enabled"):
+        from aimos.observation.scalp_micro import ScalpMicroEngine
+        engines.append(ScalpMicroEngine(cfg=obs_cfg, clock=clock,
+                                        reliability=float(reliabilities.get("scalp_micro", HALF))))
     return engines
 
 
