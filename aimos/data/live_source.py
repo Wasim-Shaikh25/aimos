@@ -128,19 +128,21 @@ def live_venue_snapshot(
 
 
 def perturb_for_venue(
-    df: pd.DataFrame, venue: str, base_offset_bps: float = 12.0, noise_bps: float = 4.0,
+    df: pd.DataFrame, venue: str, salt: str = "",
+    base_offset_bps: float = 32.0, noise_bps: float = 5.0,
 ) -> pd.DataFrame:
     """Derive a venue's candles from a shared base walk (offline realism).
 
-    Same asset trades within a few bps across venues, so instead of independent
-    random walks we take one canonical series and apply a small, deterministic
-    per-venue offset + tiny per-bar noise (bps-scale). This yields realistic
-    cross-venue dislocations (single/low-double-digit bps) that vary over time —
-    unlike independent walks, which drift tens of percent apart. Live data needs
-    none of this (real per-venue prices are already close).
+    Same asset trades within a few/low-tens of bps across venues, so instead of
+    independent random walks we take one canonical series and apply a small,
+    deterministic per-(venue, coin) offset + tiny per-bar noise (bps-scale). The
+    ``salt`` (the coin) makes each coin's cross-venue dislocation differ — some
+    tight, some wide enough to arb — instead of every coin showing the same gap.
+    Live data needs none of this (real per-venue prices are already close).
     """
-    rng = np.random.default_rng(abs(hash(venue)) % 9_999)
-    offset = (((abs(hash(venue)) % 100) / 100.0) - 0.5) * 2.0 * base_offset_bps
+    key = abs(hash(f"{venue}|{salt}"))
+    rng = np.random.default_rng(key % 9_999)
+    offset = (((key % 1000) / 1000.0) - 0.5) * 2.0 * base_offset_bps
     noise = rng.normal(0.0, noise_bps, len(df))
     factor = 1.0 + (offset + noise) / 10_000.0
     out = df.copy()

@@ -24,7 +24,7 @@ from tests.conftest import FakeClock, make_exec_ctx, make_mu, obs_cfg, reliabili
 
 _ARB_CFG = {
     "enabled": True, "min_confidence": 0.0, "min_coin_health": 0.0,
-    "extra_margin_bps": 4, "stop_bps": 30, "hold_minutes": 15, "arb_confidence": 0.6,
+    "extra_margin_bps": 4, "stop_bps": 10, "hold_minutes": 15, "arb_confidence": 0.85,
 }
 
 
@@ -43,10 +43,11 @@ def test_arb_proposes_when_dislocation_clears_costs_and_margin():
     plan = _arb().propose(mu, make_exec_ctx())
     assert plan is not None
     assert plan.action is Action.LONG and plan.plugin == "CrossExchangeArb"
-    net = 40.0 - 19.0 - 4.0  # 17 bps net capture
+    net = 40.0 - 19.0 - 4.0  # 17 bps net capture (round-trip costs netted into tp)
     assert plan.take_profit == 150.0 * (1 + net / 10_000.0)
-    assert plan.stop_loss == 150.0 * (1 - 30 / 10_000.0)
-    assert abs(plan.expected_rr - net / 30.0) < 1e-9
+    assert plan.stop_loss == 150.0 * (1 - 10 / 10_000.0)
+    assert abs(plan.expected_rr - net / 10.0) < 1e-9
+    assert plan.expected_costs_bps == 0.0  # costs self-accounted (no double-count)
     assert plan.meta["cross_venue"] is True
     assert plan.meta["buy_venue"] == "kraken" and plan.meta["sell_venue"] == "binance"
     assert abs(plan.meta["net_capture_bps"] - net) < 1e-9

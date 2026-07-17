@@ -15,12 +15,14 @@ import Engines from './screens/Engines.jsx'
 import Strategies from './screens/Strategies.jsx'
 import Models from './screens/Models.jsx'
 import Prices from './screens/Prices.jsx'
+import Trades from './screens/Trades.jsx'
+import Balances from './screens/Balances.jsx'
 
 const NAV = [
   ['/', 'Markets'], ['/prices', 'Prices'], ['/anatomy', 'Decision Anatomy'], ['/engines', 'Engines'],
   ['/strategies', 'Strategies'], ['/models', 'Models'], ['/universe', 'Universe'],
-  ['/positions', 'Positions & Risk'], ['/decisions', 'Decisions'],
-  ['/performance', 'Performance'], ['/config', 'Config'], ['/agents', 'Agents'],
+  ['/positions', 'Positions & Risk'], ['/trades', 'Trade History'], ['/balances', 'Balances'],
+  ['/decisions', 'Decisions'], ['/performance', 'Performance'], ['/config', 'Config'], ['/agents', 'Agents'],
 ]
 
 function Chrome() {
@@ -57,6 +59,8 @@ export default function App() {
         <Route path="/models" element={<Models />} />
         <Route path="/universe" element={<UniverseMatrix />} />
         <Route path="/positions" element={<PositionsRisk />} />
+        <Route path="/trades" element={<Trades />} />
+        <Route path="/balances" element={<Balances />} />
         <Route path="/decisions" element={<Decisions />} />
         <Route path="/performance" element={<Performance />} />
         <Route path="/config" element={<ConfigViewer />} />

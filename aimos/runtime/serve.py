@@ -59,7 +59,8 @@ def build_app(offline: Optional[bool] = None):
     # persistent journal when paper.journal_path is set (deployments), else in-memory
     jpath = paper.get("journal_path") or ":memory:"
     orch = PipelineOrchestrator(params, clock=clock, journal=Journal(jpath))
-    broker = PaperBroker(float(paper["starting_equity_usdt"]), cost_mod.from_config(costs_cfg))
+    broker = PaperBroker(float(paper["starting_equity_usdt"]), cost_mod.from_config(costs_cfg),
+                         venue=paper["data_exchange"])
     heartbeat = Heartbeat("state/heartbeat", clock=clock)
     caps = _caps(params)
     sources: dict = {}  # venue -> DataSource (lazy, per-venue)
@@ -79,6 +80,14 @@ def build_app(offline: Optional[bool] = None):
     status_every = int(paper.get("telegram_status_ticks", 0))
 
     universe = _build_universe(params, live_data)
+    # simulated per-venue balances + two-leg arb ledger, seeded across ALL venues
+    # the universe spans (not just cross_venues) so arb flows are all accounted (§4)
+    from aimos.execution.broker.multivenue import MultiVenueSim
+    analysis_venues = sorted({v for row in universe.matrix().values() for v in row}) \
+        or [paper["data_exchange"]]
+    sim = MultiVenueSim(venues=analysis_venues,
+                        start_usdt_total=float(paper["starting_equity_usdt"]),
+                        taker_bps=float(costs_cfg["taker_bps"]))
     holder = {
         "latest": {},          # base -> primary-venue MarketUnderstanding (Markets/Anatomy)
         "evidence": {},        # base -> {venue: [Evidence dict]} (Engines screen, per venue)
@@ -117,7 +126,7 @@ def build_app(offline: Optional[bool] = None):
                     # 2) cross-venue snapshot from the per-venue mids (for §5.11 engine)
                     vsnap = _snapshot_from_mids(venue_df, now, features)
                     # 3) analyze on EVERY venue (primary journaled/traded; others display)
-                    per_venue, prices = {}, {}
+                    per_venue, prices, primary_res = {}, {}, None
                     for v, d in venue_df.items():
                         last = d.iloc[-1]
                         exec_ctx = _exec_ctx(broker, costs_cfg, caps, v)
@@ -128,9 +137,9 @@ def build_app(offline: Optional[bool] = None):
                                               book_depth_1pct_usd=depth)
                         risk = RiskState(open_positions=len(broker.positions()))
                         if v == primary:
-                            res = await orch.tick(ctx, exec_ctx, sizing, risk)
-                            if res.plan.action is not Action.NO_TRADE:
-                                broker.place(res.plan)
+                            res = primary_res = await orch.tick(ctx, exec_ctx, sizing, risk)
+                            if res.plan.action is not Action.NO_TRADE and not res.plan.meta.get("cross_venue"):
+                                broker.place(res.plan)  # directional trade on the primary venue
                                 holder["chosen"][res.plan.plugin] = holder["chosen"].get(res.plan.plugin, 0) + 1
                             broker.step(base, last.to_dict(), now)
                             holder["latest"][base] = res.understanding.model_dump(mode="json")
@@ -139,9 +148,11 @@ def build_app(offline: Optional[bool] = None):
                         holder["evidence"].setdefault(base, {})[v] = [e.model_dump(mode="json") for e in res.evidences]
                         per_venue[v] = _venue_summary(res)
                         prices[v] = float(last["close"])
+                    # 4) cross-venue arb → two-leg execution against per-venue balances (§4)
+                    _maybe_arb(sim, primary_res, base, prices, now, paper, holder)
                     holder["venue_state"][base] = per_venue
                     holder["prices"][base] = _price_row(prices)
-                holder["equity"].append(broker.equity())
+                holder["equity"].append(broker.equity() + sim.realized_arb)
                 holder["updated"] = clock.now().isoformat()
                 holder["tick"] += 1
                 heartbeat.beat()
@@ -175,6 +186,9 @@ def build_app(offline: Optional[bool] = None):
         models_provider=lambda: _models_payload(params, holder["latest"]),
         prices_provider=lambda: _prices_payload(holder),
         venue_state_provider=lambda sym: holder["venue_state"].get(base_of(sym), {}),
+        trades_provider=lambda: _trades_payload(broker, sim),
+        balances_provider=lambda: _balances_payload(broker, sim),
+        performance_provider=lambda: _performance_payload(broker, sim, holder["equity"]),
     )
     app = create_app(state)
     app.router.lifespan_context = lifespan
@@ -270,7 +284,7 @@ def _fetch_venue_candles(src, primary_venue, venues, symbol, tf, bars, live_data
         base = primary_src.fetch(symbol, tf, bars)
         if base.empty:
             return {}
-        return {v: perturb_for_venue(base, v) for v in venues}
+        return {v: perturb_for_venue(base, v, salt=symbol) for v in venues}
     out = {}
     for v in venues:
         d = src(v).fetch(symbol, tf, bars)
@@ -302,6 +316,40 @@ def _snapshot_from_mids(venue_df, now, features):
         snap[v] = VenueTop(exchange=v, best_bid=mid * (1 - half), best_ask=mid * (1 + half),
                            mid=mid, timestamp=now)
     return snap
+
+
+def _maybe_arb(sim, primary_res, base, prices, now, paper, holder) -> None:
+    """Execute a chosen cross-venue arb as two simulated legs (buy cheap/sell rich)."""
+    if primary_res is None or primary_res.plan.action is Action.NO_TRADE:
+        return
+    m = primary_res.plan.meta
+    if not m.get("cross_venue"):
+        return
+    bv, sv = m.get("buy_venue"), m.get("sell_venue")
+    if bv not in prices or sv not in prices:
+        return
+    notional = float(primary_res.plan.size_quote or 0.0) or float(paper["starting_equity_usdt"]) * 0.01
+    sim.execute_arb(base, bv, sv, prices[bv], prices[sv], notional, now)
+    holder["chosen"]["CrossExchangeArb"] = holder["chosen"].get("CrossExchangeArb", 0) + 1
+
+
+def _trades_payload(broker, sim) -> dict:
+    """Directional + arb trades, most recent first (Trade History, §5.5)."""
+    trades = broker.trade_history() + list(sim.trades)
+    trades.sort(key=lambda t: (t.get("closed_at") or t.get("opened_at") or ""), reverse=True)
+    return {"trades": trades[:200], "n_arb": len(sim.trades)}
+
+
+def _balances_payload(broker, sim) -> dict:
+    """Per-venue simulated balances + directional cash on the primary venue (§5.4)."""
+    return {"venues": sim.balances_rows(), "total_usdt": round(sim.total_usdt(), 2),
+            "directional_cash": round(broker.cash(), 2),
+            "note": "simulated — live balances need read-only keys (Phase D preflight)"}
+
+
+def _performance_payload(broker, sim, equity) -> dict:
+    from aimos.execution.broker.multivenue import performance
+    return performance(broker.trade_history(), list(sim.trades), list(equity))
 
 
 def _venue_summary(res) -> dict:

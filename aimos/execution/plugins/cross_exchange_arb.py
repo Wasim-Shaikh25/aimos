@@ -57,7 +57,12 @@ class CrossExchangeArb(ExecutionPlugin):
         if stop_bps <= 0:
             return None
         entry = price
-        take_profit = entry * (1 + net_bps / BPS)   # convergence captures net spread
+        # tp = NET capture (round-trip costs already subtracted above). We therefore
+        # present expected_costs_bps=0 to the evaluator: a locked two-leg spread is
+        # not a directional bet, so the directional cost-fraction gate (§23.9C) must
+        # not re-charge costs already netted here (double-count) — the only residual
+        # risk is convergence failure, capped by stop_bps.
+        take_profit = entry * (1 + net_bps / BPS)
         stop_loss = entry * (1 - stop_bps / BPS)     # divergence past this → bail
         rr = net_bps / stop_bps
 
@@ -65,7 +70,7 @@ class CrossExchangeArb(ExecutionPlugin):
             plugin=self.name, symbol=mu.symbol, action=Action.LONG,
             entry=entry, stop_loss=stop_loss, take_profit=take_profit, expected_rr=rr,
             expected_hold_minutes=int(self.cfg["hold_minutes"]),
-            expected_costs_bps=costs_bps,
+            expected_costs_bps=0.0,  # already netted into tp (see note above)
             confidence=float(self.cfg["arb_confidence"]),
             reasons=[
                 f"cross-exchange arb: buy {buy_venue} / sell {sell_venue}, "
@@ -74,6 +79,7 @@ class CrossExchangeArb(ExecutionPlugin):
             meta={
                 "cross_venue": True, "buy_venue": buy_venue, "sell_venue": sell_venue,
                 "dislocation_bps": bps, "net_capture_bps": net_bps,
+                "round_trip_costs_bps": costs_bps,
             },
         )
 

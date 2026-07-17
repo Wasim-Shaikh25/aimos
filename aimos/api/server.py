@@ -41,6 +41,9 @@ class AppState:
     models_provider: Any = None  # callable -> {"models": [...]} (rule/bayes/ml + learning)
     prices_provider: Any = None  # callable -> {"venues": [...], "rows": [...]} (price matrix)
     venue_state_provider: Any = None  # callable(symbol) -> {venue: {regime,p_up,action,...}}
+    trades_provider: Any = None  # callable -> {"trades": [...]} (trade history)
+    balances_provider: Any = None  # callable -> {"venues": [...]} (per-venue balances)
+    performance_provider: Any = None  # callable -> perf metrics dict
 
 
 def _decisions(journal: Journal, limit: int) -> list[dict]:
@@ -144,6 +147,21 @@ def create_app(state: AppState) -> FastAPI:
     def get_venue_state(symbol: str):
         # per-venue regime/p_up/action for one coin (§3.1 per-venue decisions)
         return state.venue_state_provider(symbol) if state.venue_state_provider else {}
+
+    @app.get("/api/trades")
+    def get_trades():
+        # directional + cross-venue arb trades (Trade History, §5.5)
+        return state.trades_provider() if state.trades_provider else {"trades": []}
+
+    @app.get("/api/balances")
+    def get_balances():
+        # per-venue simulated balances (Balance check, §5.4)
+        return state.balances_provider() if state.balances_provider else {"venues": []}
+
+    @app.get("/api/performance")
+    def get_performance():
+        # realized PnL / win-rate / per-strategy / per-venue (Performance, §5.6)
+        return state.performance_provider() if state.performance_provider else {}
 
     @app.get("/api/strategies")
     def get_strategies():

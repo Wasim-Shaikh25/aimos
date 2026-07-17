@@ -33,14 +33,20 @@ class Fill:
     price: float
     fee_quote: float
     kind: str  # "entry" | "sl" | "tp"
+    venue: str = "paper"
+    ts: Optional[datetime] = None
+    pnl_quote: float = 0.0  # realized PnL on exit fills (0 on entries)
+    plugin: str = ""
 
 
 class PaperBroker:
-    def __init__(self, starting_equity: float, cost_model: CostModel, taker: bool = True) -> None:
+    def __init__(self, starting_equity: float, cost_model: CostModel, taker: bool = True,
+                 venue: str = "paper") -> None:
         self._cash = starting_equity
         self._realized = 0.0
         self.cost = cost_model
         self.taker = taker
+        self.venue = venue
         self._pending: list[_Pending] = []
         self._positions: dict[str, Position] = {}
         self._states: dict[str, dict] = {}  # decision_id → {initial_risk, ...}
@@ -113,7 +119,8 @@ class PaperBroker:
             plugin=plan.plugin, decision_id=self._order_id(plan), mode_tag="swing",
         )
         self._positions[plan.symbol] = pos
-        self.fills.append(Fill(pos.decision_id, plan.symbol, side, qty, price, fee, "entry"))
+        self.fills.append(Fill(pos.decision_id, plan.symbol, side, qty, price, fee, "entry",
+                               venue=self.venue, ts=now, plugin=plan.plugin))
 
     def _check_exits(self, symbol, bar, now, depth_usd) -> None:
         pos = self._positions.get(symbol)
@@ -145,8 +152,37 @@ class PaperBroker:
         initial_risk_quote = pos.qty * abs(pos.entry - pos.stop)
         if initial_risk_quote > 0:
             self.closed_trades_r.append(pnl / initial_risk_quote)
-        self.fills.append(Fill(pos.decision_id, pos.symbol, pos.side, pos.qty, price, fee, kind))
+        self.fills.append(Fill(pos.decision_id, pos.symbol, pos.side, pos.qty, price, fee, kind,
+                               venue=self.venue, ts=now, pnl_quote=pnl, plugin=pos.plugin))
         del self._positions[pos.symbol]
+
+    def trade_history(self) -> list[dict]:
+        """Pair entry fills with their SL/TP exit into closed/open directional trades."""
+        entries: dict[str, Fill] = {}
+        trades: list[dict] = []
+        for f in self.fills:
+            if f.kind == "entry":
+                entries[f.decision_id] = f
+            else:  # exit (sl/tp) — pair with its entry (raw floats; UI/serve rounds)
+                e = entries.pop(f.decision_id, None)
+                trades.append({
+                    "kind": "directional", "symbol": f.symbol, "strategy": f.plugin,
+                    "venue": f.venue, "side": (e.side.value if e else f.side.value),
+                    "qty": f.qty, "entry": e.price if e else None,
+                    "exit": f.price, "pnl_usd": f.pnl_quote,
+                    "opened_at": e.ts.isoformat() if e and e.ts else None,
+                    "closed_at": f.ts.isoformat() if f.ts else None,
+                    "result": f.kind, "status": "closed",
+                })
+        for e in entries.values():  # still-open positions
+            trades.append({
+                "kind": "directional", "symbol": e.symbol, "strategy": e.plugin,
+                "venue": e.venue, "side": e.side.value, "qty": e.qty,
+                "entry": e.price, "exit": None, "pnl_usd": 0.0,
+                "opened_at": e.ts.isoformat() if e.ts else None, "closed_at": None,
+                "result": "open", "status": "open",
+            })
+        return trades
 
     def apply_funding(self, symbol: str, funding_rate_bps: float, minutes: float) -> None:
         pos = self._positions.get(symbol)
