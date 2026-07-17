@@ -1,1 +1,1 @@
-"""aimos.agents — see AIMOS_Implementation_Plan.md."""
+"""aimos.agents — see specs/ARCHITECTURE.md."""

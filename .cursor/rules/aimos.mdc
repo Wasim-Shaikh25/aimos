@@ -1,0 +1,34 @@
+---
+description: AIMOS working rules — read specs + changelog first, update them after.
+alwaysApply: true
+---
+
+# AIMOS — Cursor rules
+
+Deterministic crypto trading system. Follow these on every task.
+
+## Before starting
+- Read `specs/STATUS.md` (what's built / dormant / next) and the top of
+  `CHANGELOG.md` (most recent work).
+- Design/behavior → `specs/ARCHITECTURE.md` (the build contract; §N sections).
+- Run/deploy/config → `specs/OPERATIONS.md`.
+- Don't re-implement ✅ items; don't enable 🟡 items without their prerequisite;
+  prefer the next ⏭️ item.
+
+## After finishing (mandatory)
+- Add a `CHANGELOG.md` entry under *Unreleased* for what you did.
+- Update `specs/STATUS.md` if the build state changed; update `specs/OPERATIONS.md`
+  for any new flag/env/run mode.
+- Pass: `python -m pytest`, `python scripts/check_magic_numbers.py`,
+  `python scripts/check_no_naive_datetime.py`, `lint-imports`.
+
+## Hard rules
+- Layers (`observation → intelligence → execution`) communicate only via pydantic
+  contracts; import direction is enforced by import-linter.
+- No LLM in the decision path (§15.3) — sensor/explainer only.
+- No hardcoded tunables in `aimos/observation|intelligence|execution` (magic-number
+  lint); route through config or `aimos/core/normalize`.
+- All time via `clock.now()`. Never edit `core/schemas.py` or the evidence registry
+  without explicit approval.
+- Live trading stays fail-closed (mandate + go-live ladder + boot guard). Secrets
+  never logged/journaled/returned to the UI.

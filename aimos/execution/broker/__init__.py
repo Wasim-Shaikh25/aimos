@@ -1,1 +1,1 @@
-"""aimos.execution.broker — see AIMOS_Implementation_Plan.md."""
+"""aimos.execution.broker — see specs/ARCHITECTURE.md."""

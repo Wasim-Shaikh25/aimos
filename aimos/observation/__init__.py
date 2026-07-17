@@ -1,1 +1,1 @@
-"""aimos.observation — see AIMOS_Implementation_Plan.md."""
+"""aimos.observation — see specs/ARCHITECTURE.md."""

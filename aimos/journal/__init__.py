@@ -1,1 +1,1 @@
-"""aimos.journal — see AIMOS_Implementation_Plan.md."""
+"""aimos.journal — see specs/ARCHITECTURE.md."""

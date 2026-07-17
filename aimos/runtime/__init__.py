@@ -1,1 +1,1 @@
-"""aimos.runtime — see AIMOS_Implementation_Plan.md."""
+"""aimos.runtime — see specs/ARCHITECTURE.md."""

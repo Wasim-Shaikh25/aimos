@@ -1,1 +1,1 @@
-"""aimos.backtest — see AIMOS_Implementation_Plan.md."""
+"""aimos.backtest — see specs/ARCHITECTURE.md."""

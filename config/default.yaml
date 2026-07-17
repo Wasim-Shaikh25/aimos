@@ -199,7 +199,14 @@ paper:
   history_bars: 400                 # warmup candles fetched per tick
   starting_equity_usdt: 10000
   max_ticks: 0                      # 0 = run forever; >0 = stop after N ticks (for a bounded run)
-  journal_path: ""                  # "" = in-memory; set a path (e.g. state/aimos.sqlite) to
-                                    # persist decisions across restarts (deployments)
+  journal_path: "state/aimos.sqlite"  # SHA-256 hash-chained decision journal (SQLite).
+                                    # "" = in-memory (lost on restart). Default persists.
   telegram_status_ticks: 0          # >0 → send a Telegram status summary every N ticks
                                     # (trade-open/close/risk alerts fire regardless when enabled)
+
+# Storage. The SQLite journal (paper.journal_path) is always the tamper-evident
+# record. TimescaleDB is an OPTIONAL time-series store for equity/decisions/prices/
+# trades — enabled only when a DSN is set (env AIMOS_TIMESCALE_DSN overrides) and
+# psycopg is installed; otherwise it is a safe no-op.
+storage:
+  timescale_dsn: ""                 # e.g. postgresql://aimos:aimos@postgres:5432/aimos

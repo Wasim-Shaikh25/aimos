@@ -1,1 +1,1 @@
-"""aimos.risk — see AIMOS_Implementation_Plan.md."""
+"""aimos.risk — see specs/ARCHITECTURE.md."""

@@ -1,57 +1,85 @@
 # AIMOS — AI Market Operating System
 
-Autonomous crypto market-intelligence and trading system. Three deterministic layers — **Observation → Intelligence → Execution** — plus learning, agents, and institutional-grade risk controls. Stablecoin-quoted pairs only. Private project.
+Autonomous crypto market-intelligence and trading system. Three deterministic
+layers — **Observation → Intelligence → Execution** — plus learning, agents, and
+institutional-grade risk controls. Stablecoin-quoted pairs only. Paper trading
+runs with **no API keys**; live trading is behind a deliberate go-live ladder.
 
-## Document map
+Private project.
+
+---
+
+## Quickstart (paper, no keys)
+
+```bash
+./run.sh                 # install + build + serve dashboard & paper loop → http://localhost:8000
+# or:
+pip install -e '.[serve,data]'
+python -m aimos.runtime.serve
+```
+
+Everything runs on public/synthetic data with no keys. See
+**[specs/OPERATIONS.md](specs/OPERATIONS.md)** for Docker, config, and all run modes.
+
+## What you get, day one (all paper)
+
+- The full decision engine: 13 observation engines → rule/bayes/ML fusion →
+  execution plugins, with a hash-chained audit journal.
+- **Multi-platform analysis** across binance/kraken/coinbase, a live price matrix,
+  and simulated cross-venue arbitrage + scalping.
+- A live-polling **dashboard**: markets, prices, decision **mind-map**, engines,
+  strategies, models, universe, trade history, balances, connections, controls,
+  go-live progress, performance.
+- **Telegram** alerts + commands, runtime feature toggles, and a go-live tracker.
+
+## What you must add for more
+
+| To enable | Add |
+|---|---|
+| Telegram alerts/commands | a bot token (`TELEGRAM_BOT_TOKEN`) |
+| LLM news sensor | `ANTHROPIC_API_KEY` |
+| TimescaleDB time-series | `pip install -e '.[timescale]'` + `AIMOS_TIMESCALE_DSN` |
+| Live balances / account | read-only, **withdrawal-disabled** keys (see `secrets.example.yaml`) |
+| **Live trading** | funded accounts + keys + the **go-live ladder** (§23.8) |
+
+Paper trading and price monitoring need **none** of these. Details in
+[specs/OPERATIONS.md](specs/OPERATIONS.md).
+
+## Where data is saved
+
+- **SQLite** — the hash-chained decision/trade journal (`state/aimos.sqlite`), the
+  system of record.
+- **TimescaleDB** (optional) — equity/decisions/prices/trades time-series.
+- **Parquet** — recorded market candles. **JSON/text** — go-live progress, heartbeat.
+- **Secrets are never stored** — read from a file or env at runtime.
+
+## Safety model
+
+Real-money trading is fail-closed behind **three independent locks**: the UI/
+Telegram controls refuse to flip live flags; `mandate.yaml` is fail-closed; and the
+app **refuses to boot** in live mode until every go-live gate is signed off. The
+LLM is a sensor/explainer only — **never** in the decision or control path (§15.3).
+
+## Documentation
 
 | File | Purpose |
 |---|---|
-| `AIMOS_Implementation_Plan.md` | **The build contract (v2.1).** Every module: logic, formulas, thresholds, schemas, tests. Sections referenced everywhere as §N. |
-| `BUILD_TASKS.md` | **Phase-by-phase task cards** for Cursor Composer. Execute in order. |
-| `README.md` | This file — how to operate the build. |
+| **[specs/ARCHITECTURE.md](specs/ARCHITECTURE.md)** | The build contract / design spec (every module, formula, threshold; §N references). |
+| **[specs/OPERATIONS.md](specs/OPERATIONS.md)** | Run, deploy, configure, activate features, storage, go-live, emergency stop. |
+| **[specs/STATUS.md](specs/STATUS.md)** | What's built, what's dormant, what's next. |
+| **[specs/MODELS.md](specs/MODELS.md)** | Model risk register. |
+| **[CHANGELOG.md](CHANGELOG.md)** | Chronological record — updated after every change. |
+| `CLAUDE.md` / `.cursor/rules/` | Assistant rules: read STATUS + CHANGELOG first, update the changelog after. |
+| `vendor/VENDOR.md`, `vendor/GPL_TRIPWIRE.md` | Vendored-code provenance + license tripwire. |
 
-## Non-negotiable architecture rules (repeat these to the agent every session)
+## Development
 
-1. Layers communicate ONLY through pydantic contracts (§3, §25.1). Observation never signals; Intelligence never orders; Execution never reads raw candles.
-2. `NO_TRADE` is always a valid, first-class decision.
-3. No LLM in the decision path (§15.3). LLM allowed only as news sensor (§19), explainer, and research agents.
-4. Zero hardcoded tunables — everything in `config/*.yaml` (§23.12). CI lint enforces.
-5. Every decision journaled with reasons; journal is hash-chained (§24.5).
-6. All timestamps UTC; all time via `clock.now()` (§4.5) — never `datetime.utcnow()` in modules.
-7. Import direction: `observation → intelligence → execution` only, enforced by import-linter. Nothing imports `vendor/vt_research` (§22.3).
-8. Any spec gap → `# SPEC-GAP:` comment + simplest compliant choice. Never invent features.
-
-## How to drive Cursor Composer (per §25.10)
-
-**Session workflow:**
-1. Open a session scoped to ONE task card (or one small group sharing a package).
-2. Paste the prompt template below with the card ID.
-3. Agent implements → runs the card's DoD tests → you review the diff.
-4. Green tests + clean import-linter = card done. Check it off in `BUILD_TASKS.md`. **Never start a card whose dependencies aren't done. Never proceed on red.**
-
-**Prompt template:**
+```bash
+pip install -e '.[dev,data,serve]'
+python -m pytest                      # test suite
+python scripts/check_magic_numbers.py # decision-path tunable lint
+python scripts/check_no_naive_datetime.py
+lint-imports                          # layer import direction
 ```
-You are implementing AIMOS. Read these before writing code:
-- AIMOS_Implementation_Plan.md sections: <card's spec refs> plus §3 and §25
-- BUILD_TASKS.md card <ID>
-Rules: follow the spec exactly; all tunables from config; mark any ambiguity
-with # SPEC-GAP and pick the simplest compliant option; do not add features;
-write the tests listed in the card's DoD and make them pass.
-Implement card <ID> now.
-```
-
-**Phase gates:** at the end of each phase, run the whole phase's test suite plus all previous phases' suites. Phase 3+ must also pass the golden integration test (§25.9) byte-for-byte to ±0.01.
-
-**Parallelism:** cards marked `∥` are independent within their phase — you can run them in separate Composer sessions/worktrees simultaneously (contracts in §3/§25 are the interface). Cards touching `core/schemas.py` are never parallel and never delegated without review.
-
-## Runtime layout (target)
-
-```
-docker compose up  →  trading runtime · research service · dashboard · postgres · telegram bot · watchdog
-```
-
-Paper mode is the default everywhere. Live mode requires the §23.8 go-live gate ladder, `mandate.yaml`, and withdrawal-disabled API keys (§23.4) — the code refuses otherwise.
-
-## Status tracking
-
-Mark cards in `BUILD_TASKS.md`: `[ ]` todo · `[~]` in progress · `[x]` done (tests green). Keep a one-line note per completed card: date + any SPEC-GAP decisions made, so the plan document can be amended later.
+Hard rules (enforced): contracts-only between layers, no hardcoded tunables in the
+decision path, all time via `clock.now()`, no LLM in the decision path.

@@ -1,1 +1,1 @@
-"""aimos.learning — see AIMOS_Implementation_Plan.md."""
+"""aimos.learning — see specs/ARCHITECTURE.md."""

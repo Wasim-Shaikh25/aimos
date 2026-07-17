@@ -118,6 +118,9 @@ def build_app(offline: Optional[bool] = None):
     ladder = GoLiveLadder(journal=orch.journal)
     guard_live_boot(params, ladder)  # fail-closed: refuse to boot live before the ladder is complete
 
+    from aimos.storage.timescale import TimescaleStore
+    ts_store = TimescaleStore(params.model_dump().get("storage", {}).get("timescale_dsn", ""))
+
     async def loop() -> None:
         tf = paper["timeframe"]
         bars = int(paper["history_bars"])
@@ -170,7 +173,13 @@ def build_app(offline: Optional[bool] = None):
                     _maybe_arb(sim, primary_res, base, prices, now, paper, holder)
                     holder["venue_state"][base] = per_venue
                     holder["prices"][base] = _price_row(prices)
+                    if primary_res is not None:  # time-series (optional TimescaleDB)
+                        mu = primary_res.understanding
+                        ts_store.write_decision(now, base, primary, mu.regime.value,
+                                                mu.p_up, primary_res.plan.action.value,
+                                                primary_res.plan.plugin)
                 holder["equity"].append(broker.equity() + sim.realized_arb)
+                ts_store.write_equity(clock.now(), broker.equity() + sim.realized_arb)
                 holder["updated"] = clock.now().isoformat()
                 holder["tick"] += 1
                 heartbeat.beat()
@@ -204,6 +213,7 @@ def build_app(offline: Optional[bool] = None):
         yield
         task.cancel()
         tg_task.cancel()
+        ts_store.close()
 
     state = AppState(
         journal=orch.journal, orchestrator=orch,

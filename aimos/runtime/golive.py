@@ -151,7 +151,7 @@ def guard_live_boot(params, ladder: Optional["GoLiveLadder"] = None) -> None:
         raise LiveNotAllowedError(
             f"refusing to start live (mode={mode}, mandate={mandate_on}): only "
             f"{st['passed']}/{st['total']} go-live gates signed off — next: {st['next']}. "
-            f"Complete the ladder on the Go-Live screen / GO_LIVE.md (§23.8).")
+            f"Complete the ladder on the Go-Live screen / specs/OPERATIONS.md (§23.8).")
 
 
 def _now() -> datetime:

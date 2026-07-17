@@ -12,11 +12,13 @@ services:
     command: python -m aimos.runtime.serve   # dashboard + paper loop + Telegram (one process)
     env_file: [.env]
     environment:
-      AIMOS__PAPER__JOURNAL_PATH: state/aimos.sqlite   # persist decisions across restarts
+      AIMOS__PAPER__JOURNAL_PATH: state/aimos.sqlite   # hash-chained journal (SQLite)
+      AIMOS_TIMESCALE_DSN: postgresql://aimos:${POSTGRES_PASSWORD:-aimos}@postgres:5432/aimos
       AIMOS_HOST: 0.0.0.0
       AIMOS_PORT: "8000"
     ports: ["127.0.0.1:8000:8000"]   # never public — behind VPN/SSH tunnel (§23.4)
     volumes: ["./data:/app/data", "./state:/app/state", "./config:/app/config:ro"]
+    depends_on: [postgres]
     restart: unless-stopped
 
   # INBOUND Telegram commands (/status, /pause) — optional; alerts already come
@@ -35,10 +37,11 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: timescale/timescaledb:latest-pg16
+    image: timescale/timescaledb:latest-pg16   # TimescaleDB — time-series store (§8.1)
     environment:
       POSTGRES_DB: aimos
-      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+      POSTGRES_USER: aimos
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aimos}
     volumes: ["pgdata:/var/lib/postgresql/data"]
     restart: unless-stopped
 

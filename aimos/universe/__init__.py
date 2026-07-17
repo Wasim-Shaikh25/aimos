@@ -1,1 +1,1 @@
-"""aimos.universe — see AIMOS_Implementation_Plan.md."""
+"""aimos.universe — see specs/ARCHITECTURE.md."""
