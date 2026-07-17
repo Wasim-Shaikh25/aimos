@@ -88,6 +88,8 @@ async def run_paper(
     bars = int(paper["history_bars"])
     loop_seconds = float(paper["loop_seconds"])
 
+    from aimos.runtime.golive import guard_live_boot
+    guard_live_boot(params)  # fail-closed: refuse to run live before the go-live ladder is complete
     clock = LiveClock()
     orch = PipelineOrchestrator(params, clock=clock)
     broker = PaperBroker(float(paper["starting_equity_usdt"]), cost_mod.from_config(costs_cfg))

@@ -131,6 +131,29 @@ class GoLiveLadder:
         return self.status()["live_allowed"]
 
 
+class LiveNotAllowedError(RuntimeError):
+    """Raised when the app is asked to run live before the go-live ladder is complete."""
+
+
+def guard_live_boot(params, ladder: Optional["GoLiveLadder"] = None) -> None:
+    """Hard fail-closed check: refuse to BOOT in live mode (or with the mandate
+    enabled) until every §23.8 go-live gate is signed off. Paper mode is never
+    affected. This is belt-and-suspenders on top of the mandate + Controls locks —
+    a misconfigured deploy physically cannot trade real money early."""
+    pd = params.model_dump()
+    mode = str(pd.get("mode", "paper")).lower()
+    mandate_on = bool((pd.get("mandate") or {}).get("enabled", False))
+    if mode != "live" and not mandate_on:
+        return  # paper — nothing to guard
+    lad = ladder or GoLiveLadder()
+    if not lad.live_allowed():
+        st = lad.status()
+        raise LiveNotAllowedError(
+            f"refusing to start live (mode={mode}, mandate={mandate_on}): only "
+            f"{st['passed']}/{st['total']} go-live gates signed off — next: {st['next']}. "
+            f"Complete the ladder on the Go-Live screen / GO_LIVE.md (§23.8).")
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -139,4 +162,4 @@ def _now_iso() -> str:
     return _now().isoformat()
 
 
-__all__ = ["GATES", "GoLiveLadder"]
+__all__ = ["GATES", "GoLiveLadder", "LiveNotAllowedError", "guard_live_boot"]

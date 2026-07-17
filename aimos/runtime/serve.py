@@ -114,8 +114,9 @@ def build_app(offline: Optional[bool] = None):
     from aimos.runtime.features import FeatureController
     feature_ctl = FeatureController(params, _rebuild_orch)
 
-    from aimos.runtime.golive import GoLiveLadder
+    from aimos.runtime.golive import GoLiveLadder, guard_live_boot
     ladder = GoLiveLadder(journal=orch.journal)
+    guard_live_boot(params, ladder)  # fail-closed: refuse to boot live before the ladder is complete
 
     async def loop() -> None:
         tf = paper["timeframe"]

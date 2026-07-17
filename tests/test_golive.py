@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
+from aimos.core.config import load_params
 from aimos.core.schemas import OrderResult
-from aimos.runtime.golive import GATES, GoLiveLadder
+from aimos.runtime.golive import GATES, GoLiveLadder, LiveNotAllowedError, guard_live_boot
 from aimos.runtime.testnet_probe import run_testnet_probe
 
 
@@ -57,6 +60,32 @@ def test_testnet_probe_places_cancels_and_marks(tmp_path):
     # the testnet gate now shows auto progress (clock started)
     tgate = next(g for g in lad.status()["gates"] if g["id"] == "testnet_1wk")
     assert tgate["progress"] is not None
+
+
+def test_boot_guard_allows_paper_refuses_incomplete_live(tmp_path):
+    p = load_params()
+    empty = GoLiveLadder(state_path=str(tmp_path / "gl.json"))
+    # paper mode → always allowed
+    p.mode = "paper"
+    guard_live_boot(p, empty)  # no raise
+    # live mode with an incomplete ladder → refuse to boot (fail-closed)
+    p.mode = "live"
+    with pytest.raises(LiveNotAllowedError):
+        guard_live_boot(p, empty)
+    # mandate enabled also triggers the guard even in paper mode
+    p.mode = "paper"
+    p.mandate.enabled = True
+    with pytest.raises(LiveNotAllowedError):
+        guard_live_boot(p, empty)
+
+
+def test_boot_guard_allows_live_when_ladder_complete(tmp_path):
+    lad = GoLiveLadder(state_path=str(tmp_path / "gl.json"))
+    for gid, *_ in GATES:
+        lad.mark(gid)
+    p = load_params()
+    p.mode = "live"
+    guard_live_boot(p, lad)  # all gates signed → boots
 
 
 def test_testnet_probe_reports_place_failure(tmp_path):

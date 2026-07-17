@@ -25,6 +25,13 @@ When all six are signed off, `live_allowed` is true and the go-live screen shows
 **ALLOWED**. Live trading itself is still governed by `mandate.yaml` (fail-closed)
 and the `mode: live` switch — both deliberate, both outside any dashboard button.
 
+### Hard boot guard (belt-and-suspenders)
+
+The app **refuses to start** in `mode: live` (or with the mandate enabled) until
+every gate is signed off — `guard_live_boot` raises `LiveNotAllowedError` at
+startup. So a misconfigured deploy physically cannot trade real money before the
+ladder is complete. Paper mode is never affected.
+
 ## What "going live" requires that time alone does not
 
 - **Funded accounts + withdrawal-disabled API keys** on each venue.
