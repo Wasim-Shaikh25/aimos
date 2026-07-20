@@ -6,6 +6,12 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Fixed
+- **`.env` templates**: removed a stale, misleading `BINANCE_API_KEY`/`BINANCE_SECRET`
+  block (the code reads `AIMOS_KEY_<VENUE>` / a secrets file, not those names).
+  Clarified the exchange-key section and listed all three venues
+  (binance / kraken / coinbase) in `.env.example` and `.env.prod.example`.
+
 ### Added
 - **TimescaleDB time-series store** (`aimos/storage/timescale.py`, optional): writes
   equity / decisions / prices / trades to hypertables when `AIMOS_TIMESCALE_DSN`
