@@ -44,7 +44,11 @@ clean; import-linter 6/6.
   balance UI. Scalp enabled (MomentumScalp + proxy micro-engine).
 
 Plus: runtime feature toggles (UI + Telegram), go-live ladder tracker with UI
-progress, testnet order probe, hard live-boot guard, TimescaleDB time-series store.
+progress, testnet order probe, hard live-boot guard, TimescaleDB time-series store,
+live-integration validator (`scripts/validate_integration.py`, testnet — see
+`specs/TESTNET.md`), and a **feature monitor agent** (background self-tester that
+probes every feature, publishes a coverage report at `/api/monitor` + the Monitor
+screen, and can force the safe keyless flags on to exercise every path).
 
 ---
 
@@ -52,8 +56,8 @@ progress, testnet order probe, hard live-boot guard, TimescaleDB time-series sto
 
 Markets · Prices (multi-venue matrix) · Decision Anatomy · Mind-map · Engines
 (per-venue) · Strategies · Models · Universe · Positions & Risk · Trade History ·
-Balances · Connections · Controls · Go-Live · Decisions · Performance · Config ·
-Agents.
+Balances · Connections · Controls · Go-Live · Monitor · Decisions · Performance ·
+Config · Agents.
 
 ---
 
@@ -75,7 +79,9 @@ Agents.
 
 ## Not built yet — ⏭️ candidates
 
-- **Real-exchange validation** of the live path (testnet run — code is mock-tested only).
+- **Real-exchange validation** of the live path — the validator harness exists
+  (`scripts/validate_integration.py`, mock-tested); the actual testnet *run* needs
+  the operator's free testnet keys (`specs/TESTNET.md`).
 - **Live multi-venue executor** wired into the serve loop (router exists; routing
   live arb through it end-to-end is the next execution step).
 - **Streaming layer** for real 1m scalp + real cross-venue top-of-book + lead-lag.

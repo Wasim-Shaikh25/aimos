@@ -210,3 +210,12 @@ paper:
 # psycopg is installed; otherwise it is a safe no-op.
 storage:
   timescale_dsn: ""                 # e.g. postgresql://aimos:aimos@postgres:5432/aimos
+
+# Feature monitor agent — a background self-tester that probes every feature on an
+# interval, writes a coverage report (state/monitor_report.json, /api/monitor,
+# Monitor screen), and can FORCE the safe keyless flags (cross_exchange, scalp) on
+# so every code path is exercised fast. Never touches live/funded features.
+monitor:
+  enabled: false                    # true → run the monitor loop in `serve`
+  force_coverage: true              # enable cross_exchange + scalp once, to exercise them
+  interval_seconds: 20              # how often to re-probe and republish the report

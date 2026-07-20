@@ -21,13 +21,15 @@ import MindMap from './screens/MindMap.jsx'
 import Connections from './screens/Connections.jsx'
 import Controls from './screens/Controls.jsx'
 import GoLive from './screens/GoLive.jsx'
+import Monitor from './screens/Monitor.jsx'
 
 const NAV = [
   ['/', 'Markets'], ['/prices', 'Prices'], ['/anatomy', 'Decision Anatomy'], ['/mindmap', 'Mind-map'],
   ['/engines', 'Engines'], ['/strategies', 'Strategies'], ['/models', 'Models'], ['/universe', 'Universe'],
   ['/positions', 'Positions & Risk'], ['/trades', 'Trade History'], ['/balances', 'Balances'],
   ['/connections', 'Connections'], ['/controls', 'Controls'], ['/golive', 'Go-Live'],
-  ['/decisions', 'Decisions'], ['/performance', 'Performance'], ['/config', 'Config'], ['/agents', 'Agents'],
+  ['/monitor', 'Monitor'], ['/decisions', 'Decisions'], ['/performance', 'Performance'],
+  ['/config', 'Config'], ['/agents', 'Agents'],
 ]
 
 function Chrome() {
@@ -70,6 +72,7 @@ export default function App() {
         <Route path="/connections" element={<Connections />} />
         <Route path="/controls" element={<Controls />} />
         <Route path="/golive" element={<GoLive />} />
+        <Route path="/monitor" element={<Monitor />} />
         <Route path="/decisions" element={<Decisions />} />
         <Route path="/performance" element={<Performance />} />
         <Route path="/config" element={<ConfigViewer />} />

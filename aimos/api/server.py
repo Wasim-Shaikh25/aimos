@@ -62,6 +62,7 @@ class AppState:
     feature_setter: Any = None  # callable(name, value) -> {"ok", ...} (runtime toggle)
     golive_provider: Any = None  # callable -> go-live ladder status
     golive_setter: Any = None  # callable(gate, passed) -> {"ok", ...}
+    monitor_provider: Any = None  # callable -> feature-monitor coverage report
 
 
 def _decisions(journal: Journal, limit: int) -> list[dict]:
@@ -200,6 +201,12 @@ def create_app(state: AppState) -> FastAPI:
     def get_golive():
         # go-live ladder progress (§23.8)
         return state.golive_provider() if state.golive_provider else {"gates": [], "percent": 0}
+
+    @app.get("/api/monitor")
+    def get_monitor():
+        # feature-monitor coverage report: per-feature ok/degraded/failing + coverage %
+        return state.monitor_provider() if state.monitor_provider else {
+            "features": [], "summary": {}, "coverage_pct": 0.0}
 
     @app.post("/api/control/golive")
     def set_golive(body: GoLiveBody):

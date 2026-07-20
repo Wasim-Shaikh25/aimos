@@ -100,6 +100,7 @@ def build_app(offline: Optional[bool] = None):
         "updated": None,
         "tick": 0,
         "features": features,  # mutable — the loop reads this so runtime toggles apply
+        "monitor": {},         # latest self-test/coverage report (feature monitor agent)
     }
 
     def _rebuild_orch() -> None:  # after a runtime feature toggle (§ features.py)
@@ -120,6 +121,17 @@ def build_app(offline: Optional[bool] = None):
 
     from aimos.storage.timescale import TimescaleStore
     ts_store = TimescaleStore(params.model_dump().get("storage", {}).get("timescale_dsn", ""))
+
+    # Feature monitor agent — probes every feature on an interval, produces a
+    # coverage report, and (optionally) forces the safe keyless flags on so every
+    # code path is exercised without waiting for organic conditions (§ monitor_agent).
+    from aimos.runtime.monitor_agent import FeatureMonitorAgent
+    mon_cfg = params.model_dump().get("monitor", {}) or {}
+    monitor = FeatureMonitorAgent(
+        _build_monitor_probes(holder, orch, broker, sim, connections, ladder),
+        feature_ctl=feature_ctl,
+        force_coverage=bool(mon_cfg.get("force_coverage", True)),
+    )
 
     async def loop() -> None:
         tf = paper["timeframe"]
@@ -191,6 +203,27 @@ def build_app(offline: Optional[bool] = None):
                 log.exception("serve_loop_error")
             await asyncio.sleep(float(paper["loop_seconds"]))
 
+    async def monitor_loop() -> None:
+        """Run the feature monitor on an interval: force safe coverage, probe every
+        feature, publish the report to /api/monitor and ``state/monitor_report.json``."""
+        import json as _json
+        if not mon_cfg.get("enabled", False):
+            return
+        interval = float(mon_cfg.get("interval_seconds", 20))
+        report_path = Path("state") / "monitor_report.json"
+        log.info("monitor_started", interval=interval, force=monitor.force_coverage_flag)
+        while True:
+            try:
+                monitor.force_coverage()  # enable cross_exchange + scalp once (safe)
+                report = monitor.run_once()
+                holder["monitor"] = report
+                report_path.write_text(_json.dumps(report, indent=2), encoding="utf-8")
+                if report["summary"].get("failing"):
+                    log.warning("monitor_failing", **report["summary"])
+            except Exception:  # noqa: BLE001 — the monitor must never kill the process
+                log.exception("monitor_loop_error")
+            await asyncio.sleep(interval)
+
     async def telegram_inbound() -> None:
         """Poll Telegram for commands (/enable, /pause, /status …) in this process."""
         bot = _build_telegram_bot(holder["features"], orch, broker, feature_ctl, clock)
@@ -208,11 +241,13 @@ def build_app(offline: Optional[bool] = None):
     async def lifespan(app):
         task = asyncio.create_task(loop())
         tg_task = asyncio.create_task(telegram_inbound())
+        mon_task = asyncio.create_task(monitor_loop())
         log.info("serve_started", live_data=live_data, dashboard=DIST.exists(),
                  universe=holder["universe"].source, symbols=len(holder["universe"].selected))
         yield
         task.cancel()
         tg_task.cancel()
+        mon_task.cancel()
         ts_store.close()
 
     state = AppState(
@@ -239,6 +274,8 @@ def build_app(offline: Optional[bool] = None):
         feature_setter=feature_ctl.set,
         golive_provider=ladder.status,
         golive_setter=lambda gate, passed: ladder.mark(gate) if passed else ladder.unmark(gate),
+        monitor_provider=lambda: holder["monitor"] or {"features": [], "summary": {}, "coverage_pct": 0.0,
+                                                       "note": "monitor disabled — set monitor.enabled: true"},
     )
     app = create_app(state)
     app.router.lifespan_context = lifespan
@@ -469,6 +506,93 @@ def _maybe_arb(sim, primary_res, base, prices, now, paper, holder) -> None:
     notional = float(primary_res.plan.size_quote or 0.0) or float(paper["starting_equity_usdt"]) * 0.01
     sim.execute_arb(base, bv, sv, prices[bv], prices[sv], notional, now)
     holder["chosen"]["CrossExchangeArb"] = holder["chosen"].get("CrossExchangeArb", 0) + 1
+
+
+def _build_monitor_probes(holder, orch, broker, sim, connections, ladder) -> dict:
+    """One probe per feature for the monitor agent. Each reads live state and
+    returns ok / degraded / failing — degraded means "wired but not yet exercised"
+    (normal early in a run), failing means "should have data and doesn't"."""
+    from aimos.runtime.monitor_agent import degraded, failing, ok
+
+    def universe():
+        u = holder["universe"]
+        n = len(u.selected)
+        return ok("universe", f"{n} symbols ({u.source})") if n else failing("universe", "empty universe")
+
+    def prices():
+        rows = holder["prices"]
+        multi = [b for b, r in rows.items() if len(r.get("venues", {})) >= 2]
+        if not rows:
+            return degraded("prices", "no ticks yet")
+        return ok("prices", f"{len(rows)} coins, {len(multi)} multi-venue")
+
+    def decisions():
+        n = orch.journal.decision_count()
+        return ok("decisions", f"{n} journaled") if n else degraded("decisions", "no ticks yet")
+
+    def per_venue():
+        vs = holder["venue_state"]
+        venues = {v for row in vs.values() for v in row}
+        return ok("per_venue_analysis", f"{len(vs)} coins × {len(venues)} venues") if vs \
+            else degraded("per_venue_analysis", "no ticks yet")
+
+    def engines():
+        ev = holder["evidence"]
+        n_ev = sum(len(vv) for by in ev.values() for vv in by.values())
+        return ok("engines", f"{n_ev} evidences across {len(ev)} coins") if n_ev \
+            else degraded("engines", "no ticks yet")
+
+    def cross_exchange():
+        if not holder["features"].get("cross_exchange_enabled"):
+            return degraded("cross_exchange", "flag off (force_coverage will enable)")
+        disl = [r["dislocation_bps"] for r in holder["prices"].values() if "dislocation_bps" in r]
+        arb = len(sim.trades)
+        if arb:
+            return ok("cross_exchange", f"{arb} arb legs executed")
+        if disl:
+            return ok("cross_exchange", f"dislocation seen (max {max(disl):.1f} bps), awaiting threshold")
+        return degraded("cross_exchange", "enabled, no dislocation computed yet")
+
+    def scalp():
+        if not holder["features"].get("scalp_enabled"):
+            return degraded("scalp", "flag off")
+        chosen = holder["chosen"].get("MomentumScalp", 0)
+        return ok("scalp", f"chosen {chosen}×" if chosen else "enabled, not yet chosen")
+
+    def trades():
+        n = len(broker.trade_history()) + len(sim.trades)
+        return ok("trades", f"{n} trades") if n else degraded("trades", "no fills yet")
+
+    def balances():
+        rows = sim.balances_rows()
+        return ok("balances", f"{len(rows)} venues, ${sim.total_usdt():.0f}") if rows \
+            else failing("balances", "no balance sheet")
+
+    def performance():
+        eq = holder["equity"]
+        return ok("performance", f"{len(eq)} equity points") if len(eq) > 1 \
+            else degraded("performance", "warming up")
+
+    def mind_map():
+        n = orch.journal.decision_count()
+        return ok("mind_map", "decision graph available") if n else degraded("mind_map", "no decisions yet")
+
+    def connections_probe():
+        if not connections:
+            return degraded("connections", "no keys configured (keyless mode)")
+        live = sum(1 for c in connections.values() if c.get("connected"))
+        return ok("connections", f"{live}/{len(connections)} venues connected")
+
+    def go_live():
+        st = ladder.status()
+        return ok("go_live", f"{st.get('percent', 0)}% gates signed off")
+
+    return {
+        "universe": universe, "prices": prices, "decisions": decisions,
+        "per_venue_analysis": per_venue, "engines": engines, "cross_exchange": cross_exchange,
+        "scalp": scalp, "trades": trades, "balances": balances, "performance": performance,
+        "mind_map": mind_map, "connections": connections_probe, "go_live": go_live,
+    }
 
 
 def _trades_payload(broker, sim) -> dict:

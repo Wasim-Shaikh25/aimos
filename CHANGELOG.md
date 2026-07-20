@@ -7,6 +7,19 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 ## Unreleased
 
 ### Added
+- **Feature monitor agent** (`aimos/runtime/monitor_agent.py`): a background self-
+  tester that probes every feature on an interval (universe, per-venue prices &
+  decisions, engines, cross_exchange, scalp, trades, balances, performance, mind-
+  map, connections, go-live) and publishes a coverage report — ok/degraded/failing
+  + coverage % — to `/api/monitor`, `state/monitor_report.json`, and a new
+  **Monitor** dashboard screen. With `monitor.force_coverage` it flips the safe
+  keyless flags (cross_exchange, scalp) on once so every path is exercised without
+  waiting for organic conditions — fast, hands-off testing. Never touches
+  live/funded features. Off by default (`monitor.enabled`); wired into `serve`.
+- **`specs/TESTNET.md`**: step-by-step guide to get free Binance **testnet** keys
+  (GitHub SSO, fake funds, real API), wire them via `AIMOS_SECRETS_FILE`/env, arm a
+  tiny mandate, and run the live-integration validator — the safe way to prove the
+  live path works before risking money, plus the mainnet path and troubleshooting.
 - **Live-integration validator** (`aimos/runtime/validate.py`,
   `scripts/validate_integration.py`): runs the real account+order path against an
   exchange **testnet** (free, real API) — authenticate → balance → withdrawals-

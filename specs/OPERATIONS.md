@@ -104,6 +104,22 @@ provide the prerequisite + restart (or use the runtime toggle where noted).
 | Live balances | add read-only keys (see §5) | withdrawal-disabled keys |
 | Live trading | the go-live ladder (§6) | funded accounts + keys + ladder |
 
+### Feature monitor agent (`config/default.yaml monitor:`)
+
+A background self-tester that probes every feature on an interval and publishes a
+coverage report (per-feature ok/degraded/failing + coverage %) to `/api/monitor`,
+`state/monitor_report.json`, and the **Monitor** dashboard screen. Off by default.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `monitor.enabled` | `false` | run the monitor loop in `serve` (env `AIMOS__MONITOR__ENABLED=true`) |
+| `monitor.force_coverage` | `true` | enable the safe keyless flags (cross_exchange, scalp) once, to exercise every path fast |
+| `monitor.interval_seconds` | `20` | re-probe + republish cadence |
+
+It never touches live/funded features. Use it to shake out the whole system quickly:
+`AIMOS__MONITOR__ENABLED=true python -m aimos.runtime.serve`, then watch the Monitor
+screen climb toward 100% coverage.
+
 ---
 
 ## 5. Account keys (live/account features only — paper needs NONE)
