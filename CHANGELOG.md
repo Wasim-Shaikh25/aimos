@@ -6,6 +6,14 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added
+- **Live-integration validator** (`aimos/runtime/validate.py`,
+  `scripts/validate_integration.py`): runs the real account+order path against an
+  exchange **testnet** (free, real API) — authenticate → balance → withdrawals-
+  disabled → place tiny order → cancel → reconcile — and prints a PASS/FAIL report,
+  marking the go-live testnet gate on all-pass. The safe way to confirm the build
+  works against a real exchange before risking money. Mock-tested.
+
 ### Fixed
 - **`.env` templates**: removed a stale, misleading `BINANCE_API_KEY`/`BINANCE_SECRET`
   block (the code reads `AIMOS_KEY_<VENUE>` / a secrets file, not those names).
