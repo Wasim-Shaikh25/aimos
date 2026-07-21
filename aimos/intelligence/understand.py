@@ -105,6 +105,23 @@ class IntelligenceLayer:
             reasons=reasons,
         )
 
+    def ml_feature_vector(self, bundle: EvidenceBundle):
+        """The EXACT feature vector the ML engine sees at inference (§6.3).
+
+        Single source of truth for train/serve parity: ``understand`` feeds the ML
+        engine ``feature_vector(bundle, regime=rule_regime, atr_pct=…, rel_vol=0)``,
+        so the history trainer must build features the same way. Returns the
+        registry-ordered numpy vector; used offline for training, never in the
+        decision path here.
+        """
+        from aimos.learning.features import feature_vector
+        rule_regime = self._argmax_regime(self.rule.opine(bundle).regime_probs)
+        kl = self._key_levels(bundle)
+        atr = float(kl.get("atr", 0.0))
+        price = float(kl.get("price", 0.0))
+        atr_pct = (atr / price * PCT) if price > 0 else 0.0
+        return feature_vector(bundle, regime=rule_regime, atr_pct=atr_pct, rel_vol=0.0)
+
     @staticmethod
     def _argmax_regime(regime_probs: dict) -> Optional[Any]:
         from aimos.core.schemas import Regime

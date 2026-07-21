@@ -67,7 +67,7 @@ Config · Agents.
 |---|---|
 | Live trading | go-live ladder + funded, withdrawal-disabled keys |
 | Live multi-venue **execution** | ladder + pre-funded inventory per venue (`multi_venue_live`) |
-| ML fusion weight (0.0) | shadow calibration checklist (§8.3) |
+| ML fusion weight (0.0) | shadow calibration checklist (§8.3) — train a model first with `scripts/train_from_history` (off by default), then raise the weight only after it clears the AUC gate + shadow window |
 | LLM news sensor | `ANTHROPIC_API_KEY` |
 | On-chain engine | an `OnchainProvider` |
 | Cross-venue lead-lag / venue-divergence | per-venue price-stream provider |

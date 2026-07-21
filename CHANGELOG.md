@@ -6,6 +6,19 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added
+- **Train the ML on older data via paper replay** (`aimos/learning/dataset.py`,
+  `scripts/train_from_history.py`): replays historical candles (Binance-vision CSVs,
+  the parquet CandleStore, or offline synthetic) through the exact production
+  observation→intelligence pipeline (anti-lookahead), labels every decision with the
+  triple-barrier method, and trains a walk-forward-validated logistic model. Feature
+  construction is unified with inference via the new `IntelligenceLayer.ml_feature_vector`
+  (single source of truth → no train/serve skew). **Enable/disable switch:** off by
+  default (`learning.history.enabled`); the trained model is saved in **shadow**
+  (fusion weight 0) and the script prints the exact one-line change to enable it —
+  and only if it clears the AUC gate. Nothing reaches the decision path until a human
+  raises `intelligence.fusion_weights.ml` after the shadow window (§8.3).
+
 ### Fixed
 - **Decision-path edge cases** found in end-to-end adversarial testing (new
   `tests/test_decision_edge_cases.py`, arb invariant test):

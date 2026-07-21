@@ -34,10 +34,13 @@ intelligence:
   p_up_clip: [0.05, 0.95]           # rule-engine p_up clamp (§6.1) · sub-range of [0,1]
   bayes_likelihood_lift: 0.35       # max multiplicative tilt per evidence (§6.2) · [0, 1]
   correlation_guard_keep: 2         # strongest N same-engine evidences kept full (§6.2) · [1, 10]
+  ml_model_path: ""                 # trained ML artifact (scripts/train_from_history --out);
+                                    # empty → ML engine inert. env AIMOS__INTELLIGENCE__ML_MODEL_PATH
   fusion_weights:                   # base engine weights (§6.4) · each [0, 1]
     rule: 0.45
     bayes: 0.45
-    ml: 0.0                         # inert until §8 proves live calibration
+    ml: 0.0                         # inert until §8 proves live calibration. Raise ONLY after
+                                    # a trained model clears the gate (train_from_history) + shadow
   tf_weights:                       # §25.2 timeframe reliability multipliers
     1m: 0.6
     5m: 0.6
@@ -158,6 +161,12 @@ learning:
     psi_threshold: 0.25             # PSI > this on > frac of features → retrain proposal
     psi_feature_frac: 0.20
     brier_degradation: 0.20         # > this → auto-halve ML fusion weight
+  history:                          # train the ML on OLDER data via paper replay
+    enabled: false                  # master switch for scripts/train_from_history
+                                    # (env AIMOS__LEARNING__HISTORY__ENABLED=true)
+    horizon_bars: 24                # triple-barrier forward window · bars
+    warmup: 200                     # bars skipped before the first labelled decision
+    n_folds: 3                      # walk-forward validation folds
 
 mode: paper                         # paper | live — live requires §23.8 gate ladder
 

@@ -120,6 +120,36 @@ It never touches live/funded features. Use it to shake out the whole system quic
 `AIMOS__MONITOR__ENABLED=true python -m aimos.runtime.serve`, then watch the Monitor
 screen climb toward 100% coverage.
 
+### Train the ML on older data (`scripts/train_from_history.py`)
+
+Replays historical candles as paper trades, labels them (triple-barrier), and
+trains a walk-forward logistic model — the disciplined way to build the ML on past
+data. **Off by default** (the enable/disable switch); the model is saved in shadow
+and only affects decisions after you deliberately raise its fusion weight.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `learning.history.enabled` | `false` | master switch (env `AIMOS__LEARNING__HISTORY__ENABLED=true`) |
+| `learning.history.horizon_bars` | `24` | triple-barrier forward window |
+| `learning.history.warmup` | `200` | bars skipped before the first labelled decision |
+| `learning.history.n_folds` | `3` | walk-forward validation folds |
+| `intelligence.ml_model_path` | `""` | trained artifact the ML engine loads (empty → inert) |
+| `intelligence.fusion_weights.ml` | `0.0` | ML's weight in fusion — **the enable/disable for ML** |
+
+```bash
+export AIMOS__LEARNING__HISTORY__ENABLED=true
+# pick a data source (Binance publishes free klines at https://data.binance.vision/):
+python -m scripts.train_from_history --csv 'data/BTCUSDT-1h-*.csv' --symbol BTC/USDT
+python -m scripts.train_from_history --parquet --exchange binance --symbol BTC/USDT --timeframe 1h
+python -m scripts.train_from_history --synthetic --symbols BTC/USDT,ETH/USDT   # offline demo
+```
+
+The script prints the walk-forward AUC vs. the gate (`learning.ml.val_auc_min`) and,
+**only if it passes**, the exact two env lines to enable ML
+(`AIMOS__INTELLIGENCE__ML_MODEL_PATH=…` + `AIMOS__INTELLIGENCE__FUSION_WEIGHTS__ML=0.15`).
+Training needs `learning.ml.min_labeled_samples` (2000) labelled bars and never
+auto-enables — you promote it, after watching it in shadow (§8.3).
+
 ---
 
 ## 5. Account keys (live/account features only — paper needs NONE)
