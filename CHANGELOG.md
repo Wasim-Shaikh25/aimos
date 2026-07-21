@@ -6,6 +6,23 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Fixed
+- **Decision-path edge cases** found in end-to-end adversarial testing (new
+  `tests/test_decision_edge_cases.py`, arb invariant test):
+  - **Sizer no longer emits a zero-notional "trade."** An asset already at its
+    concentration cap drove the risk-based size to 0, which passed every gate
+    (default `min_notional=0`) as a `LONG size_quote=0.0`. The sizer now rejects a
+    non-positive or non-finite final size before it reaches the risk manager/broker.
+  - **Non-finite geometry can't reach an order.** A NaN/inf price propagated all the
+    way to `size_quote=NaN`; the sizer now rejects non-finite entry/stop, and
+    `TrendFollowing` no longer emits a plan from a non-finite/≤0 price.
+  - **Evaluator drops stop-less / non-finite-EV candidates.** A candidate with no
+    usable stop distance had its costs ignored and could win — then get rejected at
+    sizing, suppressing a valid trade. Such candidates are now dropped up front.
+  - **Multi-venue arb can't drive a venue negative.** The inventory constraint now
+    includes the buy-side fee, so a venue never spends USDT it doesn't hold (was
+    going negative by the fee amount); total USDT stays conserved.
+
 ### Added
 - **Feature monitor agent** (`aimos/runtime/monitor_agent.py`): a background self-
   tester that probes every feature on an interval (universe, per-venue prices &

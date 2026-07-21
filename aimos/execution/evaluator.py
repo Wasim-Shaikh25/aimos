@@ -10,6 +10,7 @@ dropped and NO_TRADE wins.
 
 from __future__ import annotations
 
+import math
 from typing import Any, Mapping
 
 from aimos.core.normalize import BPS, PCT, clamp01
@@ -58,12 +59,18 @@ class Evaluator:
                 no_trade = c
                 scored.append(c)
                 continue
+            # a directional candidate with no usable stop distance can't be
+            # cost-adjusted or sized — its EV/cost math is meaningless, so it must
+            # never win (and thereby suppress a valid candidate). Drop it up front.
+            if risk_bps(c) <= 0:
+                c.reasons.append("rejected: no usable stop geometry")
+                continue
             if self._cost_fraction_exceeded(c):
                 c.reasons.append("rejected: costs exceed max cost fraction")
                 continue
             ev = expected_value(c, self.losing_r)
-            if ev <= 0:
-                c.reasons.append(f"dropped: EV {ev:+.3f} ≤ 0")
+            if not math.isfinite(ev) or ev <= 0:
+                c.reasons.append(f"dropped: EV {ev:+.3f} not positive-finite")
                 continue
             c.score = self._score(c, mu, ev)
             scored.append(c)

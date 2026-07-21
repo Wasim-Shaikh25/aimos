@@ -6,6 +6,8 @@ swing ∓ sl_atr_buffer×ATR; TP = tp_rr·R; confidence = mu.confidence × regim
 
 from __future__ import annotations
 
+import math
+
 from aimos.core.schemas import (
     Action,
     Direction,
@@ -69,7 +71,10 @@ class TrendFollowing(ExecutionPlugin):
         # entry = current mid; provided via key_levels["price"] or ctx (SPEC-GAP:
         # plugins get no raw price, so observation exports it in key_levels).
         price = mu.key_levels.get("price")
-        return float(price) if price is not None else None
+        if price is None:
+            return None
+        price = float(price)
+        return price if math.isfinite(price) and price > 0 else None
 
 
 def _nearest(levels, below=None, above=None):

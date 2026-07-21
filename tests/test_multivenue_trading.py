@@ -26,6 +26,24 @@ def test_arb_two_leg_execution_and_balances():
     assert abs(sim.total_usdt() - (10_000.0 + pnl)) < 1e-6
 
 
+def test_arb_never_drives_a_venue_negative_and_conserves_usdt():
+    """Inventory constraint must include the buy-side fee: a venue can never spend
+    USDT it doesn't hold, and two-leg arb conserves total USDT (± realized PnL)."""
+    import random
+    sim = MultiVenueSim(venues=["binance", "kraken", "coinbase"],
+                        start_usdt_total=30_000.0, taker_bps=7.5)
+    now = datetime(2026, 7, 17, tzinfo=timezone.utc)
+    random.seed(7)
+    for _ in range(3000):
+        bv, sv = random.sample(sim.venues, 2)
+        bp = random.uniform(1, 100)
+        sim.execute_arb("BTC", bv, sv, bp, bp * random.uniform(0.9, 1.1),
+                        random.uniform(-100, 50_000), now)
+    worst = min(b.get("USDT", 0.0) for b in sim.balances.values())
+    assert worst >= -1e-6, f"a venue went negative: {worst}"
+    assert abs(sim.total_usdt() - (30_000.0 + sim.realized_arb)) < 1e-3
+
+
 def test_performance_aggregates_by_strategy_and_venue():
     arb = [{"kind": "arb", "symbol": "BTC", "strategy": "CrossExchangeArb",
             "venue": "binance→kraken", "pnl_usd": 5.0, "status": "closed"}]

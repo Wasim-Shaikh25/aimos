@@ -10,6 +10,7 @@ set the size (§23.10A). Below the exchange minimum → NO_TRADE (§25.4).
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional, Sequence
 
@@ -47,11 +48,12 @@ class PositionSizer:
     def size(
         self, plan: TradePlan, ctx: ExecContext, inputs: SizingInputs
     ) -> SizingResult:
-        if plan.action is Action.NO_TRADE or not plan.entry or plan.stop_loss is None:
+        if (plan.action is Action.NO_TRADE or not plan.entry or plan.stop_loss is None
+                or not math.isfinite(plan.entry) or not math.isfinite(plan.stop_loss)):
             return SizingResult(None, ["no geometry to size"], rejected=True)
 
         frac_risk = abs(plan.entry - plan.stop_loss) / plan.entry
-        if frac_risk <= 0:
+        if not frac_risk > 0:  # catches ≤ 0 and NaN (degenerate/absent stop)
             return SizingResult(None, ["degenerate stop"], rejected=True)
 
         conf_scale = self._clamp(plan.confidence / self.scale_pivot, self.scale_lo, self.scale_hi)
@@ -87,6 +89,11 @@ class PositionSizer:
             pct_cut = (1.0 - final / risk_size) * PCT if risk_size > 0 else 0.0
             reasons.append(f"size cut {pct_cut:.0f}% by {binding} cap")
 
+        # a binding cap can drive size to 0 (asset already at its concentration cap),
+        # and degenerate geometry can make it non-finite — either is a no-op "trade",
+        # not a real order. Reject before it reaches the risk manager / broker.
+        if not math.isfinite(final) or final <= 0:
+            return SizingResult(None, reasons + ["non-positive size after caps"], rejected=True)
         if final < inputs.min_notional_usd:
             return SizingResult(None, reasons + ["size below minimum after caps"], rejected=True)
 

@@ -52,7 +52,10 @@ class MultiVenueSim:
         # size the arb down to the available balance (throttles when a venue runs
         # dry — the real reason live arb needs pre-funded inventory + rebalancing).
         avail = self.balances.get(buy_venue, {}).get("USDT", 0.0)
-        notional_usd = min(notional_usd, avail)
+        # size to available inventory INCLUDING the buy-side fee (notional + fee ≤
+        # avail), else the fee drives the buy venue slightly negative — you can't
+        # spend USDT you don't hold. This is why live arb needs pre-funded inventory.
+        notional_usd = min(notional_usd, avail / (1.0 + self.taker_bps / BPS))
         if notional_usd <= 1.0:
             return 0.0  # buy venue out of inventory → skip this arb
         qty = notional_usd / buy_price
