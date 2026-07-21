@@ -13,7 +13,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from aimos.runtime.assistant import (
-    Assistant, AssistantDisabled, anthropic_caller, build_grounding, _parse_timeframe,
+    Assistant, AssistantDisabled, anthropic_caller, build_grounding, caller_for,
+    openai_caller, _parse_timeframe,
 )
 
 
@@ -123,6 +124,39 @@ def test_anthropic_caller_requires_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(AssistantDisabled):
         anthropic_caller("s", "u", model="m", max_tokens=1, temperature=0.0, timeout=1.0)
+
+
+def test_openai_caller_requires_key(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(AssistantDisabled):
+        openai_caller("s", "u", model="m", max_tokens=1, temperature=0.0, timeout=1.0)
+
+
+def test_caller_for_selects_provider():
+    assert caller_for({"provider": "openai"}) is openai_caller
+    assert caller_for({"provider": "anthropic"}) is anthropic_caller
+    assert caller_for({}) is anthropic_caller          # default
+
+
+def test_assistant_uses_openai_model_when_provider_openai():
+    seen = {}
+
+    def fake_caller(system, user, **kw):
+        seen["model"] = kw["model"]
+        return "ok"
+
+    a = Assistant(_providers(), cfg={"provider": "openai", "openai_model": "gpt-x"},
+                  caller=fake_caller)
+    a.answer("q")
+    assert seen["model"] == "gpt-x"   # openai_model, not the anthropic model
+
+
+def test_assistant_default_backend_follows_provider(monkeypatch):
+    # with no injected caller, provider:openai wires the openai backend (which needs a key)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    a = Assistant(_providers(), cfg={"provider": "openai"})
+    with pytest.raises(AssistantDisabled):
+        a.answer("q")
 
 
 # -- API ---------------------------------------------------------------------

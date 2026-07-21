@@ -24,12 +24,14 @@ import structlog
 log = structlog.get_logger(__name__)
 
 _DEF_MODEL = "claude-sonnet-5"
+_DEF_OPENAI_MODEL = "gpt-4o-mini"   # cheap default; override via assistant.openai_model
 _DEF_MAX_TOKENS = 1200
 _DEF_TEMPERATURE = 0.2
 _DEF_TIMEOUT = 40.0
 _DEF_RECENT = 40
 _ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 _ANTHROPIC_VERSION = "2023-06-01"
+_OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 
 _SYSTEM = (
     "You are AIMOS Analyst, a READ-ONLY assistant for a deterministic crypto "
@@ -171,6 +173,31 @@ def anthropic_caller(system: str, user: str, *, model: str, max_tokens: int,
     return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip()
 
 
+def openai_caller(system: str, user: str, *, model: str, max_tokens: int,
+                  temperature: float, timeout: float) -> str:
+    key = os.environ.get("OPENAI_API_KEY")
+    if not key:
+        raise AssistantDisabled("OPENAI_API_KEY not set")
+    import httpx
+    r = httpx.post(
+        _OPENAI_URL,
+        headers={"authorization": f"Bearer {key}", "content-type": "application/json"},
+        json={"model": model, "max_tokens": max_tokens, "temperature": temperature,
+              "messages": [{"role": "system", "content": system},
+                           {"role": "user", "content": user}]},
+        timeout=timeout,
+    )
+    r.raise_for_status()
+    data = r.json()
+    return ((data.get("choices") or [{}])[0].get("message", {}).get("content") or "").strip()
+
+
+def caller_for(cfg: Optional[dict]) -> Callable:
+    """Pick the LLM backend from ``assistant.provider`` (anthropic | openai)."""
+    provider = (cfg or {}).get("provider", "anthropic")
+    return openai_caller if str(provider).lower() == "openai" else anthropic_caller
+
+
 # ---------------------------------------------------------------------------
 # the analyst
 # ---------------------------------------------------------------------------
@@ -181,7 +208,7 @@ class Assistant:
                  caller: Optional[Callable] = None) -> None:
         self.providers = providers
         self.cfg = cfg or {}
-        self.caller = caller or anthropic_caller
+        self.caller = caller or caller_for(self.cfg)  # anthropic | openai per config
         self.recent = int(self.cfg.get("recent_decisions", _DEF_RECENT))
 
     def answer(self, question: str) -> dict:
@@ -198,14 +225,20 @@ class Assistant:
         text = self._llm(_user_prompt(_REPORT_Q.format(tf=timeframe), g))
         return {"report": text, "timeframe": timeframe, "grounded_on": _grounding_summary(g)}
 
+    def _model(self) -> str:
+        if str(self.cfg.get("provider", "anthropic")).lower() == "openai":
+            return self.cfg.get("openai_model", _DEF_OPENAI_MODEL)
+        return self.cfg.get("model", _DEF_MODEL)
+
     def _llm(self, user: str) -> str:
         return self.caller(
             _SYSTEM, user,
-            model=self.cfg.get("model", _DEF_MODEL),
+            model=self._model(),
             max_tokens=int(self.cfg.get("max_tokens", _DEF_MAX_TOKENS)),
             temperature=float(self.cfg.get("temperature", _DEF_TEMPERATURE)),
             timeout=float(self.cfg.get("timeout_seconds", _DEF_TIMEOUT)),
         )
 
 
-__all__ = ["Assistant", "AssistantDisabled", "anthropic_caller", "build_grounding"]
+__all__ = ["Assistant", "AssistantDisabled", "anthropic_caller", "build_grounding",
+           "caller_for", "openai_caller"]

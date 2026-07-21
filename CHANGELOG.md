@@ -7,6 +7,15 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 ## Unreleased
 
 ### Added
+- **OpenAI backend for the AI analyst** — the analyst now supports `assistant.provider:
+  openai` (default `gpt-4o-mini`, cheap) alongside Anthropic, selected by config; same
+  grounded, read-only prompt, injectable caller (both covered by offline tests). Uses
+  `OPENAI_API_KEY`. Config gains `assistant.provider` + `assistant.openai_model`.
+- **`specs/DEPLOYMENT.md`** — one end-to-end runbook: run → paper (for months) →
+  Telegram → AI analyst (Anthropic/OpenAI) → deploy cheaply (~$5/mo VPS + Docker
+  Compose) → testnet validation → train/enable ML → **when and how to go live**
+  (the fail-closed ladder + a go/no-go checklist) → emergency stop. Linked from the
+  README; `.env.example` gains `OPENAI_API_KEY` + analyst env vars.
 - **Read-only AI analyst** (`aimos/runtime/assistant.py`, `specs/ASSISTANT.md`):
   a natural-language assistant — dashboard **AI Analyst** chat screen + Telegram
   `/ask` and `/report` — that answers questions about the running system and

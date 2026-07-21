@@ -73,10 +73,16 @@ providers (read-only) ──► build_grounding() ──► JSON evidence bundle
 | Key | Default | Meaning |
 |---|---|---|
 | `assistant.enabled` | `false` | master switch (env `AIMOS__ASSISTANT__ENABLED=true`) |
-| `assistant.model` | `claude-sonnet-5` | Anthropic model id |
+| `assistant.provider` | `anthropic` | LLM backend: `anthropic` or `openai` |
+| `assistant.model` | `claude-sonnet-5` | Anthropic model id (provider: anthropic) |
+| `assistant.openai_model` | `gpt-4o-mini` | OpenAI model id (provider: openai; cheap) |
 | `assistant.max_tokens` | `1200` | response cap |
 | `assistant.temperature` | `0.2` | low — analysis, not creativity |
 | `assistant.recent_decisions` | `40` | decisions pulled into the grounding bundle |
 | `assistant.timeout_seconds` | `40` | LLM call timeout |
 
-Enable: `export ANTHROPIC_API_KEY=…` then `AIMOS__ASSISTANT__ENABLED=true`.
+Enable (Anthropic): `export ANTHROPIC_API_KEY=…` then `AIMOS__ASSISTANT__ENABLED=true`.
+Enable (OpenAI, cheaper): `export OPENAI_API_KEY=…`,
+`AIMOS__ASSISTANT__PROVIDER=openai`, `AIMOS__ASSISTANT__ENABLED=true`. Both backends
+use the same grounded, read-only prompt — only the API differs. The caller is
+injectable, so both are covered by offline tests.

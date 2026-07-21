@@ -18,8 +18,10 @@ pip install -e '.[serve,data]'
 python -m aimos.runtime.serve
 ```
 
-Everything runs on public/synthetic data with no keys. See
-**[specs/OPERATIONS.md](specs/OPERATIONS.md)** for Docker, config, and all run modes.
+Everything runs on public/synthetic data with no keys. For the full journey —
+paper → Telegram/AI analyst → cheap always-on deploy → testnet → ML → go-live —
+follow **[specs/DEPLOYMENT.md](specs/DEPLOYMENT.md)** (and
+**[specs/OPERATIONS.md](specs/OPERATIONS.md)** for the config reference).
 
 ## What you get, day one (all paper)
 
@@ -64,8 +66,11 @@ LLM is a sensor/explainer only — **never** in the decision or control path (§
 
 | File | Purpose |
 |---|---|
+| **[specs/DEPLOYMENT.md](specs/DEPLOYMENT.md)** | End-to-end runbook: run → paper → Telegram/AI analyst → deploy cheaply → testnet → ML → go-live (when & how). |
 | **[specs/ARCHITECTURE.md](specs/ARCHITECTURE.md)** | The build contract / design spec (every module, formula, threshold; §N references). |
 | **[specs/OPERATIONS.md](specs/OPERATIONS.md)** | Run, deploy, configure, activate features, storage, go-live, emergency stop. |
+| **[specs/TESTNET.md](specs/TESTNET.md)** | Validate the live path against Binance testnet (free) before real money. |
+| **[specs/ASSISTANT.md](specs/ASSISTANT.md)** | The read-only AI analyst — grounding, guardrails, providers. |
 | **[specs/STATUS.md](specs/STATUS.md)** | What's built, what's dormant, what's next. |
 | **[specs/MODELS.md](specs/MODELS.md)** | Model risk register. |
 | **[CHANGELOG.md](CHANGELOG.md)** | Chronological record — updated after every change. |

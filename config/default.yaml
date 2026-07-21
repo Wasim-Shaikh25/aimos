@@ -234,8 +234,11 @@ monitor:
 # never trades, flips flags, or edits config. Off unless enabled + ANTHROPIC_API_KEY.
 assistant:
   enabled: false                    # master switch (env AIMOS__ASSISTANT__ENABLED=true)
-  model: claude-sonnet-5            # Anthropic model id
+  provider: anthropic               # anthropic | openai — which LLM backend to use
+  model: claude-sonnet-5            # Anthropic model id (used when provider: anthropic)
+  openai_model: gpt-4o-mini         # OpenAI model id (used when provider: openai; cheap)
   max_tokens: 1200                  # response cap
   temperature: 0.2                  # low — analysis, not creativity
   recent_decisions: 40              # decisions pulled into the grounding bundle
   timeout_seconds: 40               # LLM call timeout · seconds
+  # keys: ANTHROPIC_API_KEY (anthropic) or OPENAI_API_KEY (openai) — env only, never in files
