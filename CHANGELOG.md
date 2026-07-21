@@ -7,6 +7,17 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 ## Unreleased
 
 ### Added
+- **Read-only AI analyst** (`aimos/runtime/assistant.py`, `specs/ASSISTANT.md`):
+  a natural-language assistant — dashboard **AI Analyst** chat screen + Telegram
+  `/ask` and `/report` — that answers questions about the running system and
+  generates timeframe reports **grounded in the journal + real metrics** (recent
+  decisions, performance, ML/model status, monitor coverage, features, go-live,
+  equity). It is the sanctioned LLM role (§15.3): strictly read-only, it explains
+  and *advises* but cannot trade, flip flags, or edit config — any action it
+  recommends goes through the existing CONFIRM-gated controls. The LLM caller is
+  injected (plain httpx to the Anthropic Messages API), so grounding/prompting is
+  fully tested offline. Off by default (`assistant.enabled` + `ANTHROPIC_API_KEY`),
+  on-demand only (never per tick); secrets never enter the prompt.
 - **Train the ML on older data via paper replay** (`aimos/learning/dataset.py`,
   `scripts/train_from_history.py`): replays historical candles (Binance-vision CSVs,
   the parquet CandleStore, or offline synthetic) through the exact production

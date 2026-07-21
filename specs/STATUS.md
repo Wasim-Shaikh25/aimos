@@ -48,7 +48,10 @@ progress, testnet order probe, hard live-boot guard, TimescaleDB time-series sto
 live-integration validator (`scripts/validate_integration.py`, testnet — see
 `specs/TESTNET.md`), and a **feature monitor agent** (background self-tester that
 probes every feature, publishes a coverage report at `/api/monitor` + the Monitor
-screen, and can force the safe keyless flags on to exercise every path).
+screen, and can force the safe keyless flags on to exercise every path). Plus a
+**read-only AI analyst** (`/ask`, `/report` on the UI + Telegram — grounded in the
+journal + metrics, sensor/explainer only; see `specs/ASSISTANT.md`), and ML
+training on historical data via paper replay (`scripts/train_from_history`).
 
 ---
 
@@ -56,8 +59,8 @@ screen, and can force the safe keyless flags on to exercise every path).
 
 Markets · Prices (multi-venue matrix) · Decision Anatomy · Mind-map · Engines
 (per-venue) · Strategies · Models · Universe · Positions & Risk · Trade History ·
-Balances · Connections · Controls · Go-Live · Monitor · Decisions · Performance ·
-Config · Agents.
+Balances · Connections · Controls · Go-Live · Monitor · AI Analyst · Decisions ·
+Performance · Config · Agents.
 
 ---
 

@@ -20,7 +20,8 @@ from aimos.telegram.security import ChatWhitelist, NonceStore
 log = structlog.get_logger(__name__)
 
 _HELP = (
-    "/status  /positions  /pnl  /pause [SYM]  /resume [SYM]\n"
+    "/status  /positions  /pnl  /pause [SYM]  /resume [SYM]  /features\n"
+    "/ask <question>  /report [24h|7d]  (read-only AI analyst)\n"
     "/flatten SYM  /killswitch  (confirm with /confirm <nonce>)"
 )
 
@@ -56,6 +57,7 @@ class CommandRouter:
         journal: Optional[Any] = None,
         positions_provider: Optional[Any] = None,
         feature_controller: Optional[Any] = None,
+        assistant: Optional[Any] = None,
     ) -> None:
         self.whitelist = whitelist
         self.nonce = nonce_store
@@ -63,6 +65,7 @@ class CommandRouter:
         self.journal = journal
         self.positions_provider = positions_provider
         self.features = feature_controller
+        self.assistant = assistant
 
     def handle(self, chat_id: int, text: str) -> Optional[str]:
         if not self.whitelist.is_allowed(chat_id):
@@ -86,6 +89,8 @@ class CommandRouter:
             "/pause": lambda: self._pause(args),
             "/resume": lambda: self._resume(args),
             "/features": self._features,
+            "/ask": lambda: self._ask(args),
+            "/report": lambda: self._report(args),
         }.get(cmd)
         if handler is None:
             return f"unknown command {cmd}\n{_HELP}"
@@ -147,6 +152,26 @@ class CommandRouter:
         if self.orch:
             self.orch.resume(sym)
         return f"resumed {sym or 'global'}"
+
+    def _ask(self, args: list[str]) -> str:
+        # read-only AI analyst — grounded Q&A (§15.3). Never takes actions.
+        if self.assistant is None:
+            return "analyst not available (set assistant.enabled + ANTHROPIC_API_KEY)"
+        if not args:
+            return "usage: /ask <your question about the system>"
+        try:
+            return self.assistant.answer(" ".join(args)).get("answer", "(no answer)")
+        except Exception as exc:  # noqa: BLE001
+            return f"analyst error: {exc}"
+
+    def _report(self, args: list[str]) -> str:
+        if self.assistant is None:
+            return "analyst not available (set assistant.enabled + ANTHROPIC_API_KEY)"
+        tf = args[0] if args else "24h"
+        try:
+            return self.assistant.report(tf).get("report", "(no report)")
+        except Exception as exc:  # noqa: BLE001
+            return f"analyst error: {exc}"
 
     def _features(self) -> str:
         if self.features is None:

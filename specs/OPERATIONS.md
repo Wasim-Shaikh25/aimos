@@ -150,6 +150,32 @@ The script prints the walk-forward AUC vs. the gate (`learning.ml.val_auc_min`) 
 Training needs `learning.ml.min_labeled_samples` (2000) labelled bars and never
 auto-enables — you promote it, after watching it in shadow (§8.3).
 
+### Read-only AI analyst (`config/default.yaml assistant:`)
+
+A natural-language analyst — dashboard **AI Analyst** screen + Telegram `/ask` /
+`/report` — that answers questions and writes timeframe reports **grounded in the
+journal + metrics**. Sensor/explainer only (§15.3): read-only, advisory, it never
+trades or changes settings. Off unless enabled **and** `ANTHROPIC_API_KEY` is set.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `assistant.enabled` | `false` | master switch (env `AIMOS__ASSISTANT__ENABLED=true`) |
+| `assistant.model` | `claude-sonnet-5` | Anthropic model id |
+| `assistant.max_tokens` | `1200` | response cap |
+| `assistant.temperature` | `0.2` | low — analysis, not creativity |
+| `assistant.recent_decisions` | `40` | decisions pulled into the grounding bundle |
+| `assistant.timeout_seconds` | `40` | LLM call timeout |
+
+```bash
+export ANTHROPIC_API_KEY=...            # required
+export AIMOS__ASSISTANT__ENABLED=true
+# then, in the UI AI Analyst screen or on Telegram:
+#   /ask is the ML working?      /report 7d
+```
+
+Recommendations are advisory — act on them via Controls / the CONFIRM-gated APIs.
+See `specs/ASSISTANT.md` for the grounding design and guardrails.
+
 ---
 
 ## 5. Account keys (live/account features only — paper needs NONE)

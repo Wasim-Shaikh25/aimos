@@ -31,6 +31,12 @@ export const api = {
   }),
   golive: () => j('/api/golive'),
   monitor: () => j('/api/monitor'),
+  assistantStatus: () => j('/api/assistant'),
+  ask: (question) => j('/api/assistant', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question }),
+  }),
+  report: (timeframe) => j(`/api/assistant/report?timeframe=${encodeURIComponent(timeframe || '24h')}`),
   setGolive: (gate, passed) => j('/api/control/golive', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ confirm: 'CONFIRM', gate, passed }),

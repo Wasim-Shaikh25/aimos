@@ -133,6 +133,23 @@ def build_app(offline: Optional[bool] = None):
         force_coverage=bool(mon_cfg.get("force_coverage", True)),
     )
 
+    # Read-only AI analyst (specs/ASSISTANT.md). Grounded in the journal + metrics;
+    # never in the decision path. Off unless enabled + ANTHROPIC_API_KEY.
+    asst_cfg = params.model_dump().get("assistant", {}) or {}
+    assistant = None
+    if asst_cfg.get("enabled"):
+        from aimos.runtime.assistant import Assistant
+        assistant = Assistant({
+            "decisions": lambda limit=40: _assistant_decisions(orch.journal, limit),
+            "performance": lambda: _performance_payload(broker, sim, holder["equity"]),
+            "models": lambda: _models_payload(params, holder["latest"]),
+            "monitor": lambda: holder["monitor"],
+            "features": feature_ctl.snapshot,
+            "golive": ladder.status,
+            "strategies": lambda: _strategies_payload(params, holder["chosen"]),
+            "equity": lambda: holder["equity"],
+        }, cfg=asst_cfg)
+
     async def loop() -> None:
         tf = paper["timeframe"]
         bars = int(paper["history_bars"])
@@ -226,7 +243,7 @@ def build_app(offline: Optional[bool] = None):
 
     async def telegram_inbound() -> None:
         """Poll Telegram for commands (/enable, /pause, /status …) in this process."""
-        bot = _build_telegram_bot(holder["features"], orch, broker, feature_ctl, clock)
+        bot = _build_telegram_bot(holder["features"], orch, broker, feature_ctl, clock, assistant)
         if bot is None:
             return
         log.info("telegram_inbound_started")
@@ -276,6 +293,7 @@ def build_app(offline: Optional[bool] = None):
         golive_setter=lambda gate, passed: ladder.mark(gate) if passed else ladder.unmark(gate),
         monitor_provider=lambda: holder["monitor"] or {"features": [], "summary": {}, "coverage_pct": 0.0,
                                                        "note": "monitor disabled — set monitor.enabled: true"},
+        assistant=assistant,
     )
     app = create_app(state)
     app.router.lifespan_context = lifespan
@@ -283,7 +301,28 @@ def build_app(offline: Optional[bool] = None):
     return app
 
 
-def _build_telegram_bot(features, orch, broker, feature_ctl, clock):
+def _assistant_decisions(journal, limit: int = 40) -> list:
+    """Compact recent decisions for the analyst grounding (read-only, no secrets)."""
+    import json as _json
+    rows = journal.conn.execute(
+        "SELECT decision_id, symbol, timestamp, payload FROM decisions ORDER BY seq DESC LIMIT ?",
+        (int(limit),),
+    ).fetchall()
+    out = []
+    for r in rows:
+        rec = _json.loads(r["payload"])
+        mu = rec.get("understanding", {}) or {}
+        ch = rec.get("chosen", {}) or {}
+        out.append({
+            "decision_id": r["decision_id"], "timestamp": r["timestamp"], "symbol": r["symbol"],
+            "regime": mu.get("regime"), "action": ch.get("action"), "plugin": ch.get("plugin"),
+            "p_up": mu.get("p_up"), "confidence": mu.get("confidence"),
+            "reasons": (mu.get("reasons") or [])[:3],
+        })
+    return out
+
+
+def _build_telegram_bot(features, orch, broker, feature_ctl, clock, assistant=None):
     """Inbound Telegram command bot for this process, or None when not usable."""
     import os
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -296,7 +335,7 @@ def _build_telegram_bot(features, orch, broker, feature_ctl, clock):
         router = CommandRouter(
             ChatWhitelist(ids), NonceStore(clock), orchestrator=orch, journal=orch.journal,
             positions_provider=lambda: [p.model_dump(mode="json") for p in broker.positions()],
-            feature_controller=feature_ctl,
+            feature_controller=feature_ctl, assistant=assistant,
         )
         return TelegramBot(HttpTransport(token), router)
     except Exception:  # noqa: BLE001

@@ -228,3 +228,14 @@ monitor:
   enabled: false                    # true → run the monitor loop in `serve`
   force_coverage: true              # enable cross_exchange + scalp once, to exercise them
   interval_seconds: 20              # how often to re-probe and republish the report
+
+# Read-only AI analyst (specs/ASSISTANT.md) — answers questions and writes reports
+# grounded in the journal + metrics. LLM is a sensor/explainer only (§15.3): it
+# never trades, flips flags, or edits config. Off unless enabled + ANTHROPIC_API_KEY.
+assistant:
+  enabled: false                    # master switch (env AIMOS__ASSISTANT__ENABLED=true)
+  model: claude-sonnet-5            # Anthropic model id
+  max_tokens: 1200                  # response cap
+  temperature: 0.2                  # low — analysis, not creativity
+  recent_decisions: 40              # decisions pulled into the grounding bundle
+  timeout_seconds: 40               # LLM call timeout · seconds

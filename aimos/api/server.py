@@ -35,6 +35,10 @@ class GoLiveBody(BaseModel):
     passed: bool = True
 
 
+class AskBody(BaseModel):
+    question: str = ""
+
+
 @dataclass
 class AppState:
     """Everything the API reads/controls — injected so the backend is testable."""
@@ -63,6 +67,7 @@ class AppState:
     golive_provider: Any = None  # callable -> go-live ladder status
     golive_setter: Any = None  # callable(gate, passed) -> {"ok", ...}
     monitor_provider: Any = None  # callable -> feature-monitor coverage report
+    assistant: Any = None  # read-only AI analyst (Assistant) or None when disabled
 
 
 def _decisions(journal: Journal, limit: int) -> list[dict]:
@@ -207,6 +212,33 @@ def create_app(state: AppState) -> FastAPI:
         # feature-monitor coverage report: per-feature ok/degraded/failing + coverage %
         return state.monitor_provider() if state.monitor_provider else {
             "features": [], "summary": {}, "coverage_pct": 0.0}
+
+    @app.get("/api/assistant")
+    def assistant_status():
+        # whether the read-only analyst is available (enabled + API key)
+        return {"enabled": state.assistant is not None}
+
+    @app.post("/api/assistant")
+    def assistant_ask(body: AskBody):
+        # read-only AI analyst — grounded Q&A over the journal + metrics (§15.3)
+        if state.assistant is None:
+            raise HTTPException(status_code=503,
+                                detail="assistant disabled (set assistant.enabled + ANTHROPIC_API_KEY)")
+        try:
+            return state.assistant.answer(body.question)
+        except Exception as exc:  # noqa: BLE001 — surface LLM/config errors as 502
+            raise HTTPException(status_code=502, detail=f"assistant error: {exc}")
+
+    @app.get("/api/assistant/report")
+    def assistant_report(timeframe: str = "24h"):
+        # grounded performance + health report for a timeframe (e.g. 24h, 7d)
+        if state.assistant is None:
+            raise HTTPException(status_code=503,
+                                detail="assistant disabled (set assistant.enabled + ANTHROPIC_API_KEY)")
+        try:
+            return state.assistant.report(timeframe)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=502, detail=f"assistant error: {exc}")
 
     @app.post("/api/control/golive")
     def set_golive(body: GoLiveBody):
