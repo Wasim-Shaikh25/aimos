@@ -231,7 +231,7 @@ saas = [
 8. `[~]` Dashboard: org switcher, settings, invite flow (switcher + members endpoints done).
 
 ### Phase 3 — Finish v2.0 runtime
-1. Streaming layer: `aimos/data/streaming.py` + exchange websocket feeds.
+1. `[~]` Streaming layer: `aimos/data/streaming.py` + exchange websocket feeds (Binance source + recorder wired to serve loop; feed-into-pipeline pending).
 2. `[x]` Runtime persistence: save/restore equity, balances, positions, features, ladder (`aimos/runtime/state_store.py`).
 3. Dashboard charting: `lightweight-charts` and evidence tables.
 4. ML pipeline: `scripts/train_from_history` end-to-end, model registry, promotion/demotion.
@@ -280,7 +280,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 
 ### Phase 3 — Finish v2.0 runtime
 
-- [ ] Streaming layer: websocket public top-of-book/trades
+- [~] Streaming layer: websocket public top-of-book/trades (Binance source + recorder wired; feed-into-pipeline pending)
 - [x] Runtime state persistence (equity, balances, positions, features, ladder)
 - [ ] Rich dashboard: candlestick/equity charts, evidence tables, anatomy flow
 - [ ] ML training pipeline end-to-end (`scripts/train_from_history`)

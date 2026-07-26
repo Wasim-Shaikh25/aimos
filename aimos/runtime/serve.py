@@ -35,6 +35,7 @@ from aimos.data.live_source import (
     base_of,
     venue_snapshot_for,
 )
+from aimos.data.streaming import BinanceWebsocketSource, StreamRecorder
 from aimos.execution.broker.paper import PaperBroker
 from aimos.execution.position_sizer import SizingInputs
 from aimos.journal.journal import Journal
@@ -281,17 +282,37 @@ def build_app(offline: Optional[bool] = None):
                 log.exception("telegram_inbound_error")
             await asyncio.sleep(3.0)
 
+    async def stream_loop() -> None:
+        """Optional websocket feed: records top-of-book, trades, and tickers to
+        ``state/streams/`` for replay. The events are not yet fed into the slow
+        paper loop; that wiring is Phase 3."""
+        if not features.get("streaming_enabled"):
+            return
+        symbols = holder["universe"].symbols or list(paper.get("symbols", []))
+        if not symbols:
+            return
+        # Keep only the primary venue mapping; Binance spot is the default feed.
+        source = BinanceWebsocketSource(
+            symbols=symbols,
+            venue="binance",
+            recorder=StreamRecorder("state/streams"),
+        )
+        log.info("stream_started", venue=source.venue, symbols=len(symbols))
+        await source.run()
+
     @asynccontextmanager
     async def lifespan(app):
         task = asyncio.create_task(loop())
         tg_task = asyncio.create_task(telegram_inbound())
         mon_task = asyncio.create_task(monitor_loop())
+        stream_task = asyncio.create_task(stream_loop())
         log.info("serve_started", live_data=live_data, dashboard=DIST.exists(),
                  universe=holder["universe"].source, symbols=len(holder["universe"].selected))
         yield
         task.cancel()
         tg_task.cancel()
         mon_task.cancel()
+        stream_task.cancel()
         ts_store.close()
 
     state = AppState(

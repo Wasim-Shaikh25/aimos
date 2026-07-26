@@ -31,6 +31,14 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 - **12-month historical dataset downloader** (`scripts/download_history.py`):
   free public Binance Vision monthly klines → `CandleStore` parquet for ML
   training and regression tests. Supports multi-symbol and `1m/5m/15m/1h/4h/1d`.
+- **Streaming layer scaffold** (`aimos/data/streaming.py`):
+  - `BinanceWebsocketSource` connects to Binance combined websocket streams
+    (`@trade`, `@depth`, `@miniTicker`) and normalizes events into a venue-agnostic
+    `StreamEvent` shape.
+  - `StreamRecorder` writes events to `state/streams/<date>.jsonl` for
+    deterministic replay via `RecordedStreamSource`.
+  - `runtime/serve.py` starts a `stream_loop()` when `features.streaming_enabled`
+    is true; it records but does not yet feed the slow paper loop (Phase 3).
 - **SaaS v2.0 requirements and task tracker** (`specs/AIMOS_SaaS_Requirements_and_Task_Tracker.md`):
   roadmap for finishing the remaining runtime pieces (streaming, persistence, dashboard
   charting, ML pipeline, vendor vendoring, 12-month dataset, live multi-venue wiring)

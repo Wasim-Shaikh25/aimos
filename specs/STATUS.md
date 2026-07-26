@@ -22,7 +22,7 @@ prerequisite) · ⏭️ not built yet.
 | 5 | Runtime, API, React dashboard, Telegram, ignition, risk analytics | ✅ |
 | 6 | Learning (shadow), agents, LLM sensor, live broker, go-live gates | ✅ |
 | SaaS P1 | User auth: email/password + Google/Apple OAuth + phone OTP, JWT, tenant orgs | ✅ |
-| SaaS P2/P3 (partial) | Runtime state persistence, per-tenant journal/state store, broker/sim resume | 🟡 |
+| SaaS P2/P3 (partial) | Runtime state persistence, per-tenant journal/state store, broker/sim resume, streaming scaffold | 🟡 |
 
 The §25.9 golden worked example reproduces exactly (fusion 0.766/0.428; execution
 NO_TRADE, EV −0.018). **433 tests collected, all green**; magic-number + naive-datetime lints
