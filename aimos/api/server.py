@@ -16,6 +16,8 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from aimos.journal.journal import Journal
+from aimos.saas.router import auth_router, tenant_router
+from aimos.saas.settings import get_saas_config
 
 
 class ConfirmBody(BaseModel):
@@ -81,6 +83,11 @@ def _decisions(journal: Journal, limit: int) -> list[dict]:
 
 def create_app(state: AppState) -> FastAPI:
     app = FastAPI(title="AIMOS API")
+
+    @app.get("/api/v2/status")
+    def status():
+        """Public status endpoint so the dashboard can detect SaaS mode."""
+        return {"saas_enabled": get_saas_config().enabled}
 
     @app.get("/api/state/{symbol}")
     def get_state(symbol: str):
@@ -284,6 +291,10 @@ def create_app(state: AppState) -> FastAPI:
     def metrics():
         n = state.journal.decision_count()
         return _prometheus({"aimos_decisions_total": n})
+
+    if get_saas_config().enabled:
+        app.include_router(auth_router)
+        app.include_router(tenant_router)
 
     return app
 

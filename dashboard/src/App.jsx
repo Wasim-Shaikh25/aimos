@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
 import { api } from './api'
 import { usePoll, ago } from './hooks'
+import { AuthProvider, useAuth, LoginScreen } from './auth.jsx'
 import Markets from './screens/Markets.jsx'
 import AssetDetail from './screens/AssetDetail.jsx'
 import DecisionAnatomy from './screens/DecisionAnatomy.jsx'
@@ -33,12 +34,27 @@ const NAV = [
   ['/performance', 'Performance'], ['/config', 'Config'], ['/agents', 'Agents'],
 ]
 
+function OrgSwitcher() {
+  const { organizations, activeOrg, chooseOrg, user, logout, saasEnabled } = useAuth()
+  if (!user) return null
+  return (
+    <>
+      <select value={activeOrg || ''} onChange={e => chooseOrg(e.target.value)} title="Active organization">
+        {organizations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+      </select>
+      {saasEnabled && <button onClick={logout} style={{ marginLeft: 8 }}>Logout</button>}
+    </>
+  )
+}
+
 function Chrome() {
+  const { user } = useAuth()
   const { data: stats, updatedAt } = usePoll(api.stats, 4000)
   const { data: eq } = usePoll(api.equity, 4000)
   const [, tick] = useState(0)
   useEffect(() => { const id = setInterval(() => tick(t => t + 1), 1000); return () => clearInterval(id) }, [])
   const equity = eq?.equity?.length ? eq.equity[eq.equity.length - 1] : 10000
+  if (!user) return null
   return (
     <div className="chrome">
       <span className="stat">Equity <b>${Number(equity).toFixed(0)}</b></span>
@@ -46,13 +62,17 @@ function Chrome() {
       <span className="stat">NO_TRADE rate <b>{stats ? (stats.no_trade_rate * 100).toFixed(0) + '%' : '—'}</b></span>
       <span className="stat">Mode <b className="b-flat badge">paper</b></span>
       <span className="stat live"><i className="dot" /> live · <b>{ago(updatedAt)}</b></span>
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
+        <span className="stat" style={{ marginRight: 12 }}>{user.email}</span>
+        <OrgSwitcher />
+      </div>
     </div>
   )
 }
 
-export default function App() {
+function Dashboard() {
   return (
-    <BrowserRouter>
+    <>
       <Chrome />
       <nav className="side">
         {NAV.map(([p, l]) => <NavLink key={p} to={p} className={({ isActive }) => isActive ? 'active' : ''}>{l}</NavLink>)}
@@ -80,6 +100,22 @@ export default function App() {
         <Route path="/config" element={<ConfigViewer />} />
         <Route path="/agents" element={<Agents />} />
       </Routes>
-    </BrowserRouter>
+    </>
+  )
+}
+
+function Router() {
+  const { loading, user } = useAuth()
+  if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
+  return user ? <Dashboard /> : <LoginScreen />
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Router />
+      </BrowserRouter>
+    </AuthProvider>
   )
 }

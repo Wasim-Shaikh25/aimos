@@ -1,0 +1,62 @@
+# SaaS v2.0 configuration (§SaaS).
+# No paid third-party services are used by AIMOS itself. Credentials below are
+# operator-supplied for SMTP, OAuth, and optional SMS gateways.
+
+enabled: false                    # master SaaS feature flag (also mirrored in default.yaml features.saas_enabled)
+
+database_url: ""                  # e.g. "sqlite:///state/auth.sqlite" or a Postgres URL.
+                                  # Falls back to "sqlite:///state/auth.sqlite" when empty.
+
+# JWT tokens
+jwt_secret: ""                    # auto-generated from a random 32-byte value when empty (logged once)
+access_token_expire_minutes: 15
+refresh_token_expire_days: 30
+verification_code_expire_minutes: 15
+
+# Password / hashing
+require_email_verification: true
+require_strong_password: true       # min 8 chars, mixed case, digit, symbol
+
+# Email verification / password reset via SMTP (operator-supplied)
+smtp:
+  host: ""                        # e.g. smtp.gmail.com or a self-hosted Postfix
+  port: 587
+  username: ""
+  password: ""                    # env override AIMOS__SAAS__SMTP__PASSWORD
+  use_tls: true
+  from_address: "noreply@aimos.local"
+
+# OAuth2 providers (operator-supplied client credentials)
+oauth:
+  google:
+    client_id: ""
+    client_secret: ""
+    redirect_uri: "/auth/google/callback"
+  apple:
+    client_id: ""                 # Services ID
+    team_id: ""
+    key_id: ""
+    private_key: ""               # env override AIMOS__SAAS__OAUTH__APPLE__PRIVATE_KEY
+    redirect_uri: "/auth/apple/callback"
+
+# Phone OTP (operator-supplied SMS gateway). By default the system logs the OTP
+# to the console for local development. To enable real SMS set one driver.
+sms:
+  driver: "console"               # console | twilio | vonage
+  # Twilio example (operator-supplied):
+  # twilio:
+  #   account_sid: ""
+  #   auth_token: ""              # env override AIMOS__SAAS__SMS__TWILIO__AUTH_TOKEN
+  #   from_number: ""
+  # Vonage example (operator-supplied):
+  # vonage:
+  #   api_key: ""
+  #   api_secret: ""              # env override AIMOS__SAAS__SMS__VONAGE__API_SECRET
+  #   from_name: "AIMOS"
+
+# Tenant / runtime scoping
+tenant:
+  allow_multiple_orgs_per_user: true
+  default_org_name: "Personal"
+  journal_dir: "state/journals"     # per-tenant journal stored at <journal_dir>/<org_id>.sqlite
+  state_dir: "state/tenants"        # per-tenant runtime state

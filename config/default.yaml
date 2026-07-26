@@ -187,6 +187,7 @@ features:
                                     # CrossExchangeArb plugin (also enable it) run
   multi_venue_live: false           # Phase D — route arb legs to LIVE per-venue brokers
                                     # (needs mandate + per-venue keys; §23.8 go-live ladder)
+  saas_enabled: false               # SaaS v2.0 — user registration, auth, multi-tenancy
 
 # Phase D — account access. Keys are ONLY used here (never for analysis). See §2.
 account:

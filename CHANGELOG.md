@@ -7,6 +7,24 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 ## Unreleased
 
 ### Added
+- **SaaS v2.0 Phase 1 auth foundation** (`aimos/saas/`): SQLAlchemy user/org models,
+  bcrypt password hashing, JWT access/refresh tokens with rotation, email
+  verification and password reset over SMTP, phone OTP with console/Twilio/Vonage
+  pluggable sender, Google + Apple OAuth2 helpers, and `/auth/*` + `/api/v2/*`
+  FastAPI routers. Config-driven via `config/saas.yaml` and `AIMOS__SAAS__*`
+  env overrides; master switch `features.saas_enabled` (default `false`) keeps the
+  single-user path unchanged.
+- **Dashboard auth screens and tenant-aware API client** (`dashboard/src/auth.jsx`,
+  `dashboard/src/api.js`, `dashboard/src/App.jsx`): login/register/email-verification,
+  organization switcher, per-tenant `X-Organization-Id` header, and an
+  `/api/v2/status` probe so the dashboard falls back to local mode when SaaS is
+  disabled. `npm run build` is green.
+- **SaaS v2.0 requirements and task tracker** (`specs/AIMOS_SaaS_Requirements_and_Task_Tracker.md`):
+  roadmap for finishing the remaining runtime pieces (streaming, persistence, dashboard
+  charting, ML pipeline, vendor vendoring, 12-month dataset, live multi-venue wiring)
+  and adding a self-hostable SaaS layer with Google/Apple/email/phone auth and
+  multi-tenant organizations. Designed to use only free/open-source dependencies and
+  operator-supplied credentials; no paid third-party services required.
 - **OpenAI backend for the AI analyst** — the analyst now supports `assistant.provider:
   openai` (default `gpt-4o-mini`, cheap) alongside Anthropic, selected by config; same
   grounded, read-only prompt, injectable caller (both covered by offline tests). Uses
