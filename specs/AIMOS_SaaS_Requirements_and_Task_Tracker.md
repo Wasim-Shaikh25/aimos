@@ -236,7 +236,7 @@ saas = [
 3. Dashboard charting: `lightweight-charts` and evidence tables.
 4. ML pipeline: `scripts/train_from_history` end-to-end, model registry, promotion/demotion.
 5. Vendor vendoring: fill `vendor/` and `vendor/VENDOR.md`.
-6. 12-month dataset downloader: `scripts/download_history.py`.
+6. `[x]` 12-month dataset downloader: `scripts/download_history.py`.
 7. Live multi-venue router wiring (still fail-closed).
 
 ### Phase 4 — Deployment & docs
@@ -286,7 +286,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 - [ ] ML training pipeline end-to-end (`scripts/train_from_history`)
 - [ ] Model promotion/demotion ladder integration
 - [ ] Vendor vendoring at pinned SHAs (`vendor/VENDOR.md`)
-- [ ] 12-month historical dataset downloader (`scripts/download_history.py`)
+- [x] 12-month historical dataset downloader (`scripts/download_history.py`)
 - [ ] Live multi-venue executor wiring behind go-live gate
 - [ ] Tests for streaming, persistence, ML, dataset
 

@@ -28,6 +28,9 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   - `PaperBroker` and `MultiVenueSim` gain `state_dict()` / `load_state()` so the
     paper loop can resume after a restart.
   - `runtime/serve.py` loads state at boot and snapshots it every tick.
+- **12-month historical dataset downloader** (`scripts/download_history.py`):
+  free public Binance Vision monthly klines → `CandleStore` parquet for ML
+  training and regression tests. Supports multi-symbol and `1m/5m/15m/1h/4h/1d`.
 - **SaaS v2.0 requirements and task tracker** (`specs/AIMOS_SaaS_Requirements_and_Task_Tracker.md`):
   roadmap for finishing the remaining runtime pieces (streaming, persistence, dashboard
   charting, ML pipeline, vendor vendoring, 12-month dataset, live multi-venue wiring)
