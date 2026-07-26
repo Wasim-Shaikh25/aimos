@@ -298,8 +298,8 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 
 - [x] Update `docker-compose.yml` with auth/tenant DB; add `Dockerfile`
 - [x] Single-user → default-tenant migration script (`scripts/migrate_to_saas.py`)
-- [~] Update `specs/OPERATIONS.md` (SaaS section added; deployment section pending)
-- [ ] Update `specs/DEPLOYMENT.md`
+- [x] Update `specs/OPERATIONS.md` (SaaS auth, runtime state, org-scoped API requests)
+- [x] Update `specs/DEPLOYMENT.md` (SaaS Compose deployment section)
 - [x] Update `specs/STATUS.md`
 - [x] Update `CHANGELOG.md`
 - [x] Full test suite + lints green

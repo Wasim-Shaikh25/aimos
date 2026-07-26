@@ -237,6 +237,14 @@ runtime state to a `tenant_local_state/state.json` file beside the journal. An
 in-memory journal (`:memory:`) disables state persistence, which is the default
 for tests and short-lived runs.
 
+### Org-scoped API requests
+
+When SaaS is enabled, trading endpoints (`/api/*` outside `/api/v2/*`) require an
+`Authorization: Bearer <access_token>` header plus `X-Organization-Id: <org-id>`.
+The token's `org` claim and the header must both equal the runtime's
+`AIMOS_RUNTIME_ORG_ID`. The dashboard's `api.js` sends these automatically once
+a user is logged in and an organization is selected.
+
 ---
 
 ## 6. Account keys (live/account features only — paper needs NONE)
