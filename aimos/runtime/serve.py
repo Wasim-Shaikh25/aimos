@@ -37,6 +37,8 @@ from aimos.data.live_source import (
 )
 from aimos.data.stream_feed import StreamFeed
 from aimos.data.streaming import BinanceWebsocketSource, StreamRecorder
+from aimos.execution.broker.live import LiveBroker, MandateGate
+from aimos.execution.broker.live_router import MultiVenueLiveRouter
 from aimos.execution.broker.paper import PaperBroker
 from aimos.execution.position_sizer import SizingInputs
 from aimos.journal.journal import Journal
@@ -150,6 +152,7 @@ def build_app(offline: Optional[bool] = None):
     from aimos.runtime.golive import GoLiveLadder, guard_live_boot
     ladder = GoLiveLadder(journal=orch.journal)
     guard_live_boot(params, ladder)  # fail-closed: refuse to boot live before the ladder is complete
+    live_router = _build_live_router(params, ladder, analysis_venues)
 
     from aimos.storage.timescale import TimescaleStore
     ts_store = TimescaleStore(params.model_dump().get("storage", {}).get("timescale_dsn", ""))
@@ -233,7 +236,8 @@ def build_app(offline: Optional[bool] = None):
                         per_venue[v] = _venue_summary(res)
                         prices[v] = float(last["close"])
                     # 4) cross-venue arb → two-leg execution against per-venue balances (§4)
-                    _maybe_arb(sim, primary_res, base, prices, now, paper, holder)
+                    _maybe_arb(sim, primary_res, base, prices, now, paper, holder,
+                               live_router=live_router)
                     holder["venue_state"][base] = per_venue
                     holder["prices"][base] = _price_row(prices)
                     holder["candles"][base] = {v: d for v, d in venue_df.items()}
@@ -594,8 +598,14 @@ def _decision_graph(journal, decision_id: str, params) -> dict:
             "reasons": mu.get("reasons", []), "decision_id": decision_id}
 
 
-def _maybe_arb(sim, primary_res, base, prices, now, paper, holder) -> None:
-    """Execute a chosen cross-venue arb as two simulated legs (buy cheap/sell rich)."""
+def _maybe_arb(sim, primary_res, base, prices, now, paper, holder,
+               live_router: Optional[MultiVenueLiveRouter] = None) -> None:
+    """Execute a chosen cross-venue arb as two simulated legs (buy cheap/sell rich).
+
+    When ``live_router`` is provided (mandate enabled + go-live ladder complete +
+    per-venue API keys present), the legs are routed through :class:`LiveBroker` so
+    they can be placed on real exchanges.  Otherwise the paper/sim ledger is used.
+    """
     if primary_res is None or primary_res.plan.action is Action.NO_TRADE:
         return
     m = primary_res.plan.meta
@@ -605,8 +615,84 @@ def _maybe_arb(sim, primary_res, base, prices, now, paper, holder) -> None:
     if bv not in prices or sv not in prices:
         return
     notional = float(primary_res.plan.size_quote or 0.0) or float(paper["starting_equity_usdt"]) * 0.01
+    if live_router is not None and live_router.brokers:
+        live_router.execute_arb(
+            base_symbol=f"{base}/USDT", buy_venue=bv, sell_venue=sv,
+            notional_usd=notional,
+            buy_price=prices[bv], sell_price=prices[sv],
+            total_notional_after=notional,
+            positions_after=len(sim.trades) + 1,
+        )
+        holder["chosen"]["CrossExchangeArb"] = holder["chosen"].get("CrossExchangeArb", 0) + 1
+        return
     sim.execute_arb(base, bv, sv, prices[bv], prices[sv], notional, now)
     holder["chosen"]["CrossExchangeArb"] = holder["chosen"].get("CrossExchangeArb", 0) + 1
+
+
+def _load_secrets(params) -> dict:
+    """Load the optional operator secrets file pointed to by ``secrets.file``.
+
+    The file is a flat YAML mapping of venue → exchange_id / apiKey / secret /
+    testnet / withdraw.  It is never logged or returned to the UI.
+    """
+    import yaml
+    path = params.model_dump().get("secrets", {}).get("file")
+    if not path:
+        return {}
+    p = Path(path).expanduser()
+    if not p.exists():
+        return {}
+    try:
+        return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _build_live_router(params, ladder, venues: list[str]) -> Optional[MultiVenueLiveRouter]:
+    """Build a :class:`MultiVenueLiveRouter` only when every fail-closed gate is open.
+
+    Returns ``None`` unless:
+      - ``features.multi_venue_live`` is true
+      - ``mode`` is ``live`` or ``mandate.enabled`` is true
+      - the go-live ladder is complete
+      - per-venue API credentials are present in the secrets file
+    """
+    features = params.features.model_dump()
+    if not features.get("multi_venue_live"):
+        return None
+    pd = params.model_dump()
+    mandate_cfg = pd.get("mandate", {})
+    if not mandate_cfg.get("enabled") and str(pd.get("mode", "paper")).lower() != "live":
+        return None
+    if not ladder.live_allowed():
+        return None
+
+    secrets = _load_secrets(params)
+    venue_creds = secrets.get("venues", {})
+    if len(venues) < 2:
+        return None
+
+    mandate = MandateGate(mandate_cfg)
+    brokers: dict[str, LiveBroker] = {}
+    for venue in venues:
+        creds = venue_creds.get(venue)
+        if not creds or not creds.get("apiKey"):
+            continue
+        exchange_id = creds.get("exchange_id", venue)
+        perms = {"withdraw": bool(creds.get("withdraw", False))}
+        try:
+            brokers[venue] = LiveBroker(
+                exchange_id=exchange_id,
+                mandate=mandate,
+                api_permissions=perms,
+                api_credentials=creds,
+                testnet=bool(creds.get("testnet", True)),
+            )
+        except PermissionError:
+            continue
+    if len(brokers) < 2:
+        return None
+    return MultiVenueLiveRouter(brokers)
 
 
 def _build_monitor_probes(holder, orch, broker, sim, connections, ladder) -> dict:

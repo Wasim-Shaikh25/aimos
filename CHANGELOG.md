@@ -55,6 +55,9 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   - `tests/test_vendor.py` — manifest validity, vendoring script dry-run, vendor
     module importability, GPL tripwire presence, and the runtime-import ban on
     `vendor.vt_research`.
+  - `tests/test_live_multi_venue_wiring.py` — fail-closed live-router construction
+    (no keys, incomplete ladder, missing credentials) and `_maybe_arb` routing
+    with mock `LiveBroker` legs + unwind detection.
 - **ML model registry + promotion/demotion hooks** (`aimos/learning/registry.py`):
   `scripts/train_from_history` now records every run (AUC, Brier, status) to
   `state/model_registry.json`, checks Brier degradation for auto-demotion, and
@@ -76,6 +79,12 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   reproducible vendoring at pinned SHAs for all six `vendor/` packages with a
   `--dry-run` / `--apply` workflow; `vendor/VENDOR.md` is updated with the pinned
   SHAs and notes which packages still need exact-path / import-rewrite review.
+- **Live multi-venue executor wiring** (`runtime/serve.py`):
+  `_build_live_router` constructs a `MultiVenueLiveRouter` only when every gate is
+  open (`features.multi_venue_live`, `mode=live` or `mandate.enabled`, a complete
+  go-live ladder, and per-venue API keys from the secrets file). `_maybe_arb` now
+  routes cross-venue arbs through live brokers when the router is present, otherwise
+  it stays on the paper simulator. No keys are required or enabled by default.
 - **Candlestick API** (`/api/candles/{symbol}`):
   `runtime/serve.py` stores per-venue OHLC DataFrames each tick and exposes them
   as `{time, open, high, low, close}` candle arrays for the dashboard chart.
