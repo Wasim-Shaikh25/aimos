@@ -31,7 +31,10 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 - **Dashboard equity chart** (`dashboard/src/components/EquityChart.jsx`):
   replaced the SVG sparkline on the Performance screen with a
   `lightweight-charts` line chart driven by `/api/equity`.
-- **Test coverage for v2.0 modules**:
+- **Dashboard auth screens completed** (`dashboard/src/auth.jsx`):
+  login, registration, email verification, forgot-password/reset, and phone-OTP
+  sign-in are now wired to the SaaS auth endpoints.
+- **Test coverage for v2.0 modules`:
   - `tests/test_runtime_state.py` — roundtrip save/load of equity, broker, and
     multi-venue balances.
   - `tests/test_model_registry.py` — registry append, promote, demote, drift.

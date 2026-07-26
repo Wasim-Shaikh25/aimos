@@ -262,8 +262,8 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 - [x] `/auth/*` FastAPI routers
 - [x] Google OAuth2 login/callback
 - [x] Apple Sign In login/callback
-- [~] Phone OTP flow with pluggable SMS + fallback email OTP
-- [x] Dashboard login/register/verify pages (forgot-password/reset screen pending)
+- [x] Phone OTP flow with pluggable SMS (console/Twilio/Vonage); dashboard phone sign-in wired; email fallback can be added if SMS driver is disabled.
+- [x] Dashboard login/register/verify/forgot-password/reset/phone-sign-in pages
 - [x] Tests for auth flows
 
 ### Phase 2 — Multi-tenancy
