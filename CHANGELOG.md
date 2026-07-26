@@ -28,6 +28,14 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   - `PaperBroker` and `MultiVenueSim` gain `state_dict()` / `load_state()` so the
     paper loop can resume after a restart.
   - `runtime/serve.py` loads state at boot and snapshots it every tick.
+- **Test coverage for v2.0 modules**:
+  - `tests/test_runtime_state.py` — roundtrip save/load of equity, broker, and
+    multi-venue balances.
+  - `tests/test_model_registry.py` — registry append, promote, demote, drift.
+  - `tests/test_streaming.py` — `StreamRecorder` JSONL output and Binance trade
+    normalization.
+  - `tests/test_migrate_to_saas.py` — single-user → tenant migration.
+  - `tests/test_download_history.py` — ZIP CSV parsing and timeframe helpers.
 - **ML model registry + promotion/demotion hooks** (`aimos/learning/registry.py`):
   `scripts/train_from_history` now records every run (AUC, Brier, status) to
   `state/model_registry.json`, checks Brier degradation for auto-demotion, and
@@ -36,6 +44,14 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 - **12-month historical dataset downloader** (`scripts/download_history.py`):
   free public Binance Vision monthly klines → `CandleStore` parquet for ML
   training and regression tests. Supports multi-symbol and `1m/5m/15m/1h/4h/1d`.
+- **Deployment packaging for SaaS**:
+  - `Dockerfile` multi-stage build (Node dashboard + Python runtime) installing
+    `[serve,saas,data]` extras; `docker-compose.yml` now passes the shared
+    Postgres DSN to `AIMOS__SAAS__DATABASE_URL` so the tenant/auth DB can run
+    on the same TimescaleDB container.
+  - `scripts/migrate_to_saas.py` migrates an existing single-user deployment to
+    a default tenant (`local`), copies `state/aimos.sqlite` to the per-tenant
+    journal path, and optionally creates an owner user.
 - **Streaming layer scaffold** (`aimos/data/streaming.py`):
   - `BinanceWebsocketSource` connects to Binance combined websocket streams
     (`@trade`, `@depth`, `@miniTicker`) and normalizes events into a venue-agnostic

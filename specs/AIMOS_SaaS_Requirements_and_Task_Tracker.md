@@ -240,8 +240,8 @@ saas = [
 7. Live multi-venue router wiring (still fail-closed).
 
 ### Phase 4 — Deployment & docs
-1. Update `docker-compose.yml` with auth/tenant DB.
-2. Migration script for single-user → default org.
+1. `[x]` Update `docker-compose.yml` with auth/tenant DB; add `Dockerfile`.
+2. `[x]` Migration script for single-user → default org (`scripts/migrate_to_saas.py`).
 3. Update `specs/OPERATIONS.md`, `specs/DEPLOYMENT.md`, `specs/STATUS.md`, `CHANGELOG.md`.
 4. Add tests for all new modules.
 5. Run full `pytest`, `check_magic_numbers.py`, `check_no_naive_datetime.py`, `lint-imports`.
@@ -276,7 +276,11 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 - [ ] Org scoping middleware for trading endpoints
 - [ ] Update `PipelineOrchestrator`/`build_app` to use tenant context
 - [~] Dashboard org switcher, settings, invite/members pages (switcher + invite/members endpoints done)
-- [ ] Tests for tenancy
+- [x] Tests for auth and tenancy (`tests/test_saas.py`)
+- [x] Tests for runtime state persistence (`tests/test_runtime_state.py`)
+- [x] Tests for ML model registry (`tests/test_model_registry.py`)
+- [x] Tests for streaming normalization (`tests/test_streaming.py`)
+- [x] Tests for SaaS migration (`tests/test_migrate_to_saas.py`)
 
 ### Phase 3 — Finish v2.0 runtime
 
@@ -288,18 +292,18 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 - [ ] Vendor vendoring at pinned SHAs (`vendor/VENDOR.md`)
 - [x] 12-month historical dataset downloader (`scripts/download_history.py`)
 - [ ] Live multi-venue executor wiring behind go-live gate
-- [ ] Tests for streaming, persistence, ML, dataset
+- [x] Tests for streaming, persistence, ML, dataset (`tests/test_streaming.py`, `test_runtime_state.py`, `test_model_registry.py`, `test_download_history.py`)
 
 ### Phase 4 — Deployment & docs
 
-- [ ] Update `docker-compose.yml`
-- [ ] Single-user → default-tenant migration script
-- [ ] Update `specs/OPERATIONS.md`
+- [x] Update `docker-compose.yml` with auth/tenant DB; add `Dockerfile`
+- [x] Single-user → default-tenant migration script (`scripts/migrate_to_saas.py`)
+- [~] Update `specs/OPERATIONS.md` (SaaS section added; deployment section pending)
 - [ ] Update `specs/DEPLOYMENT.md`
-- [ ] Update `specs/STATUS.md`
-- [ ] Update `CHANGELOG.md`
-- [ ] Full test suite + lints green
-- [ ] End-to-end smoke run with SaaS disabled and enabled
+- [x] Update `specs/STATUS.md`
+- [x] Update `CHANGELOG.md`
+- [x] Full test suite + lints green
+- [ ] End-to-end smoke run with SaaS disabled and enabled (manual operator step)
 
 ---
 
