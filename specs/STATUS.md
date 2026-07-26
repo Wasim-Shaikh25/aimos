@@ -25,7 +25,7 @@ prerequisite) · ⏭️ not built yet.
 | SaaS P2/P3 (partial) | Runtime state persistence, per-tenant config/journal/state store, broker/sim resume, streaming scaffold + feed into paper loop, ML registry, dashboard equity + candlestick charts, evidence tables, decision anatomy, org settings, auth screens, org scoping, migration, Dockerfile, vendor manifest + vendoring script, live multi-venue executor wiring (fail-closed), tests | ✅ |
 
 The §25.9 golden worked example reproduces exactly (fusion 0.766/0.428; execution
-NO_TRADE, EV −0.018). **443 tests collected, all green**; magic-number + naive-datetime lints
+NO_TRADE, EV −0.018). **465 tests collected, all green** (one xfail); magic-number + naive-datetime lints
 clean; import-linter 6/6.
 
 ---
