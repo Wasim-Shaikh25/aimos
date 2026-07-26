@@ -1,7 +1,8 @@
 import React from 'react'
 import { api } from '../api'
 import { usePoll } from '../hooks'
-import { Tile, Spark, Table, Empty } from '../components/ui'
+import { Tile, Table, Empty } from '../components/ui'
+import EquityChart from '../components/EquityChart'
 
 // Performance (§5.6): realized PnL, win rate, drawdown, per-strategy & per-venue.
 export default function Performance() {
@@ -20,7 +21,7 @@ export default function Performance() {
       <Tile k="Max drawdown" v={p ? p.max_drawdown_pct.toFixed(2) + '%' : '—'} />
     </div>
     <h2>Equity curve</h2>
-    {curve.length > 1 ? <Spark points={curve} /> : <Empty what="equity points" />}
+    {curve.length > 1 ? <EquityChart data={curve} /> : <Empty what="equity points" />}
     <h2>By strategy</h2>
     {Object.keys(byStrat).length ? <Table cols={['Strategy', 'Trades', 'PnL (USDT)']}
       rows={Object.entries(byStrat).map(([k, v]) => [k, v.trades, `$${v.pnl_usd.toFixed(2)}`])} />

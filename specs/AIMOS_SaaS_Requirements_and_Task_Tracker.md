@@ -286,7 +286,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 
 - [~] Streaming layer: websocket public top-of-book/trades (Binance source + recorder wired; feed-into-pipeline pending)
 - [x] Runtime state persistence (equity, balances, positions, features, ladder)
-- [ ] Rich dashboard: candlestick/equity charts, evidence tables, anatomy flow
+- [~] Rich dashboard: equity chart wired (`lightweight-charts` on Performance screen); candlestick + evidence tables/anatomy flow pending
 - [x] ML training pipeline end-to-end (`scripts/train_from_history`)
 - [x] Model promotion/demotion ladder integration (`aimos/learning/registry.py`)
 - [ ] Vendor vendoring at pinned SHAs (`vendor/VENDOR.md`)

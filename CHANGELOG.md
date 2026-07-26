@@ -28,6 +28,9 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   - `PaperBroker` and `MultiVenueSim` gain `state_dict()` / `load_state()` so the
     paper loop can resume after a restart.
   - `runtime/serve.py` loads state at boot and snapshots it every tick.
+- **Dashboard equity chart** (`dashboard/src/components/EquityChart.jsx`):
+  replaced the SVG sparkline on the Performance screen with a
+  `lightweight-charts` line chart driven by `/api/equity`.
 - **Test coverage for v2.0 modules**:
   - `tests/test_runtime_state.py` — roundtrip save/load of equity, broker, and
     multi-venue balances.
