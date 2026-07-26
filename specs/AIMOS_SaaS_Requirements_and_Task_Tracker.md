@@ -289,7 +289,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 - [x] Rich dashboard: equity chart (`Performance`), candlestick chart (`Candles`), evidence tables (`Engines`), decision anatomy flow (`Decision Anatomy`), organization settings (`Settings`)
 - [x] ML training pipeline end-to-end (`scripts/train_from_history`)
 - [x] Model promotion/demotion ladder integration (`aimos/learning/registry.py`)
-- [ ] Vendor vendoring at pinned SHAs (`vendor/VENDOR.md`)
+- [x] Vendor vendoring at pinned SHAs: `vendor/manifest.yaml`, `scripts/vendor.py`, `vendor/VENDOR.md` updated with pinned SHAs, dry-run and import/tripwire tests
 - [x] 12-month historical dataset downloader (`scripts/download_history.py`)
 - [ ] Live multi-venue executor wiring behind go-live gate
 - [x] Tests for streaming, stream feed, persistence, ML, dataset, config overlay, org scoping (`tests/test_streaming.py`, `test_stream_feed.py`, `test_runtime_state.py`, `test_model_registry.py`, `test_download_history.py`, `test_config_tenant.py`, `test_saas.py`)

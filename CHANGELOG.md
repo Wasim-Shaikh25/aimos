@@ -52,6 +52,9 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
     normalization.
   - `tests/test_migrate_to_saas.py` — single-user → tenant migration.
   - `tests/test_download_history.py` — ZIP CSV parsing and timeframe helpers.
+  - `tests/test_vendor.py` — manifest validity, vendoring script dry-run, vendor
+    module importability, GPL tripwire presence, and the runtime-import ban on
+    `vendor.vt_research`.
 - **ML model registry + promotion/demotion hooks** (`aimos/learning/registry.py`):
   `scripts/train_from_history` now records every run (AUC, Brier, status) to
   `state/model_registry.json`, checks Brier degradation for auto-demotion, and
@@ -69,6 +72,10 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   trading endpoints (`/api/*` outside `/api/v2/*`) require a valid access
   token whose `org` claim matches `X-Organization-Id` and `AIMOS_RUNTIME_ORG_ID`
   when SaaS is enabled; tenant routes still use `TenantContext`.
+- **Vendor vendoring scaffolding** (`scripts/vendor.py`, `vendor/manifest.yaml`):
+  reproducible vendoring at pinned SHAs for all six `vendor/` packages with a
+  `--dry-run` / `--apply` workflow; `vendor/VENDOR.md` is updated with the pinned
+  SHAs and notes which packages still need exact-path / import-rewrite review.
 - **Candlestick API** (`/api/candles/{symbol}`):
   `runtime/serve.py` stores per-venue OHLC DataFrames each tick and exposes them
   as `{time, open, high, low, close}` candle arrays for the dashboard chart.

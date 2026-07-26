@@ -1,0 +1,67 @@
+# Vendor manifest (§22.1)
+# Records upstream repos, pinned SHAs, and paths to copy. Run:
+#   python scripts/vendor.py --dry-run
+#   python scripts/vendor.py --apply
+---
+packages:
+  vt_factors:
+    upstream: https://github.com/HKUDS/Vibe-Trading.git
+    license: MIT
+    sha: 4cede84635df372e56ad4fb0a0647f19be56c892
+    note: Alpha Zoo + operator layer. Import paths will likely need rewrites after copy.
+    paths:
+      - source: agent/src/factors
+        dest: ""
+
+  vt_validation:
+    upstream: https://github.com/HKUDS/Vibe-Trading.git
+    license: MIT
+    sha: 4cede84635df372e56ad4fb0a0647f19be56c892
+    note: Backtest validation module. Upstream signatures differ from the clean-room wrapper.
+    paths:
+      - source: agent/backtest/validation.py
+        dest: validation.py
+
+  vt_research:
+    upstream: https://github.com/HKUDS/Vibe-Trading.git
+    license: MIT
+    sha: 4cede84635df372e56ad4fb0a0647f19be56c892
+    note: ReAct / skills / swarm / journal-analyzer / shadow. Runtime-import-forbidden.
+    paths:
+      - source: agent/src/swarm
+        dest: swarm
+      - source: agent/src/skills/trade-journal
+        dest: skills/trade-journal
+      - source: agent/src/skills/shadow-account
+        dest: skills/shadow-account
+    skip: true  # large tree; enable after import isolation review
+
+  hb_mm:
+    upstream: https://github.com/hummingbot/hummingbot.git
+    license: Apache-2.0
+    sha: 816b8ab539360557cee7d9248c2f24473b10b16f
+    note: Avellaneda-Stoikov market-making math. Exact pure-python paths TBD.
+    paths:
+      - source: hummingbot/strategy/avellaneda_market_making
+        dest: ""
+    skip: true  # exact source paths need operator verification
+
+  ft_protections:
+    upstream: https://github.com/freqtrade/freqtrade.git
+    license: GPL-3.0
+    sha: e5fd2fec83e5b7206f1e6a488bfd7001b62d2c86
+    note: GPL tripwire; concept re-implementation required, not direct copy for distribution.
+    paths:
+      - source: freqtrade/plugins/protections
+        dest: ""
+    skip: true  # GPL; operator must decide clean-room rewrite vs private use
+
+  jesse_engine:
+    upstream: https://github.com/jesse-ai/jesse.git
+    license: MIT
+    sha: fa63531cae6c09b978711dc1892285067304e2df
+    note: Core engine / metrics / indicators. Exact files TBD.
+    paths:
+      - source: jesse/metrics
+        dest: ""
+    skip: true  # exact source paths need operator verification
