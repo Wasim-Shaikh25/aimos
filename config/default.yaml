@@ -190,6 +190,13 @@ features:
   streaming_enabled: false          # Phase 3 — public websocket top-of-book/trades/ticker feed
   saas_enabled: false               # SaaS v2.0 — user registration, auth, multi-tenancy
 
+# Phase 3 — websocket feed tuning (only used when features.streaming_enabled is true)
+streaming:
+  book_window_minutes: 1.0
+  trade_window_minutes: 5.0
+  min_notional_usd: 100.0
+  max_recent_trades: 1000
+
 # Phase D — account access. Keys are ONLY used here (never for analysis). See §2.
 account:
   preflight_on_start: true          # read-only connectivity self-check at startup (no orders)

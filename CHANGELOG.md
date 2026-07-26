@@ -67,14 +67,16 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   - `scripts/migrate_to_saas.py` migrates an existing single-user deployment to
     a default tenant (`local`), copies `state/aimos.sqlite` to the per-tenant
     journal path, and optionally creates an owner user.
-- **Streaming layer scaffold** (`aimos/data/streaming.py`):
+- **Streaming layer** (`aimos/data/streaming.py`, `aimos/data/stream_feed.py`):
   - `BinanceWebsocketSource` connects to Binance combined websocket streams
     (`@trade`, `@depth`, `@miniTicker`) and normalizes events into a venue-agnostic
     `StreamEvent` shape.
   - `StreamRecorder` writes events to `state/streams/<date>.jsonl` for
     deterministic replay via `RecordedStreamSource`.
-  - `runtime/serve.py` starts a `stream_loop()` when `features.streaming_enabled`
-    is true; it records but does not yet feed the slow paper loop (Phase 3).
+  - `StreamFeed` converts live `@depth` and `@trade` events into `BookAggregate`
+    and `LargePrint` objects and injects them into the slow paper loop's
+    `MarketContext` when `features.streaming_enabled` is true.
+  - Configurable via the new `streaming` section in `config/default.yaml`.
 - **SaaS v2.0 requirements and task tracker** (`specs/AIMOS_SaaS_Requirements_and_Task_Tracker.md`):
   roadmap for finishing the remaining runtime pieces (streaming, persistence, dashboard
   charting, ML pipeline, vendor vendoring, 12-month dataset, live multi-venue wiring)

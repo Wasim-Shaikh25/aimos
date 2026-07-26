@@ -284,7 +284,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 
 ### Phase 3 — Finish v2.0 runtime
 
-- [~] Streaming layer: websocket public top-of-book/trades (Binance source + recorder wired; feed-into-pipeline pending)
+- [x] Streaming layer: websocket public top-of-book/trades, `StreamFeed` normalizes events to `BookAggregate`/`LargePrint` and injects them into `MarketContext` in the paper loop; recording/replay remains supported.
 - [x] Runtime state persistence (equity, balances, positions, features, ladder)
 - [~] Rich dashboard: equity chart wired (`lightweight-charts` on Performance screen); candlestick + evidence tables/anatomy flow pending
 - [x] ML training pipeline end-to-end (`scripts/train_from_history`)
@@ -292,7 +292,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 - [ ] Vendor vendoring at pinned SHAs (`vendor/VENDOR.md`)
 - [x] 12-month historical dataset downloader (`scripts/download_history.py`)
 - [ ] Live multi-venue executor wiring behind go-live gate
-- [x] Tests for streaming, persistence, ML, dataset, config overlay, org scoping (`tests/test_streaming.py`, `test_runtime_state.py`, `test_model_registry.py`, `test_download_history.py`, `test_config_tenant.py`, `test_saas.py`)
+- [x] Tests for streaming, stream feed, persistence, ML, dataset, config overlay, org scoping (`tests/test_streaming.py`, `test_stream_feed.py`, `test_runtime_state.py`, `test_model_registry.py`, `test_download_history.py`, `test_config_tenant.py`, `test_saas.py`)
 
 ### Phase 4 — Deployment & docs
 

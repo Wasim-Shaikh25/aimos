@@ -105,10 +105,12 @@ class BinanceWebsocketSource:
         symbols: Iterable[str],
         venue: str = "binance",
         recorder: StreamRecorder | None = None,
+        feed: "StreamFeed | None" = None,
     ) -> None:
         self.venue = venue
         self.symbols = list(symbols)
         self._recorder = recorder
+        self._feed = feed
         self._queue: asyncio.Queue[StreamEvent] = asyncio.Queue()
         self._running = False
 
@@ -153,6 +155,8 @@ class BinanceWebsocketSource:
         symbol = _normalize_symbol(stream.split("@")[0]) if "@" in stream else ""
         event = self._to_event(stream, symbol, data)
         if event is not None:
+            if self._feed:
+                self._feed.handle(event)
             if self._recorder:
                 self._recorder.write(event)
             await self._queue.put(event)

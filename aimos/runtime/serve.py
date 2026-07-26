@@ -35,6 +35,7 @@ from aimos.data.live_source import (
     base_of,
     venue_snapshot_for,
 )
+from aimos.data.stream_feed import StreamFeed
 from aimos.data.streaming import BinanceWebsocketSource, StreamRecorder
 from aimos.execution.broker.paper import PaperBroker
 from aimos.execution.position_sizer import SizingInputs
@@ -75,6 +76,13 @@ def build_app(offline: Optional[bool] = None):
     heartbeat = Heartbeat("state/heartbeat", clock=clock)
     caps = _caps(params)
     sources: dict = {}  # venue -> DataSource (lazy, per-venue)
+    streaming_cfg = params.model_dump().get("streaming", {})
+    stream_feed = StreamFeed(
+        book_window_minutes=float(streaming_cfg.get("book_window_minutes", 1.0)),
+        trade_window_minutes=float(streaming_cfg.get("trade_window_minutes", 5.0)),
+        min_notional_usd=float(streaming_cfg.get("min_notional_usd", 100.0)),
+        max_recent_trades=int(streaming_cfg.get("max_recent_trades", 1000)),
+    )
 
     def src(venue: str):
         if venue not in sources:
@@ -203,8 +211,10 @@ def build_app(offline: Optional[bool] = None):
                     for v, d in venue_df.items():
                         last = d.iloc[-1]
                         exec_ctx = _exec_ctx(broker, costs_cfg, caps, v)
+                        stream_snap = stream_feed.snapshot(base, now) if features.get("streaming_enabled") else {}
                         ctx = build_context(base, now, {Timeframe(tf): d},
-                                            peers={"BTC": btc}, venue_snapshot=vsnap)
+                                            peers={"BTC": btc}, venue_snapshot=vsnap,
+                                            **stream_snap)
                         depth = float(costs_cfg["volume_proxy_depth_frac"]) * float(last["volume"]) * float(last["close"])
                         sizing = SizingInputs(volume_24h_usd=float(last["volume"]) * float(last["close"]),
                                               book_depth_1pct_usd=depth)
@@ -284,8 +294,8 @@ def build_app(offline: Optional[bool] = None):
 
     async def stream_loop() -> None:
         """Optional websocket feed: records top-of-book, trades, and tickers to
-        ``state/streams/`` for replay. The events are not yet fed into the slow
-        paper loop; that wiring is Phase 3."""
+        ``state/streams/`` for replay and feeds normalized book/trade snapshots
+        into the slow paper loop when ``streaming_enabled`` is true."""
         if not features.get("streaming_enabled"):
             return
         symbols = holder["universe"].symbols or list(paper.get("symbols", []))
@@ -296,6 +306,7 @@ def build_app(offline: Optional[bool] = None):
             symbols=symbols,
             venue="binance",
             recorder=StreamRecorder("state/streams"),
+            feed=stream_feed,
         )
         log.info("stream_started", venue=source.venue, symbols=len(symbols))
         await source.run()
