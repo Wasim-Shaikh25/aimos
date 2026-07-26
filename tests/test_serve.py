@@ -19,6 +19,13 @@ def test_serve_app_full_stack_offline():
         assert isinstance(eq["equity"], list) and eq["equity"][0] == 10000.0
         markets = client.get("/api/markets").json()["markets"]
         assert markets and "regime" in markets[0]
+        base = markets[0]["symbol"]
+        candles = client.get(f"/api/candles/{base}").json()
+        assert "candles" in candles and "venues" in candles
+        if candles["candles"]:
+            venue = candles["venues"][0]
+            assert venue in candles["candles"]
+            assert candles["candles"][venue][0]["open"] > 0
         # controls still CONFIRM-gated through the same app
         assert client.post("/api/control/pause", json={}).status_code == 403
 

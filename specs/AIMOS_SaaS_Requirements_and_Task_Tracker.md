@@ -286,7 +286,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 
 - [x] Streaming layer: websocket public top-of-book/trades, `StreamFeed` normalizes events to `BookAggregate`/`LargePrint` and injects them into `MarketContext` in the paper loop; recording/replay remains supported.
 - [x] Runtime state persistence (equity, balances, positions, features, ladder)
-- [~] Rich dashboard: equity chart wired (`lightweight-charts` on Performance screen); candlestick + evidence tables/anatomy flow pending
+- [x] Rich dashboard: equity chart (`Performance`), candlestick chart (`Candles`), evidence tables (`Engines`), decision anatomy flow (`Decision Anatomy`), organization settings (`Settings`)
 - [x] ML training pipeline end-to-end (`scripts/train_from_history`)
 - [x] Model promotion/demotion ladder integration (`aimos/learning/registry.py`)
 - [ ] Vendor vendoring at pinned SHAs (`vendor/VENDOR.md`)

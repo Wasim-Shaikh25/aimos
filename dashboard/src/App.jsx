@@ -16,6 +16,7 @@ import Engines from './screens/Engines.jsx'
 import Strategies from './screens/Strategies.jsx'
 import Models from './screens/Models.jsx'
 import Prices from './screens/Prices.jsx'
+import Candles from './screens/Candles.jsx'
 import Trades from './screens/Trades.jsx'
 import Balances from './screens/Balances.jsx'
 import MindMap from './screens/MindMap.jsx'
@@ -27,7 +28,7 @@ import Assistant from './screens/Assistant.jsx'
 import Settings from './screens/Settings.jsx'
 
 const NAV = [
-  ['/', 'Markets'], ['/prices', 'Prices'], ['/anatomy', 'Decision Anatomy'], ['/mindmap', 'Mind-map'],
+  ['/', 'Markets'], ['/prices', 'Prices'], ['/candles', 'Candles'], ['/anatomy', 'Decision Anatomy'], ['/mindmap', 'Mind-map'],
   ['/engines', 'Engines'], ['/strategies', 'Strategies'], ['/models', 'Models'], ['/universe', 'Universe'],
   ['/positions', 'Positions & Risk'], ['/trades', 'Trade History'], ['/balances', 'Balances'],
   ['/connections', 'Connections'], ['/controls', 'Controls'], ['/golive', 'Go-Live'],
@@ -82,6 +83,7 @@ function Dashboard() {
       <Routes>
         <Route path="/" element={<Markets />} />
         <Route path="/prices" element={<Prices />} />
+        <Route path="/candles" element={<Candles />} />
         <Route path="/asset/:base" element={<AssetDetail />} />
         <Route path="/anatomy" element={<DecisionAnatomy />} />
         <Route path="/mindmap" element={<MindMap />} />

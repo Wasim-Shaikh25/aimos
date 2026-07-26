@@ -61,6 +61,7 @@ class AppState:
     strategies_provider: Any = None  # callable -> {"strategies": [...]} (execution plugins)
     models_provider: Any = None  # callable -> {"models": [...]} (rule/bayes/ml + learning)
     prices_provider: Any = None  # callable -> {"venues": [...], "rows": [...]} (price matrix)
+    candles_provider: Any = None  # callable(symbol) -> {venues:[], candles:[]} (OHLC history)
     venue_state_provider: Any = None  # callable(symbol) -> {venue: {regime,p_up,action,...}}
     trades_provider: Any = None  # callable -> {"trades": [...]} (trade history)
     balances_provider: Any = None  # callable -> {"venues": [...]} (per-venue balances)
@@ -217,6 +218,11 @@ def create_app(state: AppState) -> FastAPI:
     def get_prices():
         # per-coin per-venue mids + dislocation (multi-platform price matrix, §5.1)
         return state.prices_provider() if state.prices_provider else {"venues": [], "rows": []}
+
+    @app.get("/api/candles/{symbol}")
+    def get_candles(symbol: str):
+        # OHLC history for the chosen symbol (Candlestick chart, §5.1)
+        return state.candles_provider(symbol) if state.candles_provider else {"venues": [], "candles": []}
 
     @app.get("/api/venue_state/{symbol}")
     def get_venue_state(symbol: str):

@@ -113,6 +113,7 @@ def build_app(offline: Optional[bool] = None):
         "evidence": {},        # base -> {venue: [Evidence dict]} (Engines screen, per venue)
         "venue_state": {},     # base -> {venue: {regime,p_up,confidence,action,plugin}} (§3.1)
         "prices": {},          # base -> {venues:{v:mid}, dislocation_bps, cheap, rich}
+        "candles": {},         # base -> {venue -> DataFrame} (OHLC for candlestick chart)
         "equity": [broker.equity()],
         "universe": universe,
         "chosen": {},
@@ -235,6 +236,7 @@ def build_app(offline: Optional[bool] = None):
                     _maybe_arb(sim, primary_res, base, prices, now, paper, holder)
                     holder["venue_state"][base] = per_venue
                     holder["prices"][base] = _price_row(prices)
+                    holder["candles"][base] = {v: d for v, d in venue_df.items()}
                     if primary_res is not None:  # time-series (optional TimescaleDB)
                         mu = primary_res.understanding
                         ts_store.write_decision(now, base, primary, mu.regime.value,
@@ -339,6 +341,7 @@ def build_app(offline: Optional[bool] = None):
         strategies_provider=lambda: _strategies_payload(params, holder["chosen"]),
         models_provider=lambda: _models_payload(params, holder["latest"]),
         prices_provider=lambda: _prices_payload(holder),
+        candles_provider=lambda sym: _candles_payload(holder, base_of(sym)),
         venue_state_provider=lambda sym: holder["venue_state"].get(base_of(sym), {}),
         trades_provider=lambda: _trades_payload(broker, sim),
         balances_provider=lambda: _balances_payload(broker, sim, connections),
@@ -768,6 +771,29 @@ def _pick_evidence(by_venue: dict, venue):
     if venue and venue in by_venue:
         return by_venue[venue]
     return next(iter(by_venue.values()))  # default: first venue (primary)
+
+
+def _candles_payload(holder, base: str) -> dict:
+    """Return OHLC history for ``base`` across venues (Candlestick chart, §5.1)."""
+    venue_dfs = holder.get("candles", {}).get(base, {})
+    if not venue_dfs:
+        return {"venues": [], "candles": []}
+    venues = sorted(venue_dfs)
+    out = {}
+    for v, df in venue_dfs.items():
+        if df is None or df.empty:
+            continue
+        out[v] = [
+            {
+                "time": int(ts.timestamp()),
+                "open": round(float(row["open"]), 6),
+                "high": round(float(row["high"]), 6),
+                "low": round(float(row["low"]), 6),
+                "close": round(float(row["close"]), 6),
+            }
+            for ts, row in df.iterrows()
+        ]
+    return {"venues": venues, "candles": out}
 
 
 def _prices_payload(holder) -> dict:

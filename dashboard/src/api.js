@@ -90,6 +90,7 @@ export const api = {
   matrix: () => j('/api/universe/matrix'),
   evidence: (sym, venue) => j(`/api/evidence/${sym}${venue ? `?venue=${venue}` : ''}`),
   prices: () => j('/api/prices/matrix'),
+  candles: (sym) => j(`/api/candles/${sym}`),
   venueState: (sym) => j(`/api/venue_state/${sym}`),
   trades: () => j('/api/trades'),
   balances: () => j('/api/balances'),

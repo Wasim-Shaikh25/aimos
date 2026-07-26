@@ -28,9 +28,14 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   - `PaperBroker` and `MultiVenueSim` gain `state_dict()` / `load_state()` so the
     paper loop can resume after a restart.
   - `runtime/serve.py` loads state at boot and snapshots it every tick.
-- **Dashboard equity chart** (`dashboard/src/components/EquityChart.jsx`):
-  replaced the SVG sparkline on the Performance screen with a
-  `lightweight-charts` line chart driven by `/api/equity`.
+- **Dashboard charting + screens**:
+  - `dashboard/src/components/EquityChart.jsx` — `lightweight-charts` line chart
+    on the Performance screen, driven by `/api/equity`.
+  - `dashboard/src/components/CandlestickChart.jsx` + `dashboard/src/screens/Candles.jsx`
+    — OHLC candlestick chart with per-venue selector, driven by the new
+    `/api/candles/{symbol}` endpoint.
+  - Evidence tables remain on `Engines`, decision anatomy flow on `DecisionAnatomy`,
+    and the new `Settings` screen handles members/invites.
 - **Dashboard auth screens completed** (`dashboard/src/auth.jsx`):
   login, registration, email verification, forgot-password/reset, and phone-OTP
   sign-in are now wired to the SaaS auth endpoints.
@@ -64,6 +69,9 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   trading endpoints (`/api/*` outside `/api/v2/*`) require a valid access
   token whose `org` claim matches `X-Organization-Id` and `AIMOS_RUNTIME_ORG_ID`
   when SaaS is enabled; tenant routes still use `TenantContext`.
+- **Candlestick API** (`/api/candles/{symbol}`):
+  `runtime/serve.py` stores per-venue OHLC DataFrames each tick and exposes them
+  as `{time, open, high, low, close}` candle arrays for the dashboard chart.
 - **Deployment packaging for SaaS**:
   - `Dockerfile` multi-stage build (Node dashboard + Python runtime) installing
     `[serve,saas,data]` extras; `docker-compose.yml` now passes the shared
