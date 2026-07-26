@@ -26,7 +26,7 @@ import structlog
 from aimos.api.server import AppState, create_app
 from aimos.backtest import costs as cost_mod
 from aimos.core.clock import LiveClock
-from aimos.core.config import load_params
+
 from aimos.core.schemas import Action, CapacityCaps, ExecContext, Timeframe, VenueTop
 from aimos.data.context import build_context
 from aimos.data.live_source import (
@@ -40,6 +40,7 @@ from aimos.execution.broker.paper import PaperBroker
 from aimos.execution.position_sizer import SizingInputs
 from aimos.journal.journal import Journal
 from aimos.runtime.state_store import RuntimeStateStore, build_snapshot
+from aimos.saas.config_tenant import load_params_for_org
 from aimos.saas.journal_tenant import tenant_journal_path
 from aimos.telegram.sink import TelegramSink
 from aimos.execution.risk_manager import RiskState
@@ -51,15 +52,14 @@ DIST = Path(__file__).resolve().parents[2] / "dashboard" / "dist"
 
 
 def build_app(offline: Optional[bool] = None):
-    params = load_params()
+    Path("state").mkdir(exist_ok=True)
+    clock = LiveClock()
+    org_id = os.environ.get("AIMOS_RUNTIME_ORG_ID", "local")
+    params = load_params_for_org(org_id)
     features = params.features.model_dump()
     paper = params.paper.model_dump()
     costs_cfg = params.costs.model_dump()
     live_data = features["live_data"] if offline is None else (not offline)
-
-    Path("state").mkdir(exist_ok=True)
-    clock = LiveClock()
-    org_id = os.environ.get("AIMOS_RUNTIME_ORG_ID", "local")
     # per-tenant journal path when SaaS is enabled; single-user journal_path otherwise
     jpath = tenant_journal_path(org_id, params)
     # Keep runtime state beside the journal so persistent deployments keep both

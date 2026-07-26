@@ -269,7 +269,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 ### Phase 2 — Multi-tenancy
 
 - [x] `TenantContext` and dependency
-- [~] Per-tenant config loader (`aimos/saas/config_tenant.py` — table + endpoints done, runtime integration pending)
+- [x] Per-tenant config loader (`aimos/saas/config_tenant.py`) with deep-merge overrides loaded at runtime (`runtime/serve.py` uses `load_params_for_org`).
 - [x] Per-tenant journal factory (`aimos/saas/journal_tenant.py`)
 - [x] Per-tenant state persistence (`aimos/saas/state_tenant.py`)
 - [x] `/api/v2/organizations` and `/api/v2/config` endpoints
@@ -292,7 +292,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 - [ ] Vendor vendoring at pinned SHAs (`vendor/VENDOR.md`)
 - [x] 12-month historical dataset downloader (`scripts/download_history.py`)
 - [ ] Live multi-venue executor wiring behind go-live gate
-- [x] Tests for streaming, persistence, ML, dataset (`tests/test_streaming.py`, `test_runtime_state.py`, `test_model_registry.py`, `test_download_history.py`)
+- [x] Tests for streaming, persistence, ML, dataset, config overlay (`tests/test_streaming.py`, `test_runtime_state.py`, `test_model_registry.py`, `test_download_history.py`, `test_config_tenant.py`)
 
 ### Phase 4 — Deployment & docs
 

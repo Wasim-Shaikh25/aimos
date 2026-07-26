@@ -44,6 +44,10 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 - **12-month historical dataset downloader** (`scripts/download_history.py`):
   free public Binance Vision monthly klines → `CandleStore` parquet for ML
   training and regression tests. Supports multi-symbol and `1m/5m/15m/1h/4h/1d`.
+- **Per-tenant config overlay** (`aimos/saas/config_tenant.py`):
+  deep-merges organization-specific overrides from `OrganizationConfig` into the
+  base `Params` tree at runtime; `runtime/serve.py` now boots with
+  `load_params_for_org(AIMOS_RUNTIME_ORG_ID)`.
 - **Deployment packaging for SaaS**:
   - `Dockerfile` multi-stage build (Node dashboard + Python runtime) installing
     `[serve,saas,data]` extras; `docker-compose.yml` now passes the shared
