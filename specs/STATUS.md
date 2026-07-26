@@ -21,7 +21,7 @@ prerequisite) · ⏭️ not built yet.
 | 4 | Execution: plugins, evaluator, sizer, risk manager, journal (hash chain), backtester | ✅ |
 | 5 | Runtime, API, React dashboard, Telegram, ignition, risk analytics | ✅ |
 | 6 | Learning (shadow), agents, LLM sensor, live broker, go-live gates | ✅ |
-| SaaS P1 | User auth: email/password + Google/Apple OAuth + phone OTP, JWT, tenant orgs | ✅ |
+| SaaS P1 | Single-admin auth seeded from config/env, email OTP 2FA, JWT, tenant orgs (multi-user UX removed) | ✅ |
 | SaaS P2/P3 (partial) | Runtime state persistence, per-tenant config/journal/state store, broker/sim resume, streaming scaffold + feed into paper loop, ML registry, dashboard equity + candlestick charts, evidence tables, decision anatomy, org settings, auth screens, org scoping, migration, Dockerfile, vendor manifest + vendoring script, live multi-venue executor wiring (fail-closed), tests | ✅ |
 
 The §25.9 golden worked example reproduces exactly (fusion 0.766/0.428; execution

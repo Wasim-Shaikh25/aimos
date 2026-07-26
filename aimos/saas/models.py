@@ -119,6 +119,18 @@ class PasswordResetToken(Base):
     used: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class EmailLoginCode(Base):
+    """One-time login code sent to the admin email (2FA step)."""
+
+    __tablename__ = "email_login_codes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(255))
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    used: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class PhoneVerificationCode(Base):
     __tablename__ = "phone_verification_codes"
 

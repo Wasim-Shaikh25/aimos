@@ -1,10 +1,9 @@
 // Journal-backed API client (§15.1) + SaaS auth helpers.
-// Auth tokens and active organization are persisted in localStorage and sent
-// as the Authorization / X-Organization-Id headers on every request.
+// Auth token is persisted in localStorage and sent as the Authorization header.
 const authHeaders = () => {
   const h = { 'Content-Type': 'application/json' }
   const token = localStorage.getItem('aimos_access_token')
-  const org = localStorage.getItem('aimos_active_org')
+  const org = localStorage.getItem('aimos_org')
   if (token) h.Authorization = `Bearer ${token}`
   if (org) h['X-Organization-Id'] = org
   return h
@@ -31,25 +30,25 @@ const j = async (url, opts = {}) => {
 export const setAuth = ({ access_token, refresh_token, organization_id }) => {
   if (access_token) localStorage.setItem('aimos_access_token', access_token)
   if (refresh_token) localStorage.setItem('aimos_refresh_token', refresh_token)
-  if (organization_id) localStorage.setItem('aimos_active_org', organization_id)
+  if (organization_id) localStorage.setItem('aimos_org', organization_id)
 }
 
 export const clearAuth = () => {
   localStorage.removeItem('aimos_access_token')
   localStorage.removeItem('aimos_refresh_token')
-  localStorage.removeItem('aimos_active_org')
+  localStorage.removeItem('aimos_org')
 }
 
 export const getAuth = () => ({
   accessToken: localStorage.getItem('aimos_access_token'),
   refreshToken: localStorage.getItem('aimos_refresh_token'),
-  activeOrg: localStorage.getItem('aimos_active_org'),
+  activeOrg: localStorage.getItem('aimos_org'),
 })
 
 export const api = {
-  // SaaS auth
-  register: (email, password) => j('/auth/register', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  // SaaS auth (single admin, email OTP 2FA)
   login: (email, password) => j('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  verifyLogin: (email, code) => j('/auth/login/verify', { method: 'POST', body: JSON.stringify({ email, code }) }),
   logout: () => {
     const refresh = localStorage.getItem('aimos_refresh_token')
     return j('/auth/logout', { method: 'POST', body: JSON.stringify({ refresh_token: refresh || '' }) })
@@ -58,25 +57,13 @@ export const api = {
     const refresh = localStorage.getItem('aimos_refresh_token')
     return j('/auth/refresh', { method: 'POST', body: JSON.stringify({ refresh_token: refresh || '' }) })
   },
-  verifyEmail: (email, code) => j('/auth/verify-email', { method: 'POST', body: JSON.stringify({ email, code }) }),
-  resendVerification: (email) => j('/auth/resend-verification', { method: 'POST', body: JSON.stringify({ email }) }),
-  forgotPassword: (email) => j('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
-  resetPassword: (email, code, new_password) => j('/auth/reset-password', {
-    method: 'POST', body: JSON.stringify({ email, code, new_password }),
-  }),
-  sendPhoneCode: (phone_number) => j('/auth/phone/send', { method: 'POST', body: JSON.stringify({ phone_number }) }),
-  verifyPhone: (phone_number, code) => j('/auth/phone/verify', {
-    method: 'POST', body: JSON.stringify({ phone_number, code }),
-  }),
   me: () => j('/api/v2/me'),
-  organizations: () => j('/api/v2/organizations'),
-  createOrganization: (name) => j('/api/v2/organizations?name=' + encodeURIComponent(name), { method: 'POST' }),
-  orgConfig: () => j('/api/v2/config'),
-  setOrgConfig: (overrides) => j('/api/v2/config', { method: 'PATCH', body: JSON.stringify(overrides) }),
-  members: (orgId) => j(`/api/v2/organizations/${orgId}/members`),
-  inviteMember: (orgId, email, role = 'member') => j(`/api/v2/organizations/${orgId}/invite`, {
-    method: 'POST', body: JSON.stringify({ email, role }),
-  }),
+
+  // Single-user settings (config + encrypted exchange secrets)
+  settings: () => j('/api/v2/settings'),
+  patchSettingsConfig: (overrides) => j('/api/v2/settings/config', { method: 'PATCH', body: JSON.stringify({ overrides }) }),
+  addExchange: (data) => j('/api/v2/settings/exchange', { method: 'POST', body: JSON.stringify(data) }),
+  deleteExchange: (venue) => j(`/api/v2/settings/exchange/${venue}`, { method: 'DELETE' }),
 
   // Runtime
   decisions: (n = 50) => j(`/api/decisions?limit=${n}`),

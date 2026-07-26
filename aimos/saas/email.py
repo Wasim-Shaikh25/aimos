@@ -89,6 +89,14 @@ def send_password_reset_email(to: str, code: str, base_url: str = "") -> None:
     _dev_drop(f"reset-{to}", code)
 
 
+def send_login_code_email(to: str, code: str) -> None:
+    """Send a one-time login code (email-based 2FA)."""
+    text = f"Your AIMOS login code is: {code}\n\nIt expires in 10 minutes."
+    html = f"<html><body><p>Your AIMOS login code is: <strong>{code}</strong></p><p>It expires in 10 minutes.</p></body></html>"
+    send_email(to, "AIMOS login code", text, html)
+    _dev_drop(f"login-{to}", code)
+
+
 def _dev_drop(prefix: str, code: str) -> None:
     """Write the code to ``state/maildrop`` for local development."""
     drop_dir = Path("state") / "maildrop"

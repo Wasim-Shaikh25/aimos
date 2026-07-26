@@ -6,6 +6,18 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Changed
+- **Single-admin mode + email OTP 2FA** (`aimos/saas/`):
+  - Removed public registration, Google/Apple OAuth, phone OTP, and forgot-password
+    endpoints; the only auth flow is admin login.
+  - Admin credentials (user_id, email, phone, password) are seeded from
+    `config/saas.yaml` `admin.*` or `AIMOS__SAAS__ADMIN__*` env vars and hashed on
+    first run.
+  - Login is two-step: `/auth/login` verifies the password and sends a one-time
+    code to the admin email; `/auth/login/verify` validates the code and issues
+    JWT access/refresh tokens.
+  - Dashboard `auth.jsx` and `api.js` updated for the new flow.
+
 ### Added
 - **SaaS v2.0 Phase 1 auth foundation** (`aimos/saas/`): SQLAlchemy user/org models,
   bcrypt password hashing, JWT access/refresh tokens with rotation, email

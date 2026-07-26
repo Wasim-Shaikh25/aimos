@@ -104,8 +104,8 @@ def create_app(state: AppState) -> FastAPI:
         """In SaaS mode, trading API requests (``/api/*`` outside ``/api/v2/*``)
         must carry a valid access token whose ``org`` claim matches the
         ``X-Organization-Id`` header and this runtime's ``AIMOS_RUNTIME_ORG_ID``.
-        Auth endpoints and the public status probe are exempt; ``/api/v2/*``
-        validates its own tenant context."""
+        Auth endpoints, the public status probe, and ``/api/v2/*`` tenant routes
+        are exempt; tenant routes validate their own auth context."""
         if get_saas_config().enabled:
             path = request.url.path
             public = path == "/api/v2/status" or path.startswith("/auth/") or path.startswith("/api/v2/")

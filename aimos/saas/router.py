@@ -1,31 +1,21 @@
-"""FastAPI routers for SaaS auth and tenant management."""
+"""FastAPI routers for single-admin SaaS auth and settings."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Form, Query, Request
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
+from aimos.core.config import load_params
 from aimos.saas import auth_service
+from aimos.saas.config_tenant import _deep_merge
 from aimos.saas.db import get_db
-from aimos.saas.models import Organization, OrganizationConfig, OrganizationMember, User
-from aimos.saas.oauth import (
-    apple_authorize_url,
-    generate_nonce,
-    generate_state,
-    google_authorize_url,
-)
-from aimos.saas.security import (
-    AuthError,
-    TenantContext,
-    create_access_token,
-    get_current_user,
-    get_tenant_context,
-    require_role,
-)
+from aimos.saas.models import Organization, OrganizationMember, User
+from aimos.saas.security import get_current_user
 from aimos.saas.settings import get_saas_config
+from aimos.saas.settings_store import SettingsStore
 
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
 tenant_router = APIRouter(prefix="/api/v2", tags=["tenant"])
@@ -36,46 +26,18 @@ tenant_router = APIRouter(prefix="/api/v2", tags=["tenant"])
 # ---------------------------------------------------------------------------
 
 
-class RegisterRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
 
-class VerifyEmailRequest(BaseModel):
+class LoginVerifyRequest(BaseModel):
     email: EmailStr
     code: str
-
-
-class ResendVerificationRequest(BaseModel):
-    email: EmailStr
-
-
-class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
-
-
-class ResetPasswordRequest(BaseModel):
-    email: EmailStr
-    code: str
-    new_password: str
 
 
 class RefreshRequest(BaseModel):
     refresh_token: str
-
-
-class PhoneSendRequest(BaseModel):
-    phone_number: str
-
-
-class PhoneVerifyRequest(BaseModel):
-    phone_number: str
-    code: str
 
 
 class TokenResponse(BaseModel):
@@ -94,17 +56,17 @@ class UserResponse(BaseModel):
     phone_verified: bool
 
 
-class OrganizationResponse(BaseModel):
-    id: str
-    name: str
-    slug: str
-    role: str
-    mode: str
+class ExchangeKeyRequest(BaseModel):
+    venue: str
+    exchange_id: str | None = None
+    apiKey: str
+    secret: str
+    testnet: bool = True
+    withdraw: bool = False
 
 
-class InviteRequest(BaseModel):
-    email: EmailStr
-    role: str = "member"
+class ConfigPatchRequest(BaseModel):
+    overrides: dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
@@ -112,73 +74,37 @@ class InviteRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _absolute_redirect(request: Request, configured: str) -> str:
-    """Convert a configured redirect path into an absolute URL."""
-    if configured.startswith("http://") or configured.startswith("https://"):
-        return configured
-    base = str(request.base_url).rstrip("/")
-    return base + (configured if configured.startswith("/") else "/" + configured)
-
-
 def _token_response(result: auth_service.AuthResult) -> TokenResponse:
     return TokenResponse(
         access_token=result.access_token,
         refresh_token=result.refresh_token,
         user_id=result.user.id,
-        organization_id=result.organization.id,
+        organization_id=result.organization.id if result.organization else "",
     )
 
 
 # ---------------------------------------------------------------------------
-# Email + password auth
+# Admin login with email OTP (no public registration)
 # ---------------------------------------------------------------------------
 
 
-@auth_router.post("/register", response_model=TokenResponse)
-def register(req: RegisterRequest, session: Session = Depends(get_db)):
-    result = auth_service.register_email_password(session, req.email, req.password)
-    return _token_response(result)
-
-
-@auth_router.post("/login", response_model=TokenResponse)
+@auth_router.post("/login")
 def login(req: LoginRequest, session: Session = Depends(get_db)):
-    result = auth_service.login_email_password(session, req.email, req.password)
+    """Step 1: verify admin password and email a one-time login code."""
+    auth_service.send_login_otp(session, req.email, req.password)
+    return {"ok": True, "message": "Check your email for a login code."}
+
+
+@auth_router.post("/login/verify", response_model=TokenResponse)
+def login_verify(req: LoginVerifyRequest, session: Session = Depends(get_db)):
+    """Step 2: verify the email OTP and issue tokens."""
+    result = auth_service.verify_login_otp(session, req.email, req.code)
     return _token_response(result)
-
-
-@auth_router.post("/verify-email")
-def verify_email(req: VerifyEmailRequest, session: Session = Depends(get_db)):
-    user = auth_service.verify_email(session, req.email, req.code)
-    return {"ok": True, "email_verified": user.email_verified}
-
-
-@auth_router.post("/resend-verification")
-def resend_verification(req: ResendVerificationRequest, session: Session = Depends(get_db)):
-    auth_service.resend_email_verification(session, req.email)
-    return {"ok": True}
-
-
-@auth_router.post("/forgot-password")
-def forgot_password(req: ForgotPasswordRequest, session: Session = Depends(get_db)):
-    auth_service.forgot_password(session, req.email)
-    return {"ok": True}
-
-
-@auth_router.post("/reset-password")
-def reset_password(req: ResetPasswordRequest, session: Session = Depends(get_db)):
-    auth_service.reset_password(session, req.email, req.code, req.new_password)
-    return {"ok": True}
-
-
-# ---------------------------------------------------------------------------
-# Token refresh / logout
-# ---------------------------------------------------------------------------
 
 
 @auth_router.post("/refresh", response_model=TokenResponse)
 def refresh(req: RefreshRequest, session: Session = Depends(get_db)):
     access, refresh, user_id = auth_service.refresh_access_token(session, req.refresh_token)
-    # Find default org for response.
     org = (
         session.query(Organization)
         .join(OrganizationMember)
@@ -201,80 +127,7 @@ def logout(req: RefreshRequest, session: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# OAuth2
-# ---------------------------------------------------------------------------
-
-
-@auth_router.get("/google")
-def google_auth(request: Request):
-    cfg = get_saas_config().oauth.google
-    if not cfg.client_id:
-        raise AuthError("Google OAuth is not configured")
-    redirect_uri = _absolute_redirect(request, cfg.redirect_uri)
-    return {
-        "authorization_url": google_authorize_url(
-            state=generate_state(),
-            nonce=generate_nonce(),
-            redirect_uri=redirect_uri,
-        ),
-    }
-
-
-@auth_router.get("/google/callback")
-def google_callback(request: Request, code: str = Query(...), session: Session = Depends(get_db)):
-    cfg = get_saas_config().oauth.google
-    redirect_uri = _absolute_redirect(request, cfg.redirect_uri)
-    result = auth_service.login_with_google(session, code, redirect_uri=redirect_uri)
-    return _token_response(result)
-
-
-@auth_router.get("/apple")
-def apple_auth(request: Request):
-    cfg = get_saas_config().oauth.apple
-    if not cfg.client_id:
-        raise AuthError("Apple Sign In is not configured")
-    redirect_uri = _absolute_redirect(request, cfg.redirect_uri)
-    return {
-        "authorization_url": apple_authorize_url(
-            state=generate_state(),
-            nonce=generate_nonce(),
-            redirect_uri=redirect_uri,
-        ),
-    }
-
-
-@auth_router.post("/apple/callback")
-def apple_callback(
-    request: Request,
-    code: str = Form(...),
-    user: str | None = Form(None),
-    session: Session = Depends(get_db),
-):
-    cfg = get_saas_config().oauth.apple
-    redirect_uri = _absolute_redirect(request, cfg.redirect_uri)
-    result = auth_service.login_with_apple(session, code, user_payload=user, redirect_uri=redirect_uri)
-    return _token_response(result)
-
-
-# ---------------------------------------------------------------------------
-# Phone auth
-# ---------------------------------------------------------------------------
-
-
-@auth_router.post("/phone/send")
-def phone_send(req: PhoneSendRequest, session: Session = Depends(get_db)):
-    auth_service.send_phone_verification(session, req.phone_number)
-    return {"ok": True}
-
-
-@auth_router.post("/phone/verify", response_model=TokenResponse)
-def phone_verify(req: PhoneVerifyRequest, session: Session = Depends(get_db)):
-    result = auth_service.verify_phone_and_login(session, req.phone_number, req.code)
-    return _token_response(result)
-
-
-# ---------------------------------------------------------------------------
-# Tenant management
+# Single-user tenant endpoints
 # ---------------------------------------------------------------------------
 
 
@@ -289,131 +142,63 @@ def me(current_user: User = Depends(get_current_user)):
     )
 
 
-@tenant_router.get("/organizations", response_model=list[OrganizationResponse])
-def list_organizations(
+# ---------------------------------------------------------------------------
+# Single-user settings (config + encrypted exchange secrets)
+# ---------------------------------------------------------------------------
+
+
+def _settings_store() -> SettingsStore:
+    return SettingsStore("default")
+
+
+@tenant_router.get("/settings")
+def get_settings(current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+    """Return the effective configuration for the single-user dashboard.
+
+    Secrets are never exposed; only exchange metadata (has_key, testnet, etc.).
+    """
+    store = _settings_store()
+    overrides = store.get_config()
+    base = load_params().model_dump()
+    merged = _deep_merge(base, overrides)
+    return {
+        "mode": merged.get("mode", "paper"),
+        "features": merged.get("features", {}),
+        "paper": merged.get("paper", {}),
+        "mandate": merged.get("mandate", {}),
+        "training": merged.get("training", {}),
+        "exchanges": store.get_exchanges(),
+        "saas_enabled": get_saas_config().enabled,
+    }
+
+
+@tenant_router.patch("/settings/config")
+def patch_settings(
+    req: ConfigPatchRequest,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_db),
-):
-    rows = (
-        session.query(Organization, OrganizationMember.role)
-        .join(OrganizationMember)
-        .filter(OrganizationMember.user_id == current_user.id)
-        .order_by(Organization.created_at.asc())
-        .all()
-    )
-    return [
-        OrganizationResponse(
-            id=org.id,
-            name=org.name,
-            slug=org.slug,
-            role=role,
-            mode=org.mode,
-        )
-        for org, role in rows
-    ]
+) -> dict[str, Any]:
+    """Update user settings.  The runtime reloads these at boot."""
+    return _settings_store().update_config(req.overrides)
 
 
-@tenant_router.post("/organizations", response_model=OrganizationResponse)
-def create_organization(
-    name: str,
+@tenant_router.post("/settings/exchange")
+def add_exchange(
+    req: ExchangeKeyRequest,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_db),
-):
-    from aimos.saas.auth_service import _create_default_organization, _slugify
-
-    org = Organization(name=name, slug=_slugify(name), owner_id=current_user.id)
-    session.add(org)
-    session.flush()
-    session.add(OrganizationMember(user_id=current_user.id, organization_id=org.id, role="owner"))
-    session.commit()
-    return OrganizationResponse(
-        id=org.id,
-        name=org.name,
-        slug=org.slug,
-        role="owner",
-        mode=org.mode,
-    )
+) -> dict[str, dict[str, Any]]:
+    """Store encrypted exchange API credentials."""
+    _settings_store().set_exchange(req.venue, req.model_dump())
+    return _settings_store().get_exchanges()
 
 
-@tenant_router.post("/organizations/{org_id}/invite")
-def invite_member(
-    org_id: str,
-    req: InviteRequest,
-    ctx: TenantContext = Depends(require_role({"owner", "admin"})),
-    session: Session = Depends(get_db),
-):
-    # Placeholder: in production this would send an email invite and create a
-    # pending membership. For now we create the membership directly if a user
-    # with that email exists.
-    invitee = session.query(User).filter(User.email == req.email).first()
-    if invitee is None:
-        return {"ok": False, "error": "User not found; invite by email not yet implemented"}
-    existing = (
-        session.query(OrganizationMember)
-        .filter(
-            OrganizationMember.user_id == invitee.id,
-            OrganizationMember.organization_id == org_id,
-        )
-        .first()
-    )
-    if existing:
-        return {"ok": False, "error": "User is already a member"}
-    session.add(
-        OrganizationMember(
-            user_id=invitee.id,
-            organization_id=org_id,
-            role=req.role,
-        )
-    )
-    session.commit()
-    return {"ok": True, "user_id": invitee.id, "role": req.role}
-
-
-@tenant_router.get("/organizations/{org_id}/members")
-def list_members(
-    org_id: str,
-    ctx: TenantContext = Depends(get_tenant_context),
-    session: Session = Depends(get_db),
-):
-    members = (
-        session.query(User, OrganizationMember.role)
-        .join(OrganizationMember)
-        .filter(OrganizationMember.organization_id == org_id)
-        .order_by(OrganizationMember.joined_at.asc())
-        .all()
-    )
-    return [
-        {"user_id": user.id, "email": user.email, "phone": user.phone_number, "role": role}
-        for user, role in members
-    ]
-
-
-@tenant_router.get("/config")
-def get_org_config(
-    ctx: TenantContext = Depends(get_tenant_context),
-    session: Session = Depends(get_db),
-):
-    cfg = session.query(OrganizationConfig).filter(
-        OrganizationConfig.organization_id == ctx.organization.id
-    ).first()
-    return cfg.overrides if cfg else {}
-
-
-@tenant_router.patch("/config")
-def patch_org_config(
-    overrides: dict[str, Any],
-    ctx: TenantContext = Depends(require_role({"owner", "admin"})),
-    session: Session = Depends(get_db),
-):
-    cfg = session.query(OrganizationConfig).filter(
-        OrganizationConfig.organization_id == ctx.organization.id
-    ).first()
-    if cfg is None:
-        cfg = OrganizationConfig(organization_id=ctx.organization.id, overrides={})
-        session.add(cfg)
-    cfg.overrides.update(overrides)
-    session.commit()
-    return cfg.overrides
+@tenant_router.delete("/settings/exchange/{venue}")
+def delete_exchange(
+    venue: str,
+    current_user: User = Depends(get_current_user),
+) -> dict[str, dict[str, Any]]:
+    """Remove exchange credentials."""
+    _settings_store().delete_exchange(venue)
+    return _settings_store().get_exchanges()
 
 
 # ---------------------------------------------------------------------------

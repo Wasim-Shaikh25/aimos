@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from aimos.saas import db as saas_db
 from aimos.saas.config_tenant import _deep_merge, load_params_for_org
-from aimos.saas.db import get_session_maker
-from aimos.saas.models import OrganizationConfig
+from aimos.saas.settings_store import SettingsStore
 
 
 def test_deep_merge_overrides_nested_and_scalar():
@@ -29,13 +28,10 @@ def test_load_params_for_org_applies_overrides(monkeypatch, tmp_path):
     saas_db._engine = None
     saas_db._SessionLocal = None
 
-    session = get_session_maker()()
-    session.add(OrganizationConfig(organization_id="org1", overrides={
+    SettingsStore("default").update_config({
         "features": {"scalp_enabled": False},
         "paper": {"max_symbols": 3},
-    }))
-    session.commit()
-    session.close()
+    })
 
     params = load_params_for_org("org1")
     assert params.features.model_dump().get("scalp_enabled") is False

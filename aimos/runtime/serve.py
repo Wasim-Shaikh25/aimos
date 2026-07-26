@@ -45,6 +45,7 @@ from aimos.journal.journal import Journal
 from aimos.runtime.state_store import RuntimeStateStore, build_snapshot
 from aimos.saas.config_tenant import load_params_for_org
 from aimos.saas.journal_tenant import tenant_journal_path
+from aimos.saas.settings_store import SettingsStore
 from aimos.telegram.sink import TelegramSink
 from aimos.execution.risk_manager import RiskState
 from aimos.runtime.pipeline import PipelineOrchestrator
@@ -629,25 +630,6 @@ def _maybe_arb(sim, primary_res, base, prices, now, paper, holder,
     holder["chosen"]["CrossExchangeArb"] = holder["chosen"].get("CrossExchangeArb", 0) + 1
 
 
-def _load_secrets(params) -> dict:
-    """Load the optional operator secrets file pointed to by ``secrets.file``.
-
-    The file is a flat YAML mapping of venue → exchange_id / apiKey / secret /
-    testnet / withdraw.  It is never logged or returned to the UI.
-    """
-    import yaml
-    path = params.model_dump().get("secrets", {}).get("file")
-    if not path:
-        return {}
-    p = Path(path).expanduser()
-    if not p.exists():
-        return {}
-    try:
-        return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    except Exception:  # noqa: BLE001
-        return {}
-
-
 def _build_live_router(params, ladder, venues: list[str]) -> Optional[MultiVenueLiveRouter]:
     """Build a :class:`MultiVenueLiveRouter` only when every fail-closed gate is open.
 
@@ -655,7 +637,7 @@ def _build_live_router(params, ladder, venues: list[str]) -> Optional[MultiVenue
       - ``features.multi_venue_live`` is true
       - ``mode`` is ``live`` or ``mandate.enabled`` is true
       - the go-live ladder is complete
-      - per-venue API credentials are present in the secrets file
+      - per-venue API credentials are stored via the Settings UI
     """
     features = params.features.model_dump()
     if not features.get("multi_venue_live"):
@@ -667,15 +649,14 @@ def _build_live_router(params, ladder, venues: list[str]) -> Optional[MultiVenue
     if not ladder.live_allowed():
         return None
 
-    secrets = _load_secrets(params)
-    venue_creds = secrets.get("venues", {})
+    store = SettingsStore("default")
     if len(venues) < 2:
         return None
 
     mandate = MandateGate(mandate_cfg)
     brokers: dict[str, LiveBroker] = {}
     for venue in venues:
-        creds = venue_creds.get(venue)
+        creds = store.get_exchange_credentials(venue)
         if not creds or not creds.get("apiKey"):
             continue
         exchange_id = creds.get("exchange_id", venue)

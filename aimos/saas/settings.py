@@ -87,6 +87,17 @@ class SMSConfig(BaseModel):
     vonage: VonageConfig = Field(default_factory=VonageConfig)
 
 
+class AdminConfig(BaseModel):
+    """Single admin user seeded at startup.  ``password`` is hashed on first run."""
+
+    model_config = ConfigDict(extra="allow")
+
+    user_id: str = "admin"
+    email: str = ""
+    phone: str = ""
+    password: str = ""
+
+
 class TenantDefaults(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -107,12 +118,14 @@ class SaasConfig(BaseModel):
     access_token_expire_minutes: int = Field(default=15, ge=1, le=1440)
     refresh_token_expire_days: int = Field(default=30, ge=1, le=365)
     verification_code_expire_minutes: int = Field(default=15, ge=1, le=1440)
+    otp_expire_minutes: int = Field(default=10, ge=1, le=1440)
     require_email_verification: bool = True
     require_strong_password: bool = True
     smtp: SMTPConfig = Field(default_factory=SMTPConfig)
     oauth: OAuthConfig = Field(default_factory=OAuthConfig)
     sms: SMSConfig = Field(default_factory=SMSConfig)
     tenant: TenantDefaults = Field(default_factory=TenantDefaults)
+    admin: AdminConfig = Field(default_factory=AdminConfig)
 
     @model_validator(mode="after")
     def _ensure_jwt_secret(self) -> "SaasConfig":

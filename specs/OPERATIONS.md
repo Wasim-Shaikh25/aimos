@@ -195,6 +195,11 @@ Auth/tenant data lives in the database configured by `config/saas.yaml`
 A 32-byte JWT secret is auto-generated and persisted in `state/.jwt_secret` on first
 startup (or set `AIMOS__SAAS__JWT_SECRET` explicitly).
 
+The single admin user is seeded from `config/saas.yaml` `admin.*` or env vars:
+`AIMOS__SAAS__ADMIN__USER_ID`, `AIMOS__SAAS__ADMIN__EMAIL`,
+`AIMOS__SAAS__ADMIN__PHONE`, `AIMOS__SAAS__ADMIN__PASSWORD` (hashed on first run,
+never logged or returned). No public registration is exposed.
+
 ### Operator-supplied credentials
 
 All external auth services are operator-supplied; AIMOS itself uses only
@@ -213,14 +218,14 @@ registration can fall back to email OTP in a future update.
 
 ### Endpoints
 
-- `POST /auth/register`, `/auth/login` — email + password.
-- `POST /auth/verify-email`, `/auth/resend-verification` — email verification code.
-- `POST /auth/forgot-password`, `/auth/reset-password` — password reset.
-- `GET /auth/google` → Google consent, `GET /auth/google/callback`.
-- `GET /auth/apple` → Apple consent, `POST /auth/apple/callback`.
-- `POST /auth/phone/send`, `/auth/phone/verify` — phone OTP.
-- `GET /api/v2/me`, `/api/v2/organizations`, `POST /api/v2/organizations`.
-- `GET/PATCH /api/v2/config` — per-tenant config overrides (owner/admin).
+- `POST /auth/login` — verify admin password and trigger an email OTP.
+- `POST /auth/login/verify` — verify the email OTP and receive access/refresh tokens.
+- `POST /auth/refresh`, `POST /auth/logout` — token rotation and logout.
+- `GET /api/v2/me` — current admin user.
+- `GET /api/v2/settings` — effective single-user config + exchange metadata.
+- `PATCH /api/v2/settings/config` — update config overrides.
+- `POST /api/v2/settings/exchange`, `DELETE /api/v2/settings/exchange/{venue}` —
+  add/remove encrypted exchange API keys.
 
 The dashboard detects SaaS mode via `/api/v2/status`; when SaaS is off it falls
 back to the original single-user experience.

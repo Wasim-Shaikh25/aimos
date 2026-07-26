@@ -39,6 +39,14 @@ def get_engine():
         _engine = create_engine(url, **kwargs)
         _SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False)
         Base.metadata.create_all(_engine)
+        # Seed the single admin user when SaaS is configured.
+        try:
+            from aimos.saas import auth_service
+
+            with _SessionLocal() as session:
+                auth_service.ensure_admin_user(session)
+        except Exception:
+            pass
     return _engine
 
 

@@ -37,21 +37,8 @@ const NAV = [
   ['/settings', 'Settings'],
 ]
 
-function OrgSwitcher() {
-  const { organizations, activeOrg, chooseOrg, user, logout, saasEnabled } = useAuth()
-  if (!user) return null
-  return (
-    <>
-      <select value={activeOrg || ''} onChange={e => chooseOrg(e.target.value)} title="Active organization">
-        {organizations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-      </select>
-      {saasEnabled && <button onClick={logout} style={{ marginLeft: 8 }}>Logout</button>}
-    </>
-  )
-}
-
 function Chrome() {
-  const { user } = useAuth()
+  const { user, logout, saasEnabled } = useAuth()
   const { data: stats, updatedAt } = usePoll(api.stats, 4000)
   const { data: eq } = usePoll(api.equity, 4000)
   const [, tick] = useState(0)
@@ -67,7 +54,7 @@ function Chrome() {
       <span className="stat live"><i className="dot" /> live · <b>{ago(updatedAt)}</b></span>
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
         <span className="stat" style={{ marginRight: 12 }}>{user.email}</span>
-        <OrgSwitcher />
+        {saasEnabled && <button onClick={logout}>Logout</button>}
       </div>
     </div>
   )

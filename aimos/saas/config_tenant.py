@@ -8,9 +8,8 @@ specific ``AIMOS_RUNTIME_ORG_ID``.
 from __future__ import annotations
 
 from aimos.core.config import Params, load_params
-from aimos.saas.db import get_session_maker
-from aimos.saas.models import OrganizationConfig
 from aimos.saas.settings import get_saas_config
+from aimos.saas.settings_store import SettingsStore
 
 
 def _deep_merge(base: dict, overlay: dict) -> dict:
@@ -24,17 +23,16 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
 
 
 def load_params_for_org(org_id: str) -> Params:
-    """Return the base config with the organization's overrides applied."""
+    """Return the base config with the single-user settings overrides applied."""
     params = load_params()
     if not get_saas_config().enabled:
         return params
-    session = get_session_maker()()
-    try:
-        cfg = session.get(OrganizationConfig, org_id)
-        if cfg and cfg.overrides:
-            raw = params.model_dump()
-            merged = _deep_merge(raw, cfg.overrides)
-            return Params.model_validate(merged)
-    finally:
-        session.close()
+    # Single-user deployments use one settings row; org_id is kept for
+    # backward compatibility with per-tenant paths and the runtime org flag.
+    settings_id = "default"
+    overrides = SettingsStore(settings_id).get_config()
+    if overrides:
+        raw = params.model_dump()
+        merged = _deep_merge(raw, overrides)
+        return Params.model_validate(merged)
     return params

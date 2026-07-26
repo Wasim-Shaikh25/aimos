@@ -54,6 +54,14 @@ sms:
   #   api_secret: ""              # env override AIMOS__SAAS__SMS__VONAGE__API_SECRET
   #   from_name: "AIMOS"
 
+# Single admin user seeded at startup (no public registration).
+# Override with env vars AIMOS__SAAS__ADMIN__EMAIL / __PASSWORD / __PHONE.
+admin:
+  user_id: "admin"
+  email: ""
+  phone: ""
+  password: ""                    # hashed on first run; never logged or returned
+
 # Tenant / runtime scoping
 tenant:
   allow_multiple_orgs_per_user: true

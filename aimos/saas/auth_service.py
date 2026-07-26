@@ -11,8 +11,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from aimos.saas.email import send_password_reset_email, send_verification_email
+from aimos.saas.email import (
+    send_login_code_email,
+    send_password_reset_email,
+    send_verification_email,
+)
 from aimos.saas.models import (
+    EmailLoginCode,
     EmailVerificationCode,
     Organization,
     OrganizationMember,
@@ -488,3 +493,115 @@ def revoke_refresh_token(session: Session, refresh_token: str) -> None:
         if verify_password(refresh_token, t.token_hash):
             t.revoked_at = _utcnow()
     session.commit()
+
+
+# ---------------------------------------------------------------------------
+# Single admin user + email OTP login
+# ---------------------------------------------------------------------------
+
+
+def ensure_admin_user(session: Session) -> User | None:
+    """Seed the single admin user from SaaS config when it is enabled.
+
+    No public registration is exposed; the operator provides credentials in
+    ``config/saas.yaml`` or via ``AIMOS__SAAS__ADMIN__*`` env vars.  The
+    plaintext password is hashed on first run and is never logged or returned.
+    """
+    cfg = get_saas_config()
+    if not cfg.enabled or not cfg.admin.email or not cfg.admin.password:
+        return None
+    user = session.query(User).filter(User.email == cfg.admin.email).first()
+    if user is None:
+        user = User(
+            id=cfg.admin.user_id,
+            email=cfg.admin.email,
+            phone_number=cfg.admin.phone or None,
+            email_verified=True,
+            password_hash=hash_password(cfg.admin.password),
+        )
+        session.add(user)
+        session.flush()
+    else:
+        # Keep the configured password in sync so operator resets work.
+        user.password_hash = hash_password(cfg.admin.password)
+    # Ensure a fallback organization exists for routes that still expect one.
+    org = (
+        session.query(Organization)
+        .join(OrganizationMember)
+        .filter(OrganizationMember.user_id == user.id)
+        .first()
+    )
+    if org is None:
+        org = Organization(
+            name=cfg.tenant.default_org_name or "Personal",
+            slug=f"admin-{uuid.uuid4().hex[:8]}",
+            owner_id=user.id,
+        )
+        session.add(org)
+        session.flush()
+        session.add(OrganizationMember(user_id=user.id, organization_id=org.id, role="owner"))
+    session.commit()
+    return user
+
+
+def _otp_expire() -> datetime:
+    return _utcnow() + timedelta(minutes=get_saas_config().otp_expire_minutes)
+
+
+def send_login_otp(session: Session, email: str, password: str) -> str:
+    """Verify the admin password and email a one-time login code.
+
+    Returns the code for local/test use; production callers should only use it
+    to display the dev-drop path.  The code is never logged by default.
+    """
+    user = session.query(User).filter(User.email == email).first()
+    if user is None or user.password_hash is None:
+        raise AuthError("Invalid email or password")
+    if not verify_password(password, user.password_hash):
+        raise AuthError("Invalid email or password")
+    # Invalidate old codes.
+    session.query(EmailLoginCode).filter(
+        EmailLoginCode.user_id == user.id, EmailLoginCode.used == False
+    ).update({"used": True})
+    code = _generate_code()
+    session.add(
+        EmailLoginCode(
+            user_id=user.id,
+            code_hash=hash_password(code),
+            expires_at=_otp_expire(),
+        )
+    )
+    session.commit()
+    send_login_code_email(email, code)
+    return code
+
+
+def verify_login_otp(session: Session, email: str, code: str) -> AuthResult:
+    """Verify a login OTP and issue tokens for the single admin user."""
+    user = session.query(User).filter(User.email == email).first()
+    if user is None:
+        raise AuthError("Invalid email or code")
+    record = (
+        session.query(EmailLoginCode)
+        .filter(
+            EmailLoginCode.user_id == user.id,
+            EmailLoginCode.used == False,
+            EmailLoginCode.expires_at > _utcnow(),
+        )
+        .order_by(EmailLoginCode.expires_at.desc())
+        .first()
+    )
+    if record is None or not verify_password(code, record.code_hash):
+        raise AuthError("Invalid or expired code")
+    record.used = True
+    session.commit()
+
+    org = (
+        session.query(Organization)
+        .join(OrganizationMember)
+        .filter(OrganizationMember.user_id == user.id)
+        .order_by(Organization.created_at.asc())
+        .first()
+    )
+    access, refresh = _issue_tokens(session, user, org)
+    return AuthResult(user=user, access_token=access, refresh_token=refresh, organization=org)

@@ -16,6 +16,21 @@ from aimos.runtime.golive import GATES, GoLiveLadder
 from aimos.runtime.serve import _build_live_router, _maybe_arb
 
 
+class FakeSettingsStore:
+    """Substitute for the encrypted settings store in tests."""
+
+    _creds: dict[str, dict[str, Any]] = {}
+
+    def __init__(self, user_id: str = "default") -> None:
+        self.user_id = user_id
+
+    def get_exchanges(self) -> dict[str, dict[str, Any]]:
+        return {v: {"has_key": bool(c.get("apiKey"))} for v, c in self._creds.items()}
+
+    def get_exchange_credentials(self, venue: str) -> dict[str, Any] | None:
+        return self._creds.get(venue)
+
+
 class FakeLiveBroker:
     """Records placed plans and returns deterministic fills."""
 
@@ -52,6 +67,11 @@ def _complete_ladder(tmp_path: Path) -> GoLiveLadder:
     return lad
 
 
+def _patch_store(monkeypatch, creds: dict[str, dict[str, Any]]) -> None:
+    FakeSettingsStore._creds = creds
+    monkeypatch.setattr("aimos.runtime.serve.SettingsStore", FakeSettingsStore)
+
+
 def test_build_live_router_none_by_default(tmp_path):
     params = load_params()
     lad = _complete_ladder(tmp_path)
@@ -60,19 +80,20 @@ def test_build_live_router_none_by_default(tmp_path):
 
 
 def test_build_live_router_none_when_ladder_incomplete(tmp_path, monkeypatch):
-    monkeypatch.setattr("aimos.runtime.serve.LiveBroker", FakeLiveBroker)
+    _patch_store(monkeypatch, {
+        "binance": {"apiKey": "x"},
+        "kraken": {"apiKey": "y"},
+    })
     params = load_params()
     params.features.multi_venue_live = True
     params.mode = "live"
     params.mandate.enabled = True
-    secrets_path = tmp_path / "secrets.yaml"
-    secrets_path.write_text(yaml.safe_dump({"venues": {"binance": {"apiKey": "x"}, "kraken": {"apiKey": "y"}}}), encoding="utf-8")
-    params.secrets["file"] = str(secrets_path)
     incomplete = GoLiveLadder(state_path=str(tmp_path / "gl.json"))
     assert _build_live_router(params, incomplete, ["binance", "kraken"]) is None
 
 
-def test_build_live_router_none_without_credentials(tmp_path):
+def test_build_live_router_none_without_credentials(tmp_path, monkeypatch):
+    _patch_store(monkeypatch, {})
     params = load_params()
     params.features.multi_venue_live = True
     params.mode = "live"
@@ -82,19 +103,15 @@ def test_build_live_router_none_without_credentials(tmp_path):
 
 
 def test_build_live_router_creates_brokers_when_gates_open(tmp_path, monkeypatch):
+    _patch_store(monkeypatch, {
+        "binance": {"apiKey": "a", "secret": "b"},
+        "kraken": {"apiKey": "c", "secret": "d"},
+    })
     monkeypatch.setattr("aimos.runtime.serve.LiveBroker", FakeLiveBroker)
     params = load_params()
     params.features.multi_venue_live = True
     params.mode = "live"
     params.mandate.enabled = True
-    secrets_path = tmp_path / "secrets.yaml"
-    secrets_path.write_text(yaml.safe_dump({
-        "venues": {
-            "binance": {"apiKey": "a", "secret": "b"},
-            "kraken": {"apiKey": "c", "secret": "d"},
-        }
-    }), encoding="utf-8")
-    params.secrets["file"] = str(secrets_path)
     lad = _complete_ladder(tmp_path)
     router = _build_live_router(params, lad, ["binance", "kraken"])
     assert router is not None
@@ -103,16 +120,12 @@ def test_build_live_router_creates_brokers_when_gates_open(tmp_path, monkeypatch
 
 
 def test_build_live_router_skips_venues_without_keys(tmp_path, monkeypatch):
+    _patch_store(monkeypatch, {"binance": {"apiKey": "a"}})
     monkeypatch.setattr("aimos.runtime.serve.LiveBroker", FakeLiveBroker)
     params = load_params()
     params.features.multi_venue_live = True
     params.mode = "live"
     params.mandate.enabled = True
-    secrets_path = tmp_path / "secrets.yaml"
-    secrets_path.write_text(yaml.safe_dump({
-        "venues": {"binance": {"apiKey": "a"}}  # only one venue
-    }), encoding="utf-8")
-    params.secrets["file"] = str(secrets_path)
     lad = _complete_ladder(tmp_path)
     assert _build_live_router(params, lad, ["binance", "kraken"]) is None
 
