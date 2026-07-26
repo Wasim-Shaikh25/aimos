@@ -38,6 +38,8 @@ from aimos.data.live_source import (
 from aimos.execution.broker.paper import PaperBroker
 from aimos.execution.position_sizer import SizingInputs
 from aimos.journal.journal import Journal
+from aimos.runtime.state_store import RuntimeStateStore, build_snapshot
+from aimos.saas.journal_tenant import tenant_journal_path
 from aimos.telegram.sink import TelegramSink
 from aimos.execution.risk_manager import RiskState
 from aimos.runtime.pipeline import PipelineOrchestrator
@@ -56,8 +58,16 @@ def build_app(offline: Optional[bool] = None):
 
     Path("state").mkdir(exist_ok=True)
     clock = LiveClock()
-    # persistent journal when paper.journal_path is set (deployments), else in-memory
-    jpath = paper.get("journal_path") or ":memory:"
+    org_id = os.environ.get("AIMOS_RUNTIME_ORG_ID", "local")
+    # per-tenant journal path when SaaS is enabled; single-user journal_path otherwise
+    jpath = tenant_journal_path(org_id, params)
+    # Keep runtime state beside the journal so persistent deployments keep both
+    # together. An in-memory journal skips state persistence (tests/dev).
+    state_dir: Optional[Path] = None
+    if jpath != ":memory:":
+        state_dir = Path(jpath).parent / f"tenant_{org_id}_state"
+    state_store = RuntimeStateStore(org_id, state_dir=state_dir)
+    saved_state = state_store.load()
     orch = PipelineOrchestrator(params, clock=clock, journal=Journal(jpath))
     broker = PaperBroker(float(paper["starting_equity_usdt"]), cost_mod.from_config(costs_cfg),
                          venue=paper["data_exchange"])
@@ -102,6 +112,18 @@ def build_app(offline: Optional[bool] = None):
         "features": features,  # mutable — the loop reads this so runtime toggles apply
         "monitor": {},         # latest self-test/coverage report (feature monitor agent)
     }
+
+    # Restore previous broker/sim/curve state if a snapshot exists.
+    # ``features`` is intentionally not restored from the snapshot: it comes from
+    # the current config so explicit env overrides (e.g. tests enabling arb) win.
+    if saved_state:
+        try:
+            broker.load_state(saved_state.get("broker", {}))
+            sim.load_state(saved_state.get("sim", {}))
+            if saved_state.get("equity"):
+                holder["equity"] = saved_state["equity"]
+        except Exception:  # noqa: BLE001 — don't fail to boot on a stale snapshot
+            log.exception("state_restore_failed")
 
     def _rebuild_orch() -> None:  # after a runtime feature toggle (§ features.py)
         from aimos.execution.decide import ExecutionLayer
@@ -212,6 +234,11 @@ def build_app(offline: Optional[bool] = None):
                 holder["updated"] = clock.now().isoformat()
                 holder["tick"] += 1
                 heartbeat.beat()
+                try:
+                    await asyncio.to_thread(state_store.save,
+                                            build_snapshot(holder, broker, sim, ladder))
+                except Exception:  # noqa: BLE001 — persistence must not kill the loop
+                    log.exception("state_save_failed")
                 if sink and status_every > 0 and holder["tick"] % status_every == 0:
                     n = orch.journal.decision_count()
                     sink.send(f"📊 AIMOS status: {holder['tick']} ticks, {n} decisions, "

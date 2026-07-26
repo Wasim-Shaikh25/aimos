@@ -225,6 +225,18 @@ registration can fall back to email OTP in a future update.
 The dashboard detects SaaS mode via `/api/v2/status`; when SaaS is off it falls
 back to the original single-user experience.
 
+### Per-tenant runtime state
+
+SaaS deployments set `AIMOS_RUNTIME_ORG_ID=<org-id>` on the trading process. The
+loop uses that org for its journal (`state/journals/<org-id>.sqlite`) and
+persists broker state, multi-venue balances, positions, equity curve, go-live
+ladder, and feature flags to the tenant DB (`organization_states` table).
+
+Single-user deployments keep the journal at `paper.journal_path` and persist
+runtime state to a `tenant_local_state/state.json` file beside the journal. An
+in-memory journal (`:memory:`) disables state persistence, which is the default
+for tests and short-lived runs.
+
 ---
 
 ## 6. Account keys (live/account features only — paper needs NONE)

@@ -165,6 +165,8 @@ class OrganizationState(Base):
     equity: Mapped[list[float]] = mapped_column(JSON, default=list)
     balances: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     positions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    broker_state: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    sim_state: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     ladder: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     features: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)

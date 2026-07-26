@@ -223,16 +223,16 @@ saas = [
 ### Phase 2 — Multi-tenancy
 1. `[x]` Add `TenantContext` dataclass and dependency.
 2. `[~]` Create per-tenant config loader (`aimos/saas/config_tenant.py` — endpoints done, runtime loader pending).
-3. `[ ]` Create per-tenant journal factory (`aimos/saas/journal_tenant.py`).
-4. `[ ]` Create per-tenant state persistence (`aimos/saas/state_tenant.py`).
-5. `[ ]` Update `PipelineOrchestrator` and `build_app` to accept tenant context.
+3. `[x]` Create per-tenant journal factory (`aimos/saas/journal_tenant.py`).
+4. `[x]` Create per-tenant state persistence (`aimos/saas/state_tenant.py`).
+5. `[~]` Update `PipelineOrchestrator` and `build_app` to accept tenant context (`serve.py` loads org and persists per-org; loader integration pending).
 6. `[x]` Add `/api/v2/organizations/*` and `/api/v2/config` endpoints.
 7. `[ ]` Enforce org scoping on all trading endpoints.
 8. `[~]` Dashboard: org switcher, settings, invite flow (switcher + members endpoints done).
 
 ### Phase 3 — Finish v2.0 runtime
 1. Streaming layer: `aimos/data/streaming.py` + exchange websocket feeds.
-2. Runtime persistence: save/restore equity, balances, positions, features, ladder.
+2. `[x]` Runtime persistence: save/restore equity, balances, positions, features, ladder (`aimos/runtime/state_store.py`).
 3. Dashboard charting: `lightweight-charts` and evidence tables.
 4. ML pipeline: `scripts/train_from_history` end-to-end, model registry, promotion/demotion.
 5. Vendor vendoring: fill `vendor/` and `vendor/VENDOR.md`.
@@ -270,8 +270,8 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 
 - [x] `TenantContext` and dependency
 - [~] Per-tenant config loader (`aimos/saas/config_tenant.py` — table + endpoints done, runtime integration pending)
-- [ ] Per-tenant journal factory (`aimos/saas/journal_tenant.py`)
-- [ ] Per-tenant state persistence (`aimos/saas/state_tenant.py`)
+- [x] Per-tenant journal factory (`aimos/saas/journal_tenant.py`)
+- [x] Per-tenant state persistence (`aimos/saas/state_tenant.py`)
 - [x] `/api/v2/organizations` and `/api/v2/config` endpoints
 - [ ] Org scoping middleware for trading endpoints
 - [ ] Update `PipelineOrchestrator`/`build_app` to use tenant context
@@ -281,7 +281,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 ### Phase 3 — Finish v2.0 runtime
 
 - [ ] Streaming layer: websocket public top-of-book/trades
-- [ ] Runtime state persistence (equity, balances, positions, features, ladder)
+- [x] Runtime state persistence (equity, balances, positions, features, ladder)
 - [ ] Rich dashboard: candlestick/equity charts, evidence tables, anatomy flow
 - [ ] ML training pipeline end-to-end (`scripts/train_from_history`)
 - [ ] Model promotion/demotion ladder integration

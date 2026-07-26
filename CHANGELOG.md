@@ -19,6 +19,15 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   organization switcher, per-tenant `X-Organization-Id` header, and an
   `/api/v2/status` probe so the dashboard falls back to local mode when SaaS is
   disabled. `npm run build` is green.
+- **SaaS v2.0 Phase 2 runtime state + per-tenant journal scaffolding**:
+  - `aimos/runtime/state_store.py` persists equity curve, broker state, multi-venue
+    balances, positions, go-live ladder, and feature flags across restarts. Saves
+    beside the journal for isolated deployments; uses the tenant DB when SaaS is on.
+  - `aimos/saas/journal_tenant.py` routes each organization to its own journal.
+  - `aimos/saas/state_tenant.py` persists per-tenant runtime state in the auth DB.
+  - `PaperBroker` and `MultiVenueSim` gain `state_dict()` / `load_state()` so the
+    paper loop can resume after a restart.
+  - `runtime/serve.py` loads state at boot and snapshots it every tick.
 - **SaaS v2.0 requirements and task tracker** (`specs/AIMOS_SaaS_Requirements_and_Task_Tracker.md`):
   roadmap for finishing the remaining runtime pieces (streaming, persistence, dashboard
   charting, ML pipeline, vendor vendoring, 12-month dataset, live multi-venue wiring)

@@ -93,6 +93,28 @@ class MultiVenueSim:
     def total_usdt(self) -> float:
         return sum(b.get("USDT", 0.0) for b in self.balances.values())
 
+    def state_dict(self) -> dict:
+        """Serialize multi-venue balance sheet and arb trade ledger."""
+        return {
+            "venues": self.venues,
+            "start_usdt_total": self.start_usdt_total,
+            "taker_bps": self.taker_bps,
+            "balances": self.balances,
+            "trades": self.trades,
+            "realized_arb": self.realized_arb,
+            "n": self._n,
+        }
+
+    def load_state(self, state: dict) -> None:
+        """Restore multi-venue balance sheet and arb ledger."""
+        self.venues = list(state.get("venues", self.venues))
+        self.start_usdt_total = float(state.get("start_usdt_total", self.start_usdt_total))
+        self.taker_bps = float(state.get("taker_bps", self.taker_bps))
+        self.balances = {k: dict(v) for k, v in state.get("balances", self.balances).items()}
+        self.trades = list(state.get("trades", self.trades))
+        self.realized_arb = float(state.get("realized_arb", self.realized_arb))
+        self._n = int(state.get("n", self._n))
+
 
 def performance(directional_trades: list, arb_trades: list, equity_curve: list) -> dict:
     """Realized PnL, win rate, and per-strategy / per-venue breakdowns (§5.6)."""

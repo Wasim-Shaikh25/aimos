@@ -73,6 +73,67 @@ class PaperBroker:
     def cash(self) -> float:
         return self._cash
 
+    def state_dict(self) -> dict:
+        """Serialize open positions, cash, pending orders, and fill history."""
+        return {
+            "cash": self._cash,
+            "realized": self._realized,
+            "positions": [p.model_dump(mode="json") for p in self._positions.values()],
+            "pending": [p.plan.model_dump(mode="json") for p in self._pending],
+            "fills": [
+                {
+                    "decision_id": f.decision_id, "symbol": f.symbol,
+                    "side": f.side.value if isinstance(f.side, Action) else f.side,
+                    "qty": f.qty, "price": f.price, "fee_quote": f.fee_quote,
+                    "kind": f.kind, "venue": f.venue,
+                    "ts": f.ts.isoformat() if f.ts else None,
+                    "pnl_quote": f.pnl_quote, "plugin": f.plugin,
+                }
+                for f in self.fills
+            ],
+            "closed_trades_r": self.closed_trades_r,
+            "last_mark": self._last_mark,
+        }
+
+    def load_state(self, state: dict) -> None:
+        """Restore broker state from a snapshot."""
+        import json as _json
+        from aimos.core.schemas import TradePlan
+
+        self._cash = float(state.get("cash", self._cash))
+        self._realized = float(state.get("realized", self._realized))
+        self._positions = {}
+        for p in state.get("positions", []):
+            pos = Position.model_validate(p)
+            self._positions[pos.symbol] = pos
+        self._pending = []
+        for raw in state.get("pending", []):
+            plan = TradePlan.model_validate(raw)
+            is_limit = plan.plugin in {"Pullback", "MeanReversion"}
+            self._pending.append(_Pending(plan, is_limit))
+        self.fills = []
+        for raw in state.get("fills", []):
+            side_raw = raw.get("side")
+            side = Action(side_raw) if isinstance(side_raw, str) else side_raw
+            ts = raw.get("ts")
+            if isinstance(ts, str):
+                ts = datetime.fromisoformat(ts)
+            self.fills.append(Fill(
+                decision_id=raw["decision_id"],
+                symbol=raw["symbol"],
+                side=side,
+                qty=raw["qty"],
+                price=raw["price"],
+                fee_quote=raw["fee_quote"],
+                kind=raw["kind"],
+                venue=raw.get("venue", self.venue),
+                ts=ts,
+                pnl_quote=raw.get("pnl_quote", 0.0),
+                plugin=raw.get("plugin", ""),
+            ))
+        self.closed_trades_r = [float(x) for x in state.get("closed_trades_r", [])]
+        self._last_mark = {k: float(v) for k, v in state.get("last_mark", {}).items()}
+
     def cancel_all(self, symbol: str) -> None:
         self._pending = [p for p in self._pending if p.plan.symbol != symbol]
 
