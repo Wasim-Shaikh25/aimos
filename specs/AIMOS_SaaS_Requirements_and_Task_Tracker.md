@@ -273,8 +273,8 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 - [x] Per-tenant journal factory (`aimos/saas/journal_tenant.py`)
 - [x] Per-tenant state persistence (`aimos/saas/state_tenant.py`)
 - [x] `/api/v2/organizations` and `/api/v2/config` endpoints
-- [ ] Org scoping middleware for trading endpoints
-- [ ] Update `PipelineOrchestrator`/`build_app` to use tenant context
+- [x] Org scoping middleware for trading endpoints (`saas_tenant_scope` in `aimos/api/server.py`)
+- [x] Update `PipelineOrchestrator`/`build_app` to use tenant context (`load_params_for_org`, `tenant_journal_path`, `RuntimeStateStore`)
 - [~] Dashboard org switcher, settings, invite/members pages (switcher + invite/members endpoints done)
 - [x] Tests for auth and tenancy (`tests/test_saas.py`)
 - [x] Tests for runtime state persistence (`tests/test_runtime_state.py`)
@@ -292,7 +292,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 - [ ] Vendor vendoring at pinned SHAs (`vendor/VENDOR.md`)
 - [x] 12-month historical dataset downloader (`scripts/download_history.py`)
 - [ ] Live multi-venue executor wiring behind go-live gate
-- [x] Tests for streaming, persistence, ML, dataset, config overlay (`tests/test_streaming.py`, `test_runtime_state.py`, `test_model_registry.py`, `test_download_history.py`, `test_config_tenant.py`)
+- [x] Tests for streaming, persistence, ML, dataset, config overlay, org scoping (`tests/test_streaming.py`, `test_runtime_state.py`, `test_model_registry.py`, `test_download_history.py`, `test_config_tenant.py`, `test_saas.py`)
 
 ### Phase 4 — Deployment & docs
 

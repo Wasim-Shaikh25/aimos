@@ -158,6 +158,32 @@ class TestOrgConfig:
         assert resp.json()["paper.max_symbols"] == 10
 
 
+class TestOrgScoping:
+    def test_trading_endpoints_require_token_and_org(self, client, registered_user, monkeypatch):
+        token = registered_user["access_token"]
+        org_id = registered_user["organization_id"]
+        monkeypatch.setenv("AIMOS_RUNTIME_ORG_ID", org_id)
+
+        # No auth -> 401
+        resp = client.get("/api/equity")
+        assert resp.status_code == 401
+
+        # Wrong org -> 403
+        resp = client.get("/api/equity", headers={
+            "Authorization": f"Bearer {token}",
+            "X-Organization-Id": "wrong-org",
+        })
+        assert resp.status_code == 403
+
+        # Correct token + org -> 200
+        resp = client.get("/api/equity", headers={
+            "Authorization": f"Bearer {token}",
+            "X-Organization-Id": org_id,
+        })
+        assert resp.status_code == 200
+        assert "equity" in resp.json()
+
+
 class TestPhoneAuth:
     def test_phone_send_and_verify(self, client):
         resp = client.post("/auth/phone/send", json={"phone_number": "+15551234567"})

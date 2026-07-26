@@ -9,14 +9,17 @@ runtime. Control actions are journaled with source="ui".
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from aimos.journal.journal import Journal
 from aimos.saas.router import auth_router, tenant_router
+from aimos.saas.security import AuthError, decode_token
 from aimos.saas.settings import get_saas_config
 
 
@@ -81,8 +84,44 @@ def _decisions(journal: Journal, limit: int) -> list[dict]:
              "timestamp": r["timestamp"], "record": json.loads(r["payload"])} for r in rows]
 
 
+def _runtime_org() -> str:
+    return os.environ.get("AIMOS_RUNTIME_ORG_ID", "local")
+
+
+def _extract_bearer(request: Request) -> str | None:
+    auth = request.headers.get("Authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth.split(" ", 1)[1]
+    return request.cookies.get("access_token")
+
+
 def create_app(state: AppState) -> FastAPI:
     app = FastAPI(title="AIMOS API")
+
+    @app.middleware("http")
+    async def saas_tenant_scope(request: Request, call_next):
+        """In SaaS mode, trading API requests (``/api/*`` outside ``/api/v2/*``)
+        must carry a valid access token whose ``org`` claim matches the
+        ``X-Organization-Id`` header and this runtime's ``AIMOS_RUNTIME_ORG_ID``.
+        Auth endpoints and the public status probe are exempt; ``/api/v2/*``
+        validates its own tenant context."""
+        if get_saas_config().enabled:
+            path = request.url.path
+            public = path == "/api/v2/status" or path.startswith("/auth/") or path.startswith("/api/v2/")
+            if not public:
+                token = _extract_bearer(request)
+                if not token:
+                    return JSONResponse({"detail": "Authorization required"}, status_code=401)
+                try:
+                    payload = decode_token(token, token_type="access")
+                except AuthError as exc:
+                    return JSONResponse({"detail": str(exc)}, status_code=401)
+                org_id = request.headers.get("X-Organization-Id") or request.cookies.get("active_org")
+                if not org_id:
+                    return JSONResponse({"detail": "X-Organization-Id required"}, status_code=403)
+                if payload.get("org") != org_id or org_id != _runtime_org():
+                    return JSONResponse({"detail": "organization not served by this runtime"}, status_code=403)
+        return await call_next(request)
 
     @app.get("/api/v2/status")
     def status():
