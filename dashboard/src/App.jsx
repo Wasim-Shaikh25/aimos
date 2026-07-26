@@ -24,6 +24,7 @@ import Controls from './screens/Controls.jsx'
 import GoLive from './screens/GoLive.jsx'
 import Monitor from './screens/Monitor.jsx'
 import Assistant from './screens/Assistant.jsx'
+import Settings from './screens/Settings.jsx'
 
 const NAV = [
   ['/', 'Markets'], ['/prices', 'Prices'], ['/anatomy', 'Decision Anatomy'], ['/mindmap', 'Mind-map'],
@@ -32,6 +33,7 @@ const NAV = [
   ['/connections', 'Connections'], ['/controls', 'Controls'], ['/golive', 'Go-Live'],
   ['/monitor', 'Monitor'], ['/assistant', 'AI Analyst'], ['/decisions', 'Decisions'],
   ['/performance', 'Performance'], ['/config', 'Config'], ['/agents', 'Agents'],
+  ['/settings', 'Settings'],
 ]
 
 function OrgSwitcher() {
@@ -99,6 +101,7 @@ function Dashboard() {
         <Route path="/performance" element={<Performance />} />
         <Route path="/config" element={<ConfigViewer />} />
         <Route path="/agents" element={<Agents />} />
+        <Route path="/settings" element={<Settings />} />
       </Routes>
     </>
   )

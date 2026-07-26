@@ -275,8 +275,8 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 - [x] `/api/v2/organizations` and `/api/v2/config` endpoints
 - [x] Org scoping middleware for trading endpoints (`saas_tenant_scope` in `aimos/api/server.py`)
 - [x] Update `PipelineOrchestrator`/`build_app` to use tenant context (`load_params_for_org`, `tenant_journal_path`, `RuntimeStateStore`)
-- [~] Dashboard org switcher, settings, invite/members pages (switcher + invite/members endpoints done)
-- [x] Tests for auth and tenancy (`tests/test_saas.py`)
+- [x] Dashboard org switcher, settings, invite/members pages (Settings screen + invite/members endpoints + tests)
+- [x] Tests for auth, tenancy, and members/invite (`tests/test_saas.py`)
 - [x] Tests for runtime state persistence (`tests/test_runtime_state.py`)
 - [x] Tests for ML model registry (`tests/test_model_registry.py`)
 - [x] Tests for streaming normalization (`tests/test_streaming.py`)

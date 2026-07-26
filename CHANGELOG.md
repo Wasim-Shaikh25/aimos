@@ -34,6 +34,11 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 - **Dashboard auth screens completed** (`dashboard/src/auth.jsx`):
   login, registration, email verification, forgot-password/reset, and phone-OTP
   sign-in are now wired to the SaaS auth endpoints.
+- **Dashboard settings / organization screen** (`dashboard/src/screens/Settings.jsx`):
+  lists organization members, sends invites by email/role, and displays per-tenant
+  config overrides. Routes and API helpers added to `App.jsx` and `api.js`.
+- **Tenant members + invite tests** (`tests/test_saas.py`):
+  covers `GET /api/v2/organizations/{id}/members` and `POST .../invite`.
 - **Test coverage for v2.0 modules`:
   - `tests/test_runtime_state.py` — roundtrip save/load of equity, broker, and
     multi-venue balances.

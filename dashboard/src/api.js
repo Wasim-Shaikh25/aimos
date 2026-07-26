@@ -73,6 +73,10 @@ export const api = {
   createOrganization: (name) => j('/api/v2/organizations?name=' + encodeURIComponent(name), { method: 'POST' }),
   orgConfig: () => j('/api/v2/config'),
   setOrgConfig: (overrides) => j('/api/v2/config', { method: 'PATCH', body: JSON.stringify(overrides) }),
+  members: (orgId) => j(`/api/v2/organizations/${orgId}/members`),
+  inviteMember: (orgId, email, role = 'member') => j(`/api/v2/organizations/${orgId}/invite`, {
+    method: 'POST', body: JSON.stringify({ email, role }),
+  }),
 
   // Runtime
   decisions: (n = 50) => j(`/api/decisions?limit=${n}`),

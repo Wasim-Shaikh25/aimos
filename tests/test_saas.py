@@ -158,6 +158,43 @@ class TestOrgConfig:
         assert resp.json()["paper.max_symbols"] == 10
 
 
+class TestMembers:
+    def test_list_and_invite_members(self, client, registered_user):
+        token = registered_user["access_token"]
+        org_id = registered_user["organization_id"]
+
+        # register a second user
+        client.post("/auth/register", json={
+            "email": "invitee@example.com",
+            "password": "Password123!",
+        })
+
+        resp = client.get(f"/api/v2/organizations/{org_id}/members", headers={
+            "Authorization": f"Bearer {token}",
+            "X-Organization-Id": org_id,
+        })
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+
+        resp = client.post(f"/api/v2/organizations/{org_id}/invite", json={
+            "email": "invitee@example.com",
+            "role": "admin",
+        }, headers={
+            "Authorization": f"Bearer {token}",
+            "X-Organization-Id": org_id,
+        })
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+
+        resp = client.get(f"/api/v2/organizations/{org_id}/members", headers={
+            "Authorization": f"Bearer {token}",
+            "X-Organization-Id": org_id,
+        })
+        assert resp.status_code == 200
+        members = resp.json()
+        assert any(m["email"] == "invitee@example.com" and m["role"] == "admin" for m in members)
+
+
 class TestOrgScoping:
     def test_trading_endpoints_require_token_and_org(self, client, registered_user, monkeypatch):
         token = registered_user["access_token"]
