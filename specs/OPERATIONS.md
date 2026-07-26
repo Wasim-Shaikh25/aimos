@@ -55,7 +55,7 @@ nesting). Key files: `default.yaml`, `observation.yaml`, `universe.yaml`,
 | `features.cross_exchange_enabled` | `false` | cross-venue price monitoring + arb (also enable the plugin) |
 | `features.scalp_enabled` | `true` | §17 minute-scale scalping |
 | `features.llm_news_sensor` | `false` | §19 LLM news sensor (needs `ANTHROPIC_API_KEY`) |
-| `features.saas_enabled` | `false` | SaaS auth, orgs, and tenant-aware UI (off keeps single-user mode) |
+| `features.saas_enabled` | `false` | single-admin login + encrypted settings UI (off keeps the original local dashboard) |
 | `paper.use_universe` | `true` | analyze the discovered/seeded universe (top-N by volume) |
 | `paper.max_symbols` | `40` | top-N assets analyzed per tick |
 | `paper.cross_venues` | `[binance, kraken]` | venues sampled for cross-exchange work |
@@ -77,10 +77,11 @@ restart. Live/funded flags are LOCKED there.
 | Decisions, outcomes, evidence, trades (hash-chained) | **SQLite** (the Journal) | `paper.journal_path` → `state/aimos.sqlite` |
 | Equity / decisions / prices / trades time-series | **TimescaleDB** (optional) | `AIMOS_TIMESCALE_DSN` |
 | Go-live progress | JSON | `state/go_live.json` |
-| Auth / tenant metadata | SQLite/Postgres | `config/saas.yaml` `database_url` or `AIMOS__SAAS__DATABASE_URL` |
-| Per-tenant journals | SQLite | `state/journals/<org_id>.sqlite` (Phase 2) |
+| Auth / settings metadata | SQLite/Postgres | `config/saas.yaml` `database_url` or `AIMOS__SAAS__DATABASE_URL` |
+| Runtime config overrides | SQLite/Postgres | `user_settings` table, edited via the Settings UI |
+| Per-user journals | SQLite | `state/journals/<org_id>.sqlite` (legacy path, single admin) |
 | Recorded market candles | Parquet | data root |
-| API secrets | **not stored** | read from `AIMOS_SECRETS_FILE` / env |
+| API secrets | **encrypted** | `user_settings.secrets` JSON column, managed through `/api/v2/settings/exchange` |
 
 The **SQLite journal is the tamper-evident system of record** (SHA-256 chain;
 verify with the journal verifier). **TimescaleDB** is optional analytics — enable
@@ -181,7 +182,7 @@ See `specs/ASSISTANT.md` for the grounding design and guardrails.
 
 ---
 
-## 5. SaaS authentication and multi-tenancy (optional)
+## 5. Single-admin authentication and settings (optional)
 
 Enable with `features.saas_enabled: true` (or `AIMOS__FEATURES__SAAS_ENABLED=true`)
 and install the auth dependencies:
@@ -207,14 +208,10 @@ free/open-source libraries.
 
 | Service | Config / env | What for |
 |---|---|---|
-| SMTP | `config/saas.yaml` `smtp.*` or `AIMOS__SAAS__SMTP__*` | email verification and password reset |
-| Google OAuth | `oauth.google.*` or `AIMOS__SAAS__OAUTH__GOOGLE__*` | Sign in with Google |
-| Apple Sign In | `oauth.apple.*` or `AIMOS__SAAS__OAUTH__APPLE__*` | Sign in with Apple |
-| SMS (optional) | `sms.*` or `AIMOS__SAAS__SMS__*` | phone OTP via Twilio or Vonage |
+| SMTP | `config/saas.yaml` `smtp.*` or `AIMOS__SAAS__SMTP__*` | send login OTP to the admin email |
+| Admin account | `config/saas.yaml` `admin.*` or `AIMOS__SAAS__ADMIN__*` | single user seeded at startup |
 
-Phone OTP defaults to **console logging** (code written to `state/smsdrop/`); real
-SMS requires operator credentials. When no SMS gateway is available, phone
-registration can fall back to email OTP in a future update.
+If SMTP is not configured, the login code is written to `state/maildrop/login-<email>.txt` for local development. No paid third-party auth services are used.
 
 ### Endpoints
 
@@ -230,40 +227,38 @@ registration can fall back to email OTP in a future update.
 The dashboard detects SaaS mode via `/api/v2/status`; when SaaS is off it falls
 back to the original single-user experience.
 
-### Per-tenant runtime state
+### Runtime state
 
-SaaS deployments set `AIMOS_RUNTIME_ORG_ID=<org-id>` on the trading process. The
-loop uses that org for its journal (`state/journals/<org-id>.sqlite`) and
-persists broker state, multi-venue balances, positions, equity curve, go-live
-ladder, and feature flags to the tenant DB (`organization_states` table).
+With SaaS enabled, the loop uses `AIMOS_RUNTIME_ORG_ID=<org-id>` for its journal
+(`state/journals/<org-id>.sqlite`) and persists broker state, multi-venue
+balances, positions, equity curve, go-live ladder, and feature flags to the
+auth/settings DB. For single-user deployments the journal stays at
+`paper.journal_path` and local state is stored in `tenant_local_state/state.json`
+beside the journal.
 
-Single-user deployments keep the journal at `paper.journal_path` and persist
-runtime state to a `tenant_local_state/state.json` file beside the journal. An
-in-memory journal (`:memory:`) disables state persistence, which is the default
-for tests and short-lived runs.
+### API requests
 
-### Org-scoped API requests
-
-When SaaS is enabled, trading endpoints (`/api/*` outside `/api/v2/*`) require an
-`Authorization: Bearer <access_token>` header plus `X-Organization-Id: <org-id>`.
-The token's `org` claim and the header must both equal the runtime's
-`AIMOS_RUNTIME_ORG_ID`. The dashboard's `api.js` sends these automatically once
-a user is logged in and an organization is selected.
+When SaaS is enabled, `/api/v2/*` routes validate the JWT themselves. Trading
+endpoints (`/api/*` outside `/api/v2/*`) require an `Authorization: Bearer <token>`
+header plus `X-Organization-Id: <org-id>`. The token's `org` claim and the header
+must both equal the runtime's `AIMOS_RUNTIME_ORG_ID`. The dashboard's `api.js`
+sends these automatically after the admin logs in.
 
 ---
 
 ## 6. Account keys (live/account features only — paper needs NONE)
 
 Keys are used **only** for account access (balances, live orders), never for
-market-data analysis. Provide them via a secrets file (preferred) or env:
+market-data analysis. Add them through the **Settings** UI
+(`/api/v2/settings/exchange`); they are encrypted at rest with the Fernet key in
+`state/.settings_key` and are never logged, journaled, or shown in the UI. For
+local/headless runs they can still be provided via env:
 ```bash
-cp secrets.example.yaml /run/secrets/aimos.yaml   # fill in; withdrawals MUST be off
-export AIMOS_SECRETS_FILE=/run/secrets/aimos.yaml
-# or: AIMOS_KEY_BINANCE=... AIMOS_SECRET_BINANCE=...
+export AIMOS_KEY_BINANCE=... AIMOS_SECRET_BINANCE=...
 ```
 On startup the **read-only preflight** authenticates each key, fetches balance,
 verifies withdrawals are disabled, and reports on the **Connections** screen —
-**no orders are placed**. Secrets are never logged, journaled, or shown in the UI.
+**no orders are placed**.
 
 ---
 

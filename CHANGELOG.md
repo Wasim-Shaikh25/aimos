@@ -18,6 +18,14 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
     JWT access/refresh tokens.
   - Dashboard `auth.jsx` and `api.js` updated for the new flow.
 
+### Docs
+- Updated `README.md`, `specs/OPERATIONS.md`, `specs/DEPLOYMENT.md`,
+  `specs/STATUS.md`, `.env.example`, `.env.prod.example`, and
+  `specs/AIMOS_SaaS_Requirements_and_Task_Tracker.md` to describe the
+  single-admin auth model, email OTP 2FA, encrypted `SettingsStore`, and the
+  `/api/v2/settings` control plane. Removed references to the retired
+  multi-user/multi-tenant SaaS design.
+
 ### Added
 - **SaaS v2.0 Phase 1 auth foundation** (`aimos/saas/`): SQLAlchemy user/org models,
   bcrypt password hashing, JWT access/refresh tokens with rotation, email

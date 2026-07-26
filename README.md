@@ -43,9 +43,10 @@ follow **[specs/DEPLOYMENT.md](specs/DEPLOYMENT.md)** (and
 | TimescaleDB time-series | `pip install -e '.[timescale]'` + `AIMOS_TIMESCALE_DSN` |
 | Live balances / account | read-only, **withdrawal-disabled** keys (see `secrets.example.yaml`) |
 | **Live trading** | funded accounts + keys + the **go-live ladder** (§23.8) |
+| **Single-admin login / settings UI** | set `features.saas_enabled: true` and `saas.admin.*` in `config/saas.yaml` or `AIMOS__SAAS__ADMIN__*` env vars |
 
 Paper trading and price monitoring need **none** of these. Details in
-[specs/OPERATIONS.md](specs/OPERATIONS.md).
+[specs/OPERATIONS.md](specs/OPERATIONS.md) and [specs/AIMOS_SaaS_Requirements_and_Task_Tracker.md](specs/AIMOS_SaaS_Requirements_and_Task_Tracker.md).
 
 ## Where data is saved
 
@@ -53,7 +54,11 @@ Paper trading and price monitoring need **none** of these. Details in
   system of record.
 - **TimescaleDB** (optional) — equity/decisions/prices/trades time-series.
 - **Parquet** — recorded market candles. **JSON/text** — go-live progress, heartbeat.
-- **Secrets are never stored** — read from a file or env at runtime.
+- **Settings** — runtime config overrides and encrypted exchange API keys live in
+  `user_settings` (`state/auth.sqlite` by default) and are edited through the
+  Settings UI.
+- **Secrets are never logged or returned to the UI** — exchange keys can be
+  entered in the dashboard and are encrypted at rest.
 
 ## Safety model
 

@@ -33,10 +33,15 @@ automatically when `testnet=True` (the CLI default), so you don't set it by hand
 
 ## 2. Give the keys to AIMOS (never in git, never logged)
 
-Two ways — pick one. Keys are used **only** for the account/order path, never for
-market-data analysis (§2), and are never journaled or shown in the UI.
+Keys are used **only** for the account/order path, never for market-data analysis
+(§2), and are never journaled or returned to the UI.
 
-**A. Secrets file (recommended).** Copy the template and fill it in:
+**A. Settings UI (recommended when SaaS is enabled).** Log in as the admin,
+open **Settings → Exchange API keys**, add the Binance testnet key, and set
+`testnet: true`. The key is encrypted at rest with the Fernet key in
+`state/.settings_key`.
+
+**B. Secrets file.** Copy the template and fill it in:
 
 ```bash
 cp secrets.example.yaml secrets.testnet.yaml
@@ -50,7 +55,7 @@ export AIMOS_SECRETS_FILE=$PWD/secrets.testnet.yaml
 
 `secrets.*` is git-ignored (only `secrets.example.yaml` is tracked).
 
-**B. Environment variables.** Per-venue, no file:
+**C. Environment variables.** Per-venue, no file:
 
 ```bash
 export AIMOS_KEY_BINANCE="<testnet api key>"
@@ -154,7 +159,7 @@ capital-limited live pilot behind the full ladder.
 
 | Symptom | Fix |
 |---|---|
-| `no keys for binance` | `AIMOS_SECRETS_FILE` not exported, or the venue key isn't in it. |
+| `no keys for binance` | No Binance key in the encrypted Settings UI, `AIMOS_SECRETS_FILE`, or `AIMOS_KEY_BINANCE` env var. |
 | `mandate not enabled` | set `enabled: true` in `config/mandate.yaml` (step 3). |
 | `ccxt`/import errors | `pip install -e '.[data]'`. |
 | `withdrawals disabled … refused` | the key can withdraw — regenerate a trade-only key. |

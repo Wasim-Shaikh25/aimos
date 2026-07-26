@@ -133,17 +133,15 @@ docker compose up -d          # aimos (serve) + postgres(TimescaleDB) + watchdog
 - **Backups:** `state/aimos.sqlite` is the system of record — back it up (a nightly
   `cp`/`rsync` off-box is enough). Postgres is optional analytics.
 
-### SaaS-enabled deployment
+### SaaS-enabled deployment (single admin + settings UI)
 
-Enable user registration/multi-tenancy with the same Compose stack. The
-auth/tenant tables live in the existing Postgres container; no extra service is
-needed.
+Enable the login gate and the encrypted settings store with the same Compose
+stack. The auth/settings tables live in the existing Postgres container or
+`state/auth.sqlite` by default.
 
 ```bash
 cp .env.example .env
-# enable SaaS and run the one-time migration
-docker compose run --rm aimos python -m scripts.migrate_to_saas \
-  --admin-email admin@example.com --admin-password 'CHANGEME'
+# admin is seeded automatically from the env/config below on first start
 docker compose up -d
 ```
 
@@ -151,20 +149,21 @@ Then set in `.env`:
 
 ```
 AIMOS__FEATURES__SAAS_ENABLED=true
+AIMOS__SAAS__ADMIN__USER_ID=admin
+AIMOS__SAAS__ADMIN__EMAIL=admin@example.com
+AIMOS__SAAS__ADMIN__PASSWORD='CHANGEME'
 AIMOS__SAAS__JWT_SECRET=<32-byte-secret-or-generate-on-first-start>
 AIMOS__SAAS__SMTP__HOST=smtp.example.com
 AIMOS__SAAS__SMTP__PORT=587
 AIMOS__SAAS__SMTP__USERNAME=...
 AIMOS__SAAS__SMTP__PASSWORD=...
 AIMOS__SAAS__SMTP__FROM=AIMOS <noreply@example.com>
-# optional: Google / Apple OAuth credentials
-# AIMOS__SAAS__OAUTH__GOOGLE__CLIENT_ID=...
-# AIMOS__SAAS__OAUTH__APPLE__CLIENT_ID=...
 ```
 
-The migration creates a default tenant (`local`) and copies the existing journal
-into `state/journals/local.sqlite`. Each new organization gets its own journal
-and runtime state in the tenant DB.
+The admin password is hashed on first start. After login, the Settings UI is the
+single place to set paper/testnet/live mode, features, mandate limits, training
+parameters, and encrypted exchange API keys. There is no public registration,
+organization switching, or member invite flow.
 
 Cost floor: a paper deployment runs comfortably for **~$5/month**.
 

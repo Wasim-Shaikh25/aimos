@@ -62,7 +62,7 @@ training on historical data via paper replay (`scripts/train_from_history`).
 Markets · Prices (multi-venue matrix) · Decision Anatomy · Mind-map · Engines
 (per-venue) · Strategies · Models · Universe · Positions & Risk · Trade History ·
 Balances · Connections · Controls · Go-Live · Monitor · AI Analyst · Decisions ·
-Performance · Config · Agents.
+Performance · Config · Agents · Settings.
 
 ---
 
