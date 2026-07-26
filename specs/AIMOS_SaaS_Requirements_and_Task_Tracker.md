@@ -234,7 +234,7 @@ saas = [
 1. `[~]` Streaming layer: `aimos/data/streaming.py` + exchange websocket feeds (Binance source + recorder wired to serve loop; feed-into-pipeline pending).
 2. `[x]` Runtime persistence: save/restore equity, balances, positions, features, ladder (`aimos/runtime/state_store.py`).
 3. Dashboard charting: `lightweight-charts` and evidence tables.
-4. ML pipeline: `scripts/train_from_history` end-to-end, model registry, promotion/demotion.
+4. `[x]` ML pipeline: `scripts/train_from_history` end-to-end, model registry, promotion/demotion (`aimos/learning/registry.py`).
 5. Vendor vendoring: fill `vendor/` and `vendor/VENDOR.md`.
 6. `[x]` 12-month dataset downloader: `scripts/download_history.py`.
 7. Live multi-venue router wiring (still fail-closed).
@@ -283,8 +283,8 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` completed
 - [~] Streaming layer: websocket public top-of-book/trades (Binance source + recorder wired; feed-into-pipeline pending)
 - [x] Runtime state persistence (equity, balances, positions, features, ladder)
 - [ ] Rich dashboard: candlestick/equity charts, evidence tables, anatomy flow
-- [ ] ML training pipeline end-to-end (`scripts/train_from_history`)
-- [ ] Model promotion/demotion ladder integration
+- [x] ML training pipeline end-to-end (`scripts/train_from_history`)
+- [x] Model promotion/demotion ladder integration (`aimos/learning/registry.py`)
 - [ ] Vendor vendoring at pinned SHAs (`vendor/VENDOR.md`)
 - [x] 12-month historical dataset downloader (`scripts/download_history.py`)
 - [ ] Live multi-venue executor wiring behind go-live gate

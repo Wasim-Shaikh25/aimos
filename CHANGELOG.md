@@ -28,6 +28,11 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   - `PaperBroker` and `MultiVenueSim` gain `state_dict()` / `load_state()` so the
     paper loop can resume after a restart.
   - `runtime/serve.py` loads state at boot and snapshots it every tick.
+- **ML model registry + promotion/demotion hooks** (`aimos/learning/registry.py`):
+  `scripts/train_from_history` now records every run (AUC, Brier, status) to
+  `state/model_registry.json`, checks Brier degradation for auto-demotion, and
+  prints the exact config lines to enable the model in shadow only after the AUC
+  gate passes. The ML fusion weight stays fail-closed at 0 until a human raises it.
 - **12-month historical dataset downloader** (`scripts/download_history.py`):
   free public Binance Vision monthly klines → `CandleStore` parquet for ML
   training and regression tests. Supports multi-symbol and `1m/5m/15m/1h/4h/1d`.

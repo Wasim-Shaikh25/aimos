@@ -79,6 +79,7 @@ def main(argv=None) -> int:
 
     from aimos.core.config import load_params
     from aimos.learning.dataset import build_training_set
+    from aimos.learning.registry import ModelEntry, ModelRegistry
     from aimos.learning.train import PromotionChecklist, train_model
 
     params = load_params()
@@ -138,9 +139,27 @@ def main(argv=None) -> int:
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     model.save(out)
 
+    # Brier score on the full training set for the registry/drift baseline.
+    probs = model.predict_proba(X)
+    brier = float(np.mean((probs - ys) ** 2))
+    registry = ModelRegistry()
+    prev = registry.latest("promoted") or registry.latest()
+    registry.add(ModelEntry(
+        path=str(out), val_auc=model.val_auc, brier=brier,
+        n_features=model.n_features, n_samples=n,
+        shadow_weeks_held=0,
+        status="promoted" if passes_auc else "candidate",
+        note="AUC gate" + (" passed" if passes_auc else " failed"),
+    ))
+    if prev and passes_auc:
+        drift = registry.check_drift(brier, prev.brier, str(out))
+        if drift["degraded"]:
+            print("\n⚠️  Brier degraded vs previous model — model demoted to weight 0. Retrain.")
+
     print("\n" + "=" * 64)
     print(f"walk-forward val AUC: {model.val_auc:.4f}  (gate: > {auc_min})  "
           f"→ {'PASS' if passes_auc else 'FAIL'}")
+    print(f"Brier (train set): {brier:.4f}")
     print(f"model saved: {out}  (features: {model.n_features})")
     print("\nML is currently DISABLED (fusion weight 0 — shadow). To ENABLE it, set:")
     print(f"   AIMOS__INTELLIGENCE__ML_MODEL_PATH={out}")
