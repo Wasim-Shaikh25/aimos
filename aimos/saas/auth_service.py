@@ -49,6 +49,10 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# Max wrong OTP guesses before a live login code is burned (audit finding H3).
+MAX_OTP_ATTEMPTS = 5
+
+
 def _code_expire() -> datetime:
     cfg = get_saas_config()
     return _utcnow() + timedelta(minutes=cfg.verification_code_expire_minutes)
@@ -577,7 +581,11 @@ def send_login_otp(session: Session, email: str, password: str) -> str:
 
 
 def verify_login_otp(session: Session, email: str, code: str) -> AuthResult:
-    """Verify a login OTP and issue tokens for the single admin user."""
+    """Verify a login OTP and issue tokens for the single admin user.
+
+    A live code is burned after ``MAX_OTP_ATTEMPTS`` wrong guesses so the 6-digit
+    space cannot be brute-forced within a code window (audit finding H3).
+    """
     user = session.query(User).filter(User.email == email).first()
     if user is None:
         raise AuthError("Invalid email or code")
@@ -591,7 +599,15 @@ def verify_login_otp(session: Session, email: str, code: str) -> AuthResult:
         .order_by(EmailLoginCode.expires_at.desc())
         .first()
     )
-    if record is None or not verify_password(code, record.code_hash):
+    if record is None:
+        raise AuthError("Invalid or expired code")
+    if record.attempts >= MAX_OTP_ATTEMPTS:
+        record.used = True  # burn it: operator must request a fresh code
+        session.commit()
+        raise AuthError("Too many attempts — request a new code")
+    if not verify_password(code, record.code_hash):
+        record.attempts += 1
+        session.commit()
         raise AuthError("Invalid or expired code")
     record.used = True
     session.commit()

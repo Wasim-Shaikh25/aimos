@@ -7,7 +7,9 @@ instead of sent (safe default for local development).
 
 from __future__ import annotations
 
+import os
 import smtplib
+import stat
 import structlog
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -40,6 +42,12 @@ def _render_password_reset_email(code: str, base_url: str) -> tuple[str, str]:
         f"Enter it in the app or visit {base_url}/reset-password?code={code}\n\n"
         "If you did not request this, ignore this email."
     )
+    html = (
+        f"<html><body><p>You requested a password reset.</p>"
+        f"<p>Your reset code is: <strong>{code}</strong></p>"
+        f"<p><a href='{base_url}/reset-password?code={code}'>Reset password</a></p>"
+        f"<p>If you did not request this, ignore this email.</p></body></html>"
+    )
     return text, html
 
 
@@ -48,12 +56,9 @@ def send_email(to: str, subject: str, text_body: str, html_body: str | None = No
     cfg = get_saas_config()
     smtp = cfg.smtp
     if not smtp.host or not smtp.username:
-        log.warning(
-            "email_not_sent_no_smtp",
-            to=to,
-            subject=subject,
-            body=text_body[:200],
-        )
+        # Never log the body — verification/login/reset emails carry one-time
+        # codes, and "secrets are never logged" is a hard rule (audit finding H2).
+        log.warning("email_not_sent_no_smtp", to=to, subject=subject)
         return
 
     msg = MIMEText(html_body or text_body, "html" if html_body else "plain", "utf-8")
@@ -98,7 +103,19 @@ def send_login_code_email(to: str, code: str) -> None:
 
 
 def _dev_drop(prefix: str, code: str) -> None:
-    """Write the code to ``state/maildrop`` for local development."""
+    """Write the code to ``state/maildrop`` — DEV ONLY, opt-in.
+
+    Disabled by default: a one-time code written to a plaintext file defeats the
+    second factor (audit finding H2). Set ``AIMOS_DEV_MAILDROP=1`` for local
+    development with no SMTP.
+    """
+    if os.environ.get("AIMOS_DEV_MAILDROP", "").strip().lower() not in ("1", "true", "yes"):
+        return
     drop_dir = Path("state") / "maildrop"
     drop_dir.mkdir(parents=True, exist_ok=True)
-    (drop_dir / f"{prefix}.txt").write_text(code, encoding="utf-8")
+    path = drop_dir / f"{prefix}.txt"
+    path.write_text(code, encoding="utf-8")
+    try:
+        path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 0600 — owner only
+    except OSError:
+        pass

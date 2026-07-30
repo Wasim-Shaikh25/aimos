@@ -129,6 +129,9 @@ class EmailLoginCode(Base):
     code_hash: Mapped[str] = mapped_column(String(255))
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     used: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Failed-guess counter so a live code is burned after too many wrong tries
+    # (audit finding H3 — bounds OTP brute force).
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
 class PhoneVerificationCode(Base):

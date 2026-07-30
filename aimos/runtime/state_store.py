@@ -12,8 +12,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import structlog
+
+from aimos.runtime.atomic_io import atomic_write_json
 from aimos.saas.settings import get_saas_config
 from aimos.saas.state_tenant import load_state as _db_load, save_state as _db_save
+
+log = structlog.get_logger(__name__)
 
 
 def _now() -> str:
@@ -37,8 +42,14 @@ class RuntimeStateStore:
         if self.saas_enabled:
             return _db_load(self.org_id)
         if self.file_path.exists():
-            with self.file_path.open("r", encoding="utf-8") as f:
-                return json.load(f)
+            try:
+                with self.file_path.open("r", encoding="utf-8") as f:
+                    return json.load(f)
+            except (ValueError, OSError) as exc:
+                # A torn write from an unclean shutdown must not crash boot
+                # (audit finding M8) — start fresh rather than fail closed on read.
+                log.warning("runtime_state_unreadable", path=str(self.file_path), error=str(exc))
+                return {}
         return {}
 
     def save(self, snapshot: dict[str, Any]) -> None:
@@ -57,8 +68,7 @@ class RuntimeStateStore:
                 features=snapshot.get("features"),
             )
             return
-        with self.file_path.open("w", encoding="utf-8") as f:
-            json.dump(snapshot, f, indent=2, default=str)
+        atomic_write_json(self.file_path, snapshot)
 
 
 def build_snapshot(holder: dict[str, Any], broker: Any, sim: Any, ladder: Any) -> dict[str, Any]:

@@ -6,6 +6,28 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Security / Fixed (audit remediation)
+- **C1 (Critical) — SPA path traversal closed.** `runtime/serve.py` now resolves the
+  requested path and serves a file only when it is inside `dashboard/dist`
+  (`is_relative_to`), else returns the SPA shell. Verified live: `…/state/.jwt_secret`,
+  `…/config/mandate.yaml`, `…/CLAUDE.md` all return the shell, not the file.
+- **C2 (Critical) — dashboard reachable with auth on.** `api/server.py` middleware
+  exemption rewritten (`_is_public_path`): the SPA shell + `/assets/*` are public,
+  `/api/*` and `/metrics` stay token-gated. Verified live + login page renders in a
+  browser under SaaS.
+- **H1 — control API hardened.** Default `AIMOS_HOST` is now `127.0.0.1`; control and
+  assistant endpoints refuse non-loopback callers when SaaS is off.
+- **H2 — OTP no longer leaked.** The no-SMTP log no longer includes the email body;
+  `state/maildrop` / `state/smsdrop` are opt-in via `AIMOS_DEV_MAILDROP` and written
+  `0600`. Fixed a `NameError` in `_render_password_reset_email`.
+- **H3 — auth brute force bounded.** Login codes are burned after 5 wrong guesses
+  (`EmailLoginCode.attempts`); `/auth/*` is rate-limited per client (429).
+- **M8 — atomic state writes.** New `runtime/atomic_io.py` (temp + fsync + rename);
+  `state_store.load` tolerates a torn file; `golive` keeps a `.bak` and restores it.
+- **L5 — accessibility.** `dashboard/index.html` sets `<html lang="en">`.
+- Suite grew 466 → **483 passed / 1 xfailed**; magic-number, naive-datetime, and
+  import-linter (6/6) gates remain green. **H4 (backups) and H5 (CI) remain open.**
+
 ### Added
 - **`PRODUCTION_READINESS_AUDIT.md`** — end-to-end product and production-readiness
   audit at commit `5fd1b88`. Audit-only; **no application source was modified**.

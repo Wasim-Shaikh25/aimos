@@ -211,7 +211,18 @@ free/open-source libraries.
 | SMTP | `config/saas.yaml` `smtp.*` or `AIMOS__SAAS__SMTP__*` | send login OTP to the admin email |
 | Admin account | `config/saas.yaml` `admin.*` or `AIMOS__SAAS__ADMIN__*` | single user seeded at startup |
 
-If SMTP is not configured, the login code is written to `state/maildrop/login-<email>.txt` for local development. No paid third-party auth services are used.
+If SMTP is not configured, the login OTP is **not** delivered by default (it is not
+logged and not dropped to disk — a one-time code in a plaintext file defeats the
+second factor). For local development with no SMTP, set **`AIMOS_DEV_MAILDROP=1`** to
+write the code to `state/maildrop/login-<email>.txt` (mode `0600`). Never set this in
+production. No paid third-party auth services are used.
+
+**Bind host.** `python -m aimos.runtime.serve` binds **`127.0.0.1`** by default (never
+publicly reachable by accident). Set `AIMOS_HOST=0.0.0.0` explicitly — behind a
+VPN/SSH tunnel or an authenticated reverse proxy — to bind all interfaces. The Docker
+image sets `0.0.0.0` because Compose already publishes only `127.0.0.1:8000` on the
+host. When SaaS auth is **off**, control endpoints (`/api/control/*`, `/api/assistant`)
+accept only loopback callers.
 
 ### Endpoints
 

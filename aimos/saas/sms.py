@@ -7,6 +7,8 @@ credentials (Twilio/Vonage) in ``config/saas.yaml``. AIMOS never pays for SMS.
 from __future__ import annotations
 
 import base64
+import os
+import stat
 import structlog
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -28,7 +30,8 @@ class ConsoleSMSSender(SMSSender):
     """Logs the message; default for local development."""
 
     def send(self, phone_number: str, message: str) -> None:
-        log.info("sms_console", phone=phone_number, message=message)
+        # Never log the OTP body (audit finding H2).
+        log.info("sms_console", phone=phone_number)
         _dev_drop(phone_number, message)
 
 
@@ -81,10 +84,18 @@ class VonageSMSSender(SMSSender):
 
 
 def _dev_drop(phone_number: str, message: str) -> None:
+    """Write the OTP to ``state/smsdrop`` — DEV ONLY, opt-in (audit finding H2)."""
+    if os.environ.get("AIMOS_DEV_MAILDROP", "").strip().lower() not in ("1", "true", "yes"):
+        return
     drop_dir = Path("state") / "smsdrop"
     drop_dir.mkdir(parents=True, exist_ok=True)
     safe = phone_number.replace("+", "").replace("/", "_")
-    (drop_dir / f"{safe}.txt").write_text(message, encoding="utf-8")
+    path = drop_dir / f"{safe}.txt"
+    path.write_text(message, encoding="utf-8")
+    try:
+        path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        pass
 
 
 def get_sms_sender() -> SMSSender:

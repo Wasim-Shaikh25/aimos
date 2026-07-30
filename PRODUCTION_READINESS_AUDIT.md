@@ -10,6 +10,11 @@ findings below are reported, not fixed.
 — dashboard built and rendered in a real browser; C1 kill chain proven end to end;
 new state-durability and accessibility findings). Pass 2 found **zero new Critical
 or High** findings — see the *Pass 2 Addendum* below.
+**Remediation:** a fix pass was subsequently **authorized and applied** on this
+branch for both Criticals and four Highs/Mediums — see *Remediation Applied* below.
+The two open release-required items that remain are **H4 (backups)** and **H5 (CI)**,
+so the overall recommendation is unchanged pending those and an independent
+verification pass.
 
 ---
 
@@ -39,17 +44,18 @@ root.
 
 ### Finding count by severity
 
-| Severity | Count | Open blockers |
+| Severity | Count | Open blockers (post-remediation) |
 |---|---|---|
-| Critical | 2 | 2 |
-| High | 5 | 5 |
-| Medium | 8 | 0 (pre-release / post-release) |
-| Low | 5 | 0 |
-| **Total** | **20** | **7** |
+| Critical | 2 | **0** — C1, C2 fixed & verified |
+| High | 5 | **2** — H4, H5 (H1/H2/H3 fixed, awaiting independent verification) |
+| Medium | 8 | 0 (pre-release / post-release; M8 fixed) |
+| Low | 5 | 0 (L5 fixed) |
+| **Total** | **20** | **2** |
 
 *(Pass 2 added M8 — non-atomic state writes, and L5 — missing `<html lang>`. No new
 Critical or High. C1's evidence was upgraded from a replica to the live application
-plus a proven forged-admin-token kill chain.)*
+plus a proven forged-admin-token kill chain. The subsequent remediation pass fixed
+C1, C2, H1, H2, H3, M8, and L5 — see *Remediation Applied*.)*
 
 ### Major technical risks
 
@@ -315,8 +321,8 @@ password change), not new views.
 | **Classification** | Confirmed Defect |
 | **Severity** | **Critical** |
 | **Category** | Security — broken access control / arbitrary file read |
-| **Disposition** | **Open — Release Blocker** |
-| **Release impact** | Blocks release |
+| **Disposition** | **Verified** (fixed this branch — see *Remediation Applied*) |
+| **Release impact** | Was blocking; fix verified live |
 | **Affected roles** | Anonymous (unauthenticated), Operator |
 | **Likelihood** | High — trivially exploitable with a single HTTP GET |
 
@@ -483,8 +489,8 @@ covered separately under H2.
 | **Classification** | Confirmed Defect |
 | **Severity** | **Critical** |
 | **Category** | Business logic / availability / architecture |
-| **Disposition** | **Open — Release Blocker** |
-| **Release impact** | Blocks release |
+| **Disposition** | **Verified** (fixed this branch — see *Remediation Applied*) |
+| **Release impact** | Was blocking; fix verified live + in-browser |
 | **Affected roles** | Operator |
 | **Likelihood** | Certain — deterministic, occurs on every request |
 
@@ -1827,6 +1833,46 @@ a good baseline. A full audit (keyboard traversal, focus-visible, colour contras
 the badge colours, screen-reader flow) is still required before release (see
 Residual Risks); this finding is the one concrete defect surfaced by the automated
 probe.
+
+---
+
+## Remediation Applied (this branch)
+
+Source-code changes were authorized after Pass 2. The fixes below were implemented,
+tested, and — for the Criticals — verified against a live running server. **No
+decision-path/layer rules were touched**: magic-number lint, naive-datetime lint,
+and import-linter (6/6) remain green; the suite grew from 466 to **483 passed / 1
+xfailed** with 17 new regression tests.
+
+| Finding | Disposition | Fix | Tests | Live verification |
+|---|---|---|---|---|
+| **C1** traversal | **Verified** | `serve.py` SPA route now resolves the candidate and requires `is_relative_to(DIST)`; falls back to the SPA shell otherwise | `test_saas.py::TestSpaTraversalBlocked` | `curl` of `…/state/.jwt_secret`, `…/config/mandate.yaml`, `…/CLAUDE.md` all return the SPA shell, not the file; legit asset still 200 |
+| **C2** SPA lockout | **Verified** | `server.py` middleware exemption rewritten (`_is_public_path`): SPA shell + assets public, `/api/*` and `/metrics` protected | `test_saas.py::TestSpaReachableWhenSaasEnabled` (5) | With SaaS on: `/`, `/login`, `/assets/*`, `/api/v2/status` → 200; `/api/decisions`, `/metrics` → 401. **Login page renders in Chromium** ("Sign in… Email / Password / Send login code") |
+| **H1** open control API | **Fixed — Awaiting Verification** | Default `AIMOS_HOST` → `127.0.0.1`; control + assistant endpoints refuse non-loopback callers when SaaS is off (`_is_control_path` + `_client_is_local`) | `test_saas.py::TestControlPathGuards` (3) | Loopback `POST /api/control/pause` → 403 confirm-gate (allowed through, still gated). Remote-block path unit-tested, not exercised from a second host |
+| **H2** OTP logged/dropped | **Fixed — Awaiting Verification** | `email.py`/`sms.py`: no body in the no-SMTP log; `_dev_drop` gated behind `AIMOS_DEV_MAILDROP`, files `0600`. Also fixed the `_render_password_reset_email` `NameError` | `test_saas.py::TestOtpNotLeaked` (2) | — |
+| **H3** no auth throttle | **Fixed — Awaiting Verification** | `EmailLoginCode.attempts` column + burn-after-`MAX_OTP_ATTEMPTS` (5); per-IP fixed-window throttle on `/auth/*` (429) | `TestOtpBruteForceBounded`, `TestAuthThrottle` | — |
+| **M8** torn state writes | **Fixed — Awaiting Verification** | New `runtime/atomic_io.py` (temp+fsync+`os.replace`); `state_store.load` catches torn JSON; `golive` keeps a `.bak` and restores it | `test_runtime_state.py` (2), `test_golive.py` (2) | — |
+| **L5** missing `<html lang>` | **Verified** | `dashboard/index.html` → `<html lang="en">` | (static) | Chromium reports `html[lang]="en"` |
+
+**H1 note.** The loopback guard and loopback-default host close the *accidental*
+exposure and the anonymous-remote-control path. Whether H1 is fully retired or
+downgraded to Accepted Risk still depends on **PD1** (is AIMOS ever exposed beyond
+localhost/an authenticated proxy?) — that product decision is unchanged by the fix.
+
+**Files changed:** `aimos/runtime/serve.py`, `aimos/api/server.py`,
+`aimos/saas/email.py`, `aimos/saas/sms.py`, `aimos/saas/auth_service.py`,
+`aimos/saas/models.py`, `aimos/runtime/state_store.py`, `aimos/runtime/golive.py`,
+`aimos/runtime/atomic_io.py` (new), `dashboard/index.html`, and the four test files.
+
+**Still open (unchanged recommendation):** H4 (backups) and H5 (CI) are
+release-required and were **not** implemented in this pass. M1–M7 (minus the
+`NameError` fixed opportunistically under H2) and L1–L4 remain as scheduled. A
+independent verification pass should re-run the C1/C2 checks and exercise the H1
+remote-block and H3 throttle from a real client before these are marked Verified.
+
+**Schema note (H3).** `EmailLoginCode.attempts` is a new column. The project still
+has no migration framework (a Group 4 item); on an existing deployment the
+transient `email_login_codes` table should be dropped so `create_all` rebuilds it.
 
 ---
 

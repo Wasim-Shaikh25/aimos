@@ -885,14 +885,26 @@ def _mount_dashboard(app) -> None:
     if assets.exists():
         app.mount("/assets", StaticFiles(directory=str(assets)), name="assets")
 
+    index = DIST / "index.html"
+    root = DIST.resolve()
+
     @app.get("/")
     def _index():  # noqa: ANN202
-        return FileResponse(str(DIST / "index.html"))
+        return FileResponse(str(index))
 
     @app.get("/{full_path:path}")
     def _spa(full_path: str):  # noqa: ANN202 — SPA fallback (client-side routes)
-        f = DIST / full_path
-        return FileResponse(str(f if f.is_file() else DIST / "index.html"))
+        # Serve a real file ONLY when it resolves to a path genuinely inside the
+        # built dist tree; otherwise fall back to the SPA shell (client-side route).
+        # resolve() normalizes percent-decoded "../" and symlinks so an attacker
+        # cannot escape DIST to read state/.jwt_secret, secrets, or arbitrary files.
+        try:
+            candidate = (root / full_path).resolve()
+        except (OSError, ValueError):
+            return FileResponse(str(index))
+        if candidate.is_file() and candidate.is_relative_to(root):
+            return FileResponse(str(candidate))
+        return FileResponse(str(index))
 
 
 def _make_source(live_data: bool, exchange: str, seed_salt: int = 0):
@@ -927,7 +939,10 @@ app = build_app()  # module-level ASGI app for `uvicorn aimos.runtime.serve:app`
 
 def main() -> int:  # pragma: no cover - launches the server
     import uvicorn
-    host = os.environ.get("AIMOS_HOST", "0.0.0.0")
+    # Default to loopback so a bare `python -m aimos.runtime.serve` is never
+    # publicly reachable by accident (audit finding H1). Set AIMOS_HOST=0.0.0.0
+    # explicitly (behind a VPN/tunnel/proxy) to bind all interfaces.
+    host = os.environ.get("AIMOS_HOST", "127.0.0.1")
     port = int(os.environ.get("AIMOS_PORT", "8000"))
     log.info("aimos_serve", url=f"http://{host}:{port}")
     uvicorn.run(app, host=host, port=port, log_level="info")
