@@ -6,6 +6,30 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added
+- **`PRODUCTION_READINESS_AUDIT.md`** — end-to-end product and production-readiness
+  audit at commit `5fd1b88`. Audit-only; **no application source was modified**.
+  18 findings (2 Critical, 5 High, 7 Medium, 4 Low); recommendation **CONTINUE — NO-GO**.
+  Baseline recorded: 466 passed / 1 xfailed, magic-number + naive-datetime lints
+  clean, import-linter 6/6, GPL tripwire armed (2 files).
+  - **C1 (Critical)** — unauthenticated path traversal in the SPA catch-all
+    (`runtime/serve.py:892`): percent-encoded `../` escapes `dashboard/dist` and
+    serves `state/.jwt_secret`, `state/.settings_key`, `state/maildrop/*`,
+    `secrets.yaml`, `.env`, `/etc/passwd`. Reproduced by execution.
+  - **C2 (Critical)** — enabling `saas_enabled` makes the dashboard, its login page,
+    and `/assets/*` return 401 (`api/server.py:111` exemption list omits non-API
+    paths), so auth cannot be switched on. Reproduced by execution.
+  - **H1** — control API (killswitch, feature toggles, go-live sign-off, LLM
+    assistant) is unauthenticated when `saas_enabled` is false (the default).
+  - **H2** — login OTPs logged at WARNING and written unconditionally to
+    `state/maildrop/` in plaintext, violating the "secrets are never logged" rule.
+  - **H3** — no inbound rate limiting or lockout; OTP codes are not invalidated on
+    failed attempts; 275 ms of bcrypt per unauthenticated request is a DoS vector
+    against the process that also runs the trading loop.
+  - **H4** — no backup mechanism exists and `scripts/restore_drill.sh` exits 0 when
+    no backup is found.
+  - **H5** — no CI/CD; the four documented quality gates are unenforced.
+
 ### Changed
 - **Single-admin mode + email OTP 2FA** (`aimos/saas/`):
   - Removed public registration, Google/Apple OAuth, phone OTP, and forgot-password
