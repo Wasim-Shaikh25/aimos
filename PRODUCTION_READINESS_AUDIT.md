@@ -6,6 +6,10 @@
 SRE/DevOps, data architecture, product, UX/accessibility, performance.
 **Authorization:** audit-only. **No application source code was modified.** All
 findings below are reported, not fixed.
+**Passes:** Pass 1 (static + targeted execution) and Pass 2 (live-server execution
+— dashboard built and rendered in a real browser; C1 kill chain proven end to end;
+new state-durability and accessibility findings). Pass 2 found **zero new Critical
+or High** findings — see the *Pass 2 Addendum* below.
 
 ---
 
@@ -39,9 +43,13 @@ root.
 |---|---|---|
 | Critical | 2 | 2 |
 | High | 5 | 5 |
-| Medium | 7 | 0 (pre-release / post-release) |
-| Low | 4 | 0 |
-| **Total** | **18** | **7** |
+| Medium | 8 | 0 (pre-release / post-release) |
+| Low | 5 | 0 |
+| **Total** | **20** | **7** |
+
+*(Pass 2 added M8 — non-atomic state writes, and L5 — missing `<html lang>`. No new
+Critical or High. C1's evidence was upgraded from a replica to the live application
+plus a proven forged-admin-token kill chain.)*
 
 ### Major technical risks
 
@@ -347,17 +355,41 @@ mounts the route verbatim from `serve.py`:
   /etc/hostname (deep)        -> 200 ESCAPED=True  'vm\n'
 ```
 
-Reproduction steps against a running instance:
-
-```bash
-./run.sh                      # dashboard on :8000
-curl -s 'http://localhost:8000/%2e%2e%2f%2e%2e%2fstate/.jwt_secret'
-curl -s 'http://localhost:8000/%2e%2e%2f%2e%2e%2fstate/.settings_key'
-curl -s 'http://localhost:8000/%2e%2e%2f%2e%2e%2fstate/maildrop/login-admin%40example.com.txt'
-```
-
 In the Docker image the same paths apply verbatim: `WORKDIR /app`, dist at
 `/app/dashboard/dist`, and `./state` bind-mounted at `/app/state`.
+
+**Evidence — confirmed against the live running application (Pass 2).** The
+dashboard was built (`npm run build`) and the real server started
+(`python -m aimos.runtime.serve`, paper mode, port 8011). `curl` against the running
+process:
+
+```
+200  /%2e%2e%2f%2e%2e%2fstate/.jwt_secret     -> cDUZGGWZzhd3p8LuSpTZMxfJwidHgX3B-hzr3ZpivH4=
+200  /%2e%2e%2f%2e%2e%2fstate/aimos.sqlite     -> SQLite format 3 ...   (the journal — system of record)
+200  /%2e%2e%2f%2e%2e%2fCLAUDE.md              -> # CLAUDE.md — working rules ...
+200  /%2e%2e%2f%2e%2e%2fconfig/mandate.yaml    -> # Live-trading mandate — fail-closed contract ...
+```
+
+Refinement of the reach claim: from `dashboard/dist` (two levels below repo root),
+a deep `../../../../etc/passwd` does **not** reach filesystem root — it returns the
+SPA `index.html`. The exploitable reach is **everything within the repo/container
+tree at that depth**, which already includes the JWT signing key, the settings
+encryption key, the plaintext `state/maildrop/*` OTP codes, the SQLite journal, and
+all config. That is complete compromise; reaching `/etc/passwd` is not required.
+
+**Evidence — full kill chain proven (Pass 2).** Using the secret leaked above, a
+forged admin access token was minted and fed to the application's own decoder:
+
+```
+leaked secret: cDUZGGWZzhd3...(44 chars)
+forged admin access token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ ...
+decode_token ACCEPTS forged token -> payload: {'sub': 'admin', 'org': 'attacker', 'type': 'access'}
+```
+
+`aimos.saas.security.decode_token(..., token_type="access")` accepts the forged
+token. This closes the loop: traversal → leak signing key → mint admin session. The
+authentication layer is not merely bypassable, it is forgeable from an
+unauthenticated GET.
 
 **Impact.**
 
@@ -1474,6 +1506,7 @@ second and strictly after C1. H2 can proceed in parallel.
 | **M2** | Password-change endpoint + UI; seed from config only on first run |
 | **M4** | Log and re-raise admin-seed failures; add auth-event audit logging |
 | **M6** | Add `/healthz` and `/readyz`; decide `/metrics` exposure |
+| **M8** | Atomic writes for `state.json`/`go_live.json`; resilient loader; `.bak` for go-live |
 | **L1** | Correct the STATUS test count |
 
 ### Group 3 — Short-term post-release
@@ -1484,6 +1517,7 @@ second and strictly after C1. H2 can proceed in parallel.
 | **M3** | Refresh token to `httpOnly; Secure` cookie; add CSP and security headers |
 | **M5** | Bound the `limit` query parameter |
 | **L3** | Sequential go-live gate prerequisites |
+| **L5** | Add `<html lang="en">`; run a full keyboard/contrast/screen-reader a11y audit |
 | **G5/G7** | Session listing + global revoke; alert on repeated failed logins |
 
 ### Group 4 — Long-term architectural
@@ -1522,10 +1556,12 @@ second and strictly after C1. H2 can proceed in parallel.
 
 ### Unverified concerns
 
-- **Stored-XSS via AI analyst output** — the analyst renders LLM-generated text; no
-  `dangerouslySetInnerHTML` was found, but the sink was not exercised at runtime.
-  Combined with M3 (tokens in `localStorage`) this is the highest-value unverified
-  path. **Verify before release.**
+- ~~**Stored-XSS via AI analyst output**~~ — **Resolved in Pass 2.** No
+  `dangerouslySetInnerHTML`, `innerHTML`, `eval`, or `new Function` exists anywhere
+  in `dashboard/src` (verified by search + live render with 0 console errors). React's
+  default escaping is intact, so the realistic injection path for M3 does not exist.
+  M3 (refresh token in `localStorage`) remains a valid hardening item but its
+  exploitability is now low.
 - **Postgres/TimescaleDB paths** — the compose deployment points the auth DB and
   time-series store at Postgres; all testing here used SQLite. Concurrency, type
   mapping (`JSON` columns in `user_settings`), and migration behavior are unverified.
@@ -1542,9 +1578,9 @@ second and strictly after C1. H2 can proceed in parallel.
 
 - No exchange API keys (testnet or live) → the entire live path is unvalidated
   against a real venue. `specs/TESTNET.md` documents the procedure; it has not been run.
-- No Node toolchain in this container → `npm run build` not executed, `dashboard/dist`
-  absent, so **no dashboard screen was rendered or tested in a browser**. All UI
-  findings derive from source inspection.
+- ~~No Node toolchain~~ → **Corrected in Pass 2.** Node 22 is available at
+  `/opt/node22`; the dashboard was built and rendered in Chromium. Remaining UI gap
+  is a per-screen UX/accessibility walkthrough, not "no browser at all".
 - No production environment, log aggregator, monitoring stack, or backup artifact.
 - No `ANTHROPIC_API_KEY` → the AI analyst path is untested at runtime.
 
@@ -1585,11 +1621,12 @@ second and strictly after C1. H2 can proceed in parallel.
 | Health / readiness probes | **Fail** | G4 — none |
 | Logging & metrics | **Partial** | structlog + `/metrics`; no auth audit trail (M4); secrets logged (H2) |
 | Alerting | **Partial** | Telegram alerts exist; no security alerting |
-| Deployment & rollback | **Partial** | Dockerfile + compose + watchdog; no artifact versioning, no documented rollback |
+| Deployment & rollback | **Partial** | Dockerfile + compose + watchdog; no artifact versioning, no documented rollback; non-atomic state writes crash restart recovery (M8) |
 | Dependency & secret scanning | **Not Tested** | No tooling configured |
-| UI / UX | **Not Tested** | No browser testing performed |
-| Accessibility | **Not Tested** | No a11y tests exist |
-| Performance & load | **Not Tested** | No load testing performed |
+| UI / UX | **Partial** | Pass 2: dashboard builds and renders — 21 screens, 41 assets, live data, **0 console errors**, all controls labeled. Full UX walkthrough of each screen still pending |
+| Accessibility | **Partial** | Pass 2 automated probe: 0 unlabeled inputs/buttons (good); **1 defect** — missing `<html lang>` (L5). Keyboard/focus/contrast/screen-reader audit still required |
+| Performance & load | **Not Tested** | No load testing performed (H3 is the priority target) |
+| Data durability | **Fail** | M8 — non-atomic state writes; torn `state.json` crashes boot, torn `go_live.json` silently wipes sign-offs (both reproduced) |
 | Licensing | **Partial** | Tripwire armed (M7); fine while private |
 
 ---
@@ -1605,9 +1642,18 @@ second and strictly after C1. H2 can proceed in parallel.
 | 5. Build, test, migration, deploy, monitoring, backup, rollback gates pass | **No** | No CI, no backups, no migrations, no health probes |
 | 6. Product gaps resolved or formally deferred | **Partial** | G1 open; PD1–PD5 outstanding |
 | 7. Remaining risks have owner and disposition | **Partial** | Documented; ownership pending |
-| 8. Two consecutive passes with no new Critical/High | **No** | This is pass 1 |
-| 9. Remaining findings mainly low-risk | **No** | |
-| 10. Another pass unlikely to change the decision | **No** | Untested areas remain |
+| 8. Two consecutive passes with no new Critical/High | **Partial** | Pass 2 added **no** new Critical/High (only M8, L5) — first of the two required clean passes is now on record; a post-fix pass is still needed |
+| 9. Remaining findings mainly low-risk | **No** | C1/C2 + H1–H5 open |
+| 10. Another pass unlikely to change the decision | **Partial** | Pass 2 did not change the decision; it hardened the evidence and shrank the untested surface. The decision will not flip until C1/C2 + H1–H5 are fixed |
+
+**Pass 2 conclusion.** A second broad pass surfaced no new release-blocking findings —
+only one Medium (M8) and one Low (L5) — and instead firmed up the existing evidence
+(C1 kill chain proven; XSS sink absence and the Telegram channel verified; the UI
+rendered and probed). Per stopping rule 8, that is the expected trajectory: the
+Critical/High set has stabilised at C1, C2, H1–H5. **Further general audit passes are
+not warranted before remediation** — the next pass should be a *targeted
+verification* pass after the blockers are fixed, with the objective already
+enumerated above.
 
 **Objective for the next audit pass** — not a general re-audit:
 
@@ -1620,6 +1666,167 @@ second and strictly after C1. H2 can proceed in parallel.
 6. Confirm CI blocks a deliberately-failing commit.
 7. Review the AI analyst render path for stored XSS (the open unverified concern).
 8. Exercise the Postgres/TimescaleDB deployment at least once.
+
+---
+
+## Pass 2 Addendum — Live-Server Execution
+
+Pass 2 closed Pass 1's two largest scope gaps: a Node toolchain **is** available
+(`/opt/node22`, just not on the default PATH — a Pass 1 error, corrected here), and
+Chromium is preinstalled. The dashboard was built and the real application was run
+and exercised. Summary: **no new Critical or High findings**; C1 upgraded to a proven
+end-to-end kill chain; two lower-severity findings added; several Pass 1 "Not Tested"
+and "Unverified" items resolved.
+
+### What was newly verified
+
+| Pass 1 status | Pass 2 result |
+|---|---|
+| C1 shown on a replica | **Confirmed on the live server** + forged-admin-token kill chain proven (see C1) |
+| UI — Not Tested (no browser) | **Dashboard renders**: all 21 nav screens, 41 assets, live data, **0 console errors**, 0 unlabeled inputs/buttons |
+| M3 stored-XSS — Unverified | **No XSS sink exists** — zero `dangerouslySetInnerHTML`/`innerHTML`/`eval` across all dashboard source. M3 residual risk substantially reduced (token-in-`localStorage` remains, but the realistic injection path does not) |
+| Telegram control channel — Unverified | **Verified as a strength** — chat allowlist (unknown → silent ignore + log), two-step nonce for dangerous commands, wrong-chat confirm rejection, 60s TTL, no cap-raising. Stronger than the HTTP API's auth story |
+| H1 — control API open by default | **Visually confirmed** — the full dashboard and all trading data load at `/` with no login gate in default mode |
+
+### Screenshot evidence
+
+The rendered Markets screen (paper mode): header shows `Equity $10687 · Decisions
+1680 · NO_TRADE rate 92% · Mode paper · single-user`, a 21-item navigation bar, and
+a 41-row live decision table (regime, p_up, confidence, opportunity, risk, action).
+The UI is polished and professional. Crucially, **no authentication was required to
+reach it** — direct evidence for H1.
+
+---
+
+### M8 — Runtime state and go-live files are written non-atomically; a torn write crashes boot or silently wipes go-live sign-offs
+
+| Field | Value |
+|---|---|
+| **Classification** | Confirmed Defect |
+| **Severity** | Medium |
+| **Category** | Data integrity / durability / availability |
+| **Disposition** | Open — Required Before Release |
+| **Release impact** | Does not block by itself; fix before relying on restart recovery |
+| **Likelihood** | Medium — triggered by any unclean shutdown mid-write |
+
+**Location:** `aimos/runtime/state_store.py:60-61`, `aimos/runtime/golive.py:50-52`
+
+```python
+# state_store.py — truncates the file, THEN writes; no temp-file + rename
+with self.file_path.open("w", encoding="utf-8") as f:
+    json.dump(snapshot, f, indent=2, default=str)
+```
+
+```python
+# golive.py
+self.path.write_text(json.dumps(self._state, indent=2), encoding="utf-8")
+```
+
+**Root cause.** Both persist JSON by truncating the target file and writing in place,
+with no write-to-temp-then-`os.replace` (which is atomic on POSIX). If the process
+dies mid-write — and the bundled `watchdog` (`docker-compose.yml`) restarts the app
+on 3 missed heartbeats, plus OOM kills and `docker stop` during a rolling deploy all
+apply — the file is left truncated. The two loaders then diverge:
+
+- `RuntimeStateStore.load` (`state_store.py:39-42`) calls `json.load` with **no
+  error handling** → boot crashes with `JSONDecodeError` and stays down until an
+  operator manually deletes `state.json`.
+- `GoLiveLadder._load` (`golive.py:42-48`) **swallows `ValueError`** and returns
+  `{"gates": {}, "markers": {}}` → all operator go-live sign-offs and the paper-day
+  markers are **silently discarded**.
+
+**Evidence — reproduced by execution (Pass 2).**
+
+```
+state_store.load(torn): CRASHES -> JSONDecodeError: Unterminated string ...
+   (RuntimeStateStore.load has NO try/except around json.load -> boot fails)
+
+go_live before torn write: live_allowed=True (all 6 gates signed off)
+go_live after torn write:  live_allowed=False passed=0/6
+   (golive._load swallows ValueError -> ALL operator sign-offs silently wiped)
+```
+
+**Impact.** The go-live reset is fail-*safe* on the money axis (it resets toward
+"not allowed", never toward "allowed"), so it does not risk premature live trading —
+but it silently destroys the operator's go-live record and resets the `paper_4wk`
+timeline with no warning, which erodes trust in the ladder (compare H4). The
+state-store boot crash is the sharper edge: a single unclean shutdown makes the
+application **fail to start** until someone hand-edits the state directory — poor
+behavior for a system with an auto-restart watchdog, since the watchdog will
+restart it straight back into the same crash.
+
+**Recommended solution.** Write atomically and make the loader resilient.
+
+```python
+# atomic write helper (illustrative)
+import os, tempfile
+def _atomic_write_json(path: Path, obj) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(obj, f, indent=2, default=str)
+            f.flush(); os.fsync(f.fileno())
+        os.replace(tmp, path)          # atomic on POSIX
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+```
+
+And in `RuntimeStateStore.load`, wrap `json.load` in `try/except (ValueError,
+OSError)` returning `{}` (matching the resilient go-live loader), and log a warning
+so a discarded snapshot is at least visible rather than silent. For go-live,
+atomic-write plus a `.bak` of the last-good file is worth it given the value of the
+sign-off record.
+
+**Regression risks.** `os.replace` across filesystems fails — keep the temp file in
+the same directory (as above). `fsync` adds latency to each save; the save cadence
+here is per-tick-batch, not per-tick, so the cost is acceptable.
+
+**Tests to add.** `test_state_store_survives_torn_write` (write partial JSON, assert
+`load()` returns `{}` and logs, does not raise); `test_golive_atomic_write_survives_kill`
+(assert a torn temp never replaces the good file); `test_atomic_write_leaves_no_tmp`.
+
+**Verification steps.** Populate `state.json`; truncate it to a partial object;
+start the server → must boot (not crash). Sign off all go-live gates; truncate
+`go_live.json`; reload → sign-offs preserved from the `.bak`, or at minimum a logged
+warning rather than a silent reset.
+
+**Similar locations inspected.** `serve.py:282` (monitor report),
+`watchdog.py:32` (heartbeat), and `settings.py:158` (`.jwt_secret`) use the same
+in-place write. The heartbeat is transient (self-heals next tick) and the JWT secret
+is write-once, so neither is impactful; the monitor report is display-only. Applying
+the atomic helper uniformly is the clean fix. The SQLite journal and auth DB are
+**not** affected — SQLite manages its own durability.
+
+---
+
+### L5 — `<html>` element has no `lang` attribute (WCAG 3.1.1)
+
+| Field | Value |
+|---|---|
+| **Classification** | Confirmed Defect (accessibility) |
+| **Severity** | Low |
+| **Disposition** | Scheduled Post-Release |
+
+**Location:** `dashboard/index.html:1`
+
+```html
+<!doctype html><html><head><meta charset="utf-8"><title>AIMOS</title></head>
+```
+
+**Evidence.** Confirmed in the live render (`html[lang]: None`) and in source. No
+`lang` attribute is set, so screen readers cannot select the correct pronunciation
+rules. WCAG 2.1 Level A, SC 3.1.1 (Language of Page).
+
+**Recommended solution.** `<html lang="en">`. Trivial.
+
+**Other a11y observations (Pass 2, positive).** The browser probe found **0** inputs
+without a label/aria-label/placeholder and **0** buttons without an accessible name —
+a good baseline. A full audit (keyboard traversal, focus-visible, colour contrast on
+the badge colours, screen-reader flow) is still required before release (see
+Residual Risks); this finding is the one concrete defect surfaced by the automated
+probe.
 
 ---
 

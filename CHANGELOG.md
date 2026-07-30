@@ -29,6 +29,14 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   - **H4** — no backup mechanism exists and `scripts/restore_drill.sh` exits 0 when
     no backup is found.
   - **H5** — no CI/CD; the four documented quality gates are unenforced.
+  - **Pass 2 (live-server execution):** built the dashboard and ran the real app.
+    C1 confirmed against the running server and the full kill chain proven
+    (traversal → leak `state/.jwt_secret` → forge a token that `decode_token`
+    accepts as admin). Dashboard renders (21 screens, 0 console errors); no XSS
+    sink exists; the Telegram channel verified as a genuine strength. Added **M8**
+    (non-atomic `state.json`/`go_live.json` writes — torn write crashes boot or
+    silently wipes go-live sign-offs, both reproduced) and **L5** (`<html>` missing
+    `lang`). **No new Critical/High** — recommendation unchanged at **NO-GO**.
 
 ### Changed
 - **Single-admin mode + email OTP 2FA** (`aimos/saas/`):
