@@ -304,3 +304,24 @@ Telegram locks, the fail-closed `mandate.yaml`, and the boot guard.
   Telegram `/killswitch` (nonce-confirmed); or `touch RUNTIME_HALT` in the working
   dir (loop halts, forces NO_TRADE).
 - **Watchdog:** heartbeat at `state/heartbeat`; 3× miss → restart + alert (§23.5).
+
+### Backups & restore (§23.5)
+
+The hash-chained journal (`state/aimos.sqlite`) is the system of record — back it up.
+
+```bash
+# Create a verified, consistent snapshot (SQLite online-backup API; verifies the
+# hash chain before accepting it) and update backups/journal-latest.sqlite.
+python scripts/backup_journal.py --src state/aimos.sqlite --dest backups --keep 14
+
+# Monthly restore DRILL — restores the latest backup and re-verifies the chain.
+# Exits non-zero if there is no backup (a drill with no backup is not a pass).
+bash scripts/restore_drill.sh
+```
+
+Schedule `backup_journal.py` at your target RPO (cron, a compose timer, or the
+APScheduler runtime). Back up **separately and securely**: the auth/settings DB
+(`state/auth.sqlite` or Postgres via `AIMOS__SAAS__DATABASE_URL`) and
+`state/.settings_key` — without the key, encrypted exchange credentials are
+unrecoverable. Never drop `state/.settings_key` into `backups/` alongside the
+journal; treat it as a secret.

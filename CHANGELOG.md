@@ -24,9 +24,18 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   (`EmailLoginCode.attempts`); `/auth/*` is rate-limited per client (429).
 - **M8 — atomic state writes.** New `runtime/atomic_io.py` (temp + fsync + rename);
   `state_store.load` tolerates a torn file; `golive` keeps a `.bak` and restores it.
+- **H4 — journal backups.** New `scripts/backup_journal.py` — SQLite online-backup
+  API (consistent under writes) + immediate hash-chain verify + retention + an
+  atomic `journal-latest.sqlite` pointer. `scripts/restore_drill.sh` now **exits 1**
+  when no backup exists (a drill with no backup is not a pass).
+- **H5 — CI.** New `.github/workflows/ci.yml` runs pytest + all three lints + the
+  GPL tripwire + a backup/restore drill, plus a dashboard-build job, on every
+  push/PR so the gates are enforced rather than discipline-only.
 - **L5 — accessibility.** `dashboard/index.html` sets `<html lang="en">`.
-- Suite grew 466 → **483 passed / 1 xfailed**; magic-number, naive-datetime, and
-  import-linter (6/6) gates remain green. **H4 (backups) and H5 (CI) remain open.**
+- Suite grew 466 → **488 passed / 1 xfailed**; magic-number, naive-datetime, and
+  import-linter (6/6) gates remain green. **All Critical/High/Medium audit blockers
+  are now fixed**; recommendation moves to **STOP — CONDITIONAL GO** (conditional on
+  an independent verification pass + product decisions PD1–PD5).
 
 ### Added
 - **`PRODUCTION_READINESS_AUDIT.md`** — end-to-end product and production-readiness

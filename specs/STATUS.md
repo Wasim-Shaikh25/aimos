@@ -25,14 +25,16 @@ prerequisite) · ⏭️ not built yet.
 | SaaS P2/P3 (partial) | Runtime state persistence, per-tenant config/journal/state store, broker/sim resume, streaming scaffold + feed into paper loop, ML registry, dashboard equity + candlestick charts, evidence tables, decision anatomy, org settings, auth screens, org scoping, migration, Dockerfile, vendor manifest + vendoring script, live multi-venue executor wiring (fail-closed), tests | ✅ |
 
 The §25.9 golden worked example reproduces exactly (fusion 0.766/0.428; execution
-NO_TRADE, EV −0.018). **483 passed, 1 xfailed**; magic-number + naive-datetime lints
+NO_TRADE, EV −0.018). **488 passed, 1 xfailed**; magic-number + naive-datetime lints
 clean; import-linter 6/6.
 
-> ⚠️ **Production readiness: NO-GO (improving).** See **`PRODUCTION_READINESS_AUDIT.md`**.
-> The audit's **2 Criticals (C1 traversal, C2 auth-lockout) are now fixed and verified
-> live**, and H1/H2/H3/M8/L5 are fixed with tests. **Two release-required items remain
-> open: H4 (no backups) and H5 (no CI).** Do not go live until those are resolved and
-> an independent verification pass re-checks the fixes.
+> ✅ **Production readiness: STOP — CONDITIONAL GO.** See **`PRODUCTION_READINESS_AUDIT.md`**.
+> **All Critical/High/Medium audit blockers are fixed** — the 2 Criticals (C1
+> traversal, C2 auth-lockout) verified live, and H1–H5 + M8 + L5 fixed with tests
+> (466 → 488). Remaining conditions before live: an **independent verification pass**,
+> product decision **PD1** (network-exposure model), scheduling the new
+> `scripts/backup_journal.py` at the target RPO, and the H3 `email_login_codes`
+> schema change on existing deployments.
 
 ---
 

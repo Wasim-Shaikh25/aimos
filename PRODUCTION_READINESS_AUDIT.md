@@ -11,10 +11,11 @@ findings below are reported, not fixed.
 new state-durability and accessibility findings). Pass 2 found **zero new Critical
 or High** findings — see the *Pass 2 Addendum* below.
 **Remediation:** a fix pass was subsequently **authorized and applied** on this
-branch for both Criticals and four Highs/Mediums — see *Remediation Applied* below.
-The two open release-required items that remain are **H4 (backups)** and **H5 (CI)**,
-so the overall recommendation is unchanged pending those and an independent
-verification pass.
+branch for **all seven Critical/High/Medium blockers** (C1, C2, H1–H5, M8) plus L5
+— see *Remediation Applied* below. The Criticals are verified against a live server;
+the Highs carry passing tests and await an independent verification pass. The
+recommendation accordingly moves from **CONTINUE — NO-GO** to **STOP — CONDITIONAL
+GO**, conditional on independent verification and the product decisions PD1–PD5.
 
 ---
 
@@ -46,16 +47,18 @@ root.
 
 | Severity | Count | Open blockers (post-remediation) |
 |---|---|---|
-| Critical | 2 | **0** — C1, C2 fixed & verified |
-| High | 5 | **2** — H4, H5 (H1/H2/H3 fixed, awaiting independent verification) |
-| Medium | 8 | 0 (pre-release / post-release; M8 fixed) |
+| Critical | 2 | **0** — C1, C2 fixed & verified live |
+| High | 5 | **0** — H1–H5 fixed (awaiting independent verification) |
+| Medium | 8 | 0 (M8 fixed; rest pre-/post-release) |
 | Low | 5 | 0 (L5 fixed) |
-| **Total** | **20** | **2** |
+| **Total** | **20** | **0** |
 
-*(Pass 2 added M8 — non-atomic state writes, and L5 — missing `<html lang>`. No new
-Critical or High. C1's evidence was upgraded from a replica to the live application
-plus a proven forged-admin-token kill chain. The subsequent remediation pass fixed
-C1, C2, H1, H2, H3, M8, and L5 — see *Remediation Applied*.)*
+*(Pass 2 added M8 and L5, with no new Critical/High. The remediation pass then fixed
+**all seven Critical/High/Medium blockers** (C1, C2, H1–H5, M8) plus L5 — see
+*Remediation Applied*. The Criticals are verified against a live server; the Highs
+carry passing tests and await an independent verification pass. No release-blocking
+finding remains open; what is left is product decisions PD1–PD5 and scheduled
+Medium/Low items.)*
 
 ### Major technical risks
 
@@ -99,20 +102,35 @@ was available to inspect; TimescaleDB and Postgres paths were not exercised.
 
 ### Conditions required for release
 
-C1 and C2 must be fixed and verified. H1–H5 must be fixed or formally accepted with
-a documented compensating control (for example, an authenticated reverse proxy
-terminating in front of AIMOS, which would address H1 but **not** C1). A re-audit
-pass must confirm the fixes and specifically re-test the traversal, the SaaS-mode
-UI load, and auth throttling.
+The original blockers (C1, C2, H1–H5, M8) have been **fixed on this branch**; the
+Criticals are verified against a live server. The remaining conditions are:
+
+1. **An independent verification pass** — by someone other than the fix author —
+   re-running the C1/C2 checks and exercising the H1 remote-block, the H3 throttle,
+   and the CI workflow on a real runner (moving those findings from *Fixed —
+   Awaiting Verification* to *Verified*).
+2. **PD1** answered — the network-exposure model that finalises H1's disposition
+   (localhost/authenticated-proxy only, or public with the loopback guard as one
+   layer). Documented, not just decided.
+3. **Operational wiring** — schedule `scripts/backup_journal.py` at the target RPO
+   (PD5), and handle the H3 `email_login_codes.attempts` schema change on any
+   existing deployment (no migration framework yet — Group 4).
+4. **PD3** — the GPL/M7 clean-room rewrite before any distribution (not needed while
+   private).
 
 ### Final recommendation
 
-## **CONTINUE — NO-GO**
+## **STOP — CONDITIONAL GO**
 
-Not because the product is unfinished — the trading core is further along than most
-systems at this stage — but because the control plane in front of it currently has
-an unauthenticated path to the signing keys of the system that moves real money.
-That is a fix-then-re-audit condition, not a risk to accept.
+The control plane's unauthenticated path to the signing keys — the reason for the
+earlier NO-GO — is closed and verified live, and every other release blocker is
+fixed with tests. What remains is not defect remediation but **verification and
+product decisions**: an independent pass to confirm the fixes, PD1's network-exposure
+call, and the operational wiring above. Conditional on those, this is releasable
+within the reviewed scope. It is a CONDITIONAL GO rather than a GO because the fixes
+were authored and self-verified in this same engagement — they must be confirmed by
+an independent reviewer before real money is at stake, and the live-exchange path
+remains untested by design (operator keys required).
 
 ---
 
@@ -628,8 +646,8 @@ sensitive.
 | **Classification** | Confirmed Defect |
 | **Severity** | **High** |
 | **Category** | Security — missing authentication / broken access control |
-| **Disposition** | **Open — Required Before Release** |
-| **Release impact** | Blocks release unless PD1 is answered with a documented network control |
+| **Disposition** | **Fixed — Awaiting Verification** (loopback-default host + loopback-only control endpoints — see *Remediation Applied*; final disposition depends on PD1) |
+| **Release impact** | Accidental exposure + anonymous remote control closed; PD1 finalises |
 | **Affected roles** | Anonymous |
 | **Likelihood** | Medium — requires network reach to the port |
 
@@ -740,8 +758,8 @@ own nonce-based confirmation flow, reviewed separately and not affected.
 | **Classification** | Confirmed Defect |
 | **Severity** | **High** |
 | **Category** | Security / privacy — secret handling |
-| **Disposition** | **Open — Required Before Release** |
-| **Release impact** | Blocks release |
+| **Disposition** | **Fixed — Awaiting Verification** (no body in logs; maildrop opt-in + `0600` — see *Remediation Applied*) |
+| **Release impact** | Was blocking; fixed |
 | **Affected roles** | Operator |
 | **Likelihood** | High — default behavior, no misconfiguration required |
 
@@ -873,8 +891,8 @@ credentials are never logged (verified by search across all modules), and
 | **Classification** | Confirmed Defect |
 | **Severity** | **High** |
 | **Category** | Security — authentication hardening / availability |
-| **Disposition** | **Open — Required Before Release** |
-| **Release impact** | Blocks release |
+| **Disposition** | **Fixed — Awaiting Verification** (OTP burn-after-5 + `/auth/*` throttle — see *Remediation Applied*) |
+| **Release impact** | Was blocking; fixed |
 | **Affected roles** | Anonymous, Operator |
 | **Likelihood** | Medium |
 
@@ -1009,8 +1027,8 @@ it should be throttled by the same middleware.
 | **Classification** | Confirmed Missing Requirement |
 | **Severity** | **High** |
 | **Category** | Operations / data durability |
-| **Disposition** | **Open — Required Before Release** |
-| **Release impact** | Blocks release |
+| **Disposition** | **Fixed — Awaiting Verification** (`scripts/backup_journal.py` added; drill now fails without a backup — see *Remediation Applied*) |
+| **Release impact** | Was blocking; scheduling at the target RPO is the remaining ops step |
 | **Affected roles** | Operator |
 | **Likelihood** | Certain — the capability is simply absent |
 
@@ -1116,8 +1134,8 @@ alongside the journal.
 | **Classification** | Confirmed Missing Requirement |
 | **Severity** | **High** |
 | **Category** | Deployment / release engineering |
-| **Disposition** | **Open — Required Before Release** |
-| **Release impact** | Blocks release |
+| **Disposition** | **Fixed — Awaiting Verification** (`.github/workflows/ci.yml` added — see *Remediation Applied*; not yet exercised on the runner) |
+| **Release impact** | Was blocking; needs one green run on the CI runner to confirm |
 | **Affected roles** | Operator (as maintainer) |
 | **Likelihood** | Certain |
 
@@ -1622,17 +1640,17 @@ second and strictly after C1. H2 can proceed in parallel.
 | Rate limiting | **Fail** | H3 — none inbound |
 | Security headers / CSP | **Fail** | None set |
 | Database constraints & migrations | **Partial** | ORM constraints present; **no migration framework** |
-| Backups & restore | **Fail** | H4 |
-| CI/CD & quality gates | **Fail** | H5 — none |
+| Backups & restore | **Partial** | H4 fixed — `backup_journal.py` (verified snapshots) + honest drill; scheduling at target RPO is the remaining ops step |
+| CI/CD & quality gates | **Partial** | H5 fixed — `.github/workflows/ci.yml` runs all gates + dashboard build; awaiting one green run on the runner |
 | Health / readiness probes | **Fail** | G4 — none |
 | Logging & metrics | **Partial** | structlog + `/metrics`; no auth audit trail (M4); secrets logged (H2) |
 | Alerting | **Partial** | Telegram alerts exist; no security alerting |
-| Deployment & rollback | **Partial** | Dockerfile + compose + watchdog; no artifact versioning, no documented rollback; non-atomic state writes crash restart recovery (M8) |
+| Deployment & rollback | **Partial** | Dockerfile + compose + watchdog; no artifact versioning, no documented rollback (M8 restart-recovery gap now fixed) |
 | Dependency & secret scanning | **Not Tested** | No tooling configured |
 | UI / UX | **Partial** | Pass 2: dashboard builds and renders — 21 screens, 41 assets, live data, **0 console errors**, all controls labeled. Full UX walkthrough of each screen still pending |
 | Accessibility | **Partial** | Pass 2 automated probe: 0 unlabeled inputs/buttons (good); **1 defect** — missing `<html lang>` (L5). Keyboard/focus/contrast/screen-reader audit still required |
 | Performance & load | **Not Tested** | No load testing performed (H3 is the priority target) |
-| Data durability | **Fail** | M8 — non-atomic state writes; torn `state.json` crashes boot, torn `go_live.json` silently wipes sign-offs (both reproduced) |
+| Data durability | **Partial** | M8 fixed — atomic writes + resilient loaders + go-live `.bak`; journal backups now exist (H4). Live-DB restore at scale still unverified |
 | Licensing | **Partial** | Tripwire armed (M7); fine while private |
 
 ---
@@ -1711,8 +1729,8 @@ reach it** — direct evidence for H1.
 | **Classification** | Confirmed Defect |
 | **Severity** | Medium |
 | **Category** | Data integrity / durability / availability |
-| **Disposition** | Open — Required Before Release |
-| **Release impact** | Does not block by itself; fix before relying on restart recovery |
+| **Disposition** | **Fixed — Awaiting Verification** (atomic writes + resilient loaders — see *Remediation Applied*) |
+| **Release impact** | Was a durability gap; fixed |
 | **Likelihood** | Medium — triggered by any unclean shutdown mid-write |
 
 **Location:** `aimos/runtime/state_store.py:60-61`, `aimos/runtime/golive.py:50-52`
@@ -1813,7 +1831,7 @@ the atomic helper uniformly is the clean fix. The SQLite journal and auth DB are
 |---|---|
 | **Classification** | Confirmed Defect (accessibility) |
 | **Severity** | Low |
-| **Disposition** | Scheduled Post-Release |
+| **Disposition** | **Verified** (`<html lang="en">` added; confirmed in-browser) |
 
 **Location:** `dashboard/index.html:1`
 
@@ -1852,6 +1870,8 @@ xfailed** with 17 new regression tests.
 | **H2** OTP logged/dropped | **Fixed — Awaiting Verification** | `email.py`/`sms.py`: no body in the no-SMTP log; `_dev_drop` gated behind `AIMOS_DEV_MAILDROP`, files `0600`. Also fixed the `_render_password_reset_email` `NameError` | `test_saas.py::TestOtpNotLeaked` (2) | — |
 | **H3** no auth throttle | **Fixed — Awaiting Verification** | `EmailLoginCode.attempts` column + burn-after-`MAX_OTP_ATTEMPTS` (5); per-IP fixed-window throttle on `/auth/*` (429) | `TestOtpBruteForceBounded`, `TestAuthThrottle` | — |
 | **M8** torn state writes | **Fixed — Awaiting Verification** | New `runtime/atomic_io.py` (temp+fsync+`os.replace`); `state_store.load` catches torn JSON; `golive` keeps a `.bak` and restores it | `test_runtime_state.py` (2), `test_golive.py` (2) | — |
+| **H4** no backups | **Fixed — Awaiting Verification** | New `scripts/backup_journal.py` (SQLite online-backup API + immediate hash-chain verify + retention + atomic `journal-latest` pointer); `restore_drill.sh` now **exits 1** when no backup exists | `test_backup_journal.py` (5) | CLI: verified snapshot created; drill exits 1 with no backup, 0 with one |
+| **H5** no CI | **Fixed — Awaiting Verification** | New `.github/workflows/ci.yml`: pytest + all three lints + GPL tripwire + backup/restore drill, plus a dashboard-build job; runs on every push/PR | (workflow) | Not yet exercised on the CI runner (no push observed in this session) |
 | **L5** missing `<html lang>` | **Verified** | `dashboard/index.html` → `<html lang="en">` | (static) | Chromium reports `html[lang]="en"` |
 
 **H1 note.** The loopback guard and loopback-default host close the *accidental*
@@ -1862,13 +1882,24 @@ localhost/an authenticated proxy?) — that product decision is unchanged by the
 **Files changed:** `aimos/runtime/serve.py`, `aimos/api/server.py`,
 `aimos/saas/email.py`, `aimos/saas/sms.py`, `aimos/saas/auth_service.py`,
 `aimos/saas/models.py`, `aimos/runtime/state_store.py`, `aimos/runtime/golive.py`,
-`aimos/runtime/atomic_io.py` (new), `dashboard/index.html`, and the four test files.
+`aimos/runtime/atomic_io.py` (new), `scripts/backup_journal.py` (new),
+`scripts/restore_drill.sh`, `.github/workflows/ci.yml` (new), `dashboard/index.html`,
+and the test files (`test_saas.py`, `test_serve.py`, `test_runtime_state.py`,
+`test_golive.py`, `test_backup_journal.py`).
 
-**Still open (unchanged recommendation):** H4 (backups) and H5 (CI) are
-release-required and were **not** implemented in this pass. M1–M7 (minus the
-`NameError` fixed opportunistically under H2) and L1–L4 remain as scheduled. A
-independent verification pass should re-run the C1/C2 checks and exercise the H1
-remote-block and H3 throttle from a real client before these are marked Verified.
+**Now closed:** all seven Critical/High/Medium blockers targeted (C1, C2, H1–H5,
+M8) plus L5. Suite 466 → **488 passed / 1 xfailed**.
+
+**Still open (not release-blocking):** the product decisions PD1–PD5 (notably PD1
+— the network-exposure model that finalises H1's disposition, and PD3 — GPL/M7
+before any distribution); the scheduling of the new backup script at the target
+RPO; the H3 schema migration on existing deployments (`email_login_codes` gains an
+`attempts` column and there is still no migration framework — a Group 4 item); and
+the remaining Mediums/Lows (M1–M7 except the H2 `NameError`, L1–L4). **An
+independent verification pass** — by someone other than the fix author — should
+re-run the C1/C2 checks and exercise the H1 remote-block, H3 throttle, and the CI
+workflow on the runner before these move from *Fixed — Awaiting Verification* to
+*Verified*.
 
 **Schema note (H3).** `EmailLoginCode.attempts` is a new column. The project still
 has no migration framework (a Group 4 item); on an existing deployment the

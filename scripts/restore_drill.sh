@@ -7,7 +7,10 @@ BACKUP="${1:-backups/journal-latest.sqlite}"
 SCRATCH="$(mktemp -d)"
 trap 'rm -rf "$SCRATCH"' EXIT
 if [[ ! -f "$BACKUP" ]]; then
-  echo "no backup at $BACKUP — nothing to drill (create one first)"; exit 0
+  # A drill with no backup is not a pass (audit finding H4). Create one with
+  # `python scripts/backup_journal.py` first.
+  echo "FAIL: no backup at $BACKUP — a drill with no backup is not a pass" >&2
+  exit 1
 fi
 cp "$BACKUP" "$SCRATCH/restored.sqlite"
 python -m aimos.journal.verify "$SCRATCH/restored.sqlite"
