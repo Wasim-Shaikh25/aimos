@@ -26,6 +26,17 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   exchange metadata badges in `Settings.jsx` so expected-off states are no longer
   shown in destructive red.
 
+
+### Added (REQ-20)
+- **REQ-20 in `specs/REQUIREMENTS_BACKLOG.md`** — guided UI to connect Binance and
+  other exchange platforms, at the operator's direct request. Grounded in a real
+  gap found by inspection: `Settings.jsx`'s exchange-key form is free-text with no
+  validation, and the Connections preflight screen reads from a completely
+  different credential source (`secrets.yaml`/env vars) than the one the Settings
+  UI writes to (`SettingsStore`) — a key added in the UI is invisible to the
+  connection-status screen until also duplicated into the legacy path. Not built
+  yet; full acceptance criteria in the backlog entry.
+
 ### Changed (single-user mode)
 - **Removed all SaaS/multi-tenant code**: the `aimos/saas` package, `config/saas.yaml`,
   the `saas` extra, and SaaS-specific tests/migrations are gone. AIMOS is now a
