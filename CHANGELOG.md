@@ -149,6 +149,12 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   `docker-compose.yml` mounts a separate `secrets` volume at `/app/secrets` so
   key material is outside `dashboard/dist`'s ancestry even when the runtime is
   deployed in a container.
+- **REQ-16 — real `OnchainProvider` for the dormant on-chain engine.** Added
+  `CoinMetricsCommunityProvider` that fetches `AdrActCnt` for the base asset and
+  `FlowInAllNtv` for a configurable stablecoin asset, with no API key required.
+  `config/observation.yaml` gains `onchain.enabled`/`provider`/`api_key` knobs and
+  `aimos/observation/runner.py` wires the provider into `OnchainEngine` at build
+  time.
 - **`PRODUCTION_READINESS_AUDIT.md`** — end-to-end product and production-readiness
   audit at commit `5fd1b88`. Audit-only; **no application source was modified**.
   18 findings (2 Critical, 5 High, 7 Medium, 4 Low); recommendation **CONTINUE — NO-GO**.

@@ -248,16 +248,23 @@ removed once folded into STATUS.md).
   21 dashboard screens.
 - **Priority:** Low-Medium. **Effort:** Medium.
 
-### REQ-16: Build a real `OnchainProvider` to un-gate the on-chain engine
+### [x] REQ-16: Build a real `OnchainProvider` to un-gate the on-chain engine
 
 - **Source:** `specs/STATUS.md` dormant list, sharpened by today's OpenBB research.
 - **Evidence:** `aimos/observation/onchain_engine.py` is real, tested, dormant code
   — it wants `active_addresses` and `stablecoin_inflow` time series and returns `[]`
   with no provider configured.
-- **Path:** a direct connector to a specific on-chain data API (Glassnode, Nansen,
-  Dune, etc.), **or** — if OpenBB's aggregation is specifically wanted — call it as
-  an isolated out-of-process service per REQ-11's rule, never imported into
-  `aimos/`.
+- **Decision:** add a direct connector to the Coin Metrics Community API; it requires
+  no API key, respects rate limits, and fails gracefully to `None` so the engine
+  stays dormant when the network or data is unavailable.
+- **Implementation:**
+  - Added `CoinMetricsCommunityProvider` to `aimos/data/onchain.py`.
+  - `config/observation.yaml` `onchain` section now has `enabled`, `provider`,
+    `api_key`, `stablecoin_asset` keys.
+  - `aimos/observation/runner.py` wires the configured provider into `OnchainEngine`
+    at construction.
+  - Added `tests/test_onchain_provider.py` covering parsing, failures, and runner
+    wiring.
 - **Priority:** Low (new scope, not a defect). **Effort:** Medium.
 - **Dependencies:** REQ-11 (copyleft policy) if OpenBB is the chosen path.
 

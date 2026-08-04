@@ -35,8 +35,9 @@ clean; import-linter 6/6.
 > migration (REQ-9), the backup scheduler runs hourly by default (REQ-12), the
 > network-exposure model is documented as loopback-only/proxy-or-SaaS (REQ-10),
 > and key material defaults to `~/.aimos/secrets` with a dedicated Docker secrets
-> volume (REQ-14). Remaining condition before live: an **independent verification
-> pass**.
+> volume (REQ-14). The dormant on-chain engine now has a Coin Metrics Community
+> API provider (REQ-16). Remaining condition before live: an **independent
+> verification pass**.
 
 ---
 
