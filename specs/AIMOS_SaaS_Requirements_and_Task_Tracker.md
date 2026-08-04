@@ -228,9 +228,16 @@ Legend: `[x]` completed · `[ ]` pending
 - [x] Email OTP login flow (`/auth/login`, `/auth/login/verify`).
 - [x] Removed public registration, Google/Apple OAuth, phone OTP, and
   forgot-password endpoints.
+- [x] Removed the underlying **service-layer code** for the above (`oauth.py`,
+  `sms.py`, and the corresponding `auth_service.py` functions and ORM models),
+  not just the routes — audit finding M1. Nothing dormant remains to audit or
+  accidentally re-expose; the only login flow is email + password + email OTP.
 - [x] JWT access/refresh tokens with rotation.
 - [x] Dashboard two-step login screen.
 - [x] Tests for admin login, OTP, refresh, logout.
+- [x] Documented [Brevo](https://www.brevo.com) as the recommended free-tier
+  SMTP relay for the login OTP (`specs/OPERATIONS.md`, `config/saas.yaml`) — no
+  code change, `email.py` already speaks plain SMTP.
 
 ### Settings store
 - [x] `SettingsStore` with Fernet-encrypted exchange secrets.

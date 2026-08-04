@@ -6,6 +6,39 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Removed / Changed (auth surface — operator decision on PD2)
+- **Deleted the retired auth surface entirely** (resolves audit finding M1;
+  operator's answer to PD2 for the auth-code half): `aimos/saas/oauth.py` and
+  `aimos/saas/sms.py` removed; `register_email_password`, `verify_email`,
+  `resend_email_verification`, `forgot_password`, `reset_password`,
+  `login_email_password`, `send_phone_verification`, `verify_phone_and_login`,
+  `login_with_google`, `login_with_apple`, and the dead `set_auth_cookies` removed
+  from `aimos/saas/auth_service.py` / `router.py`. Removed the now-unused
+  `UserIdentity`, `EmailVerificationCode`, `PasswordResetToken`,
+  `PhoneVerificationCode` ORM models and the `oauth`/`sms` config blocks from
+  `SaasConfig`. Dropped `Authlib` from `pyproject.toml`.
+- **The only login flow is now email + password + email OTP** — no phone/SMS
+  login, no Google/Apple OAuth, no self-service password reset. Nothing dormant
+  remains to audit or accidentally re-expose. `admin.phone` is kept as an
+  informational profile field only (returned by `/api/v2/me`), not a login path.
+  Verified: all 26 `test_saas.py` tests pass unchanged (the surface was fully
+  dead — zero test coverage of it existed), and a live end-to-end login
+  (password → OTP → token) still works after the removal.
+- **Documented [Brevo](https://www.brevo.com) as the recommended SMTP provider**
+  for the login OTP (`config/saas.yaml`, `specs/OPERATIONS.md`) — free-tier SMTP
+  relay, no code change since `email.py` already speaks plain SMTP.
+- Corrected a stale `specs/STATUS.md` line: runtime state (equity/balances/
+  broker/sim/ladder) already persists across restarts via `RuntimeStateStore`
+  (wired into `serve.py`'s boot/save loop) — it was listed as not-built.
+- **New `specs/REQUIREMENTS_BACKLOG.md`** — 19 prioritized requirements
+  consolidating the production-readiness audit's residual items (M2–M9, PD1/PD3/
+  PD5, Group 3/4 remediation items) with a competitive-feature review against
+  TradingAgents (Tauric Research) and the OpenBB Platform. Notably: REQ-1 (wire
+  the already-built, already-tested `risk/analytics.py` alpha/beta/VaR-ES to an
+  API endpoint and the dashboard — currently unreachable) and REQ-11 (formalize a
+  no-copyleft-in-`aimos/` dependency policy, since OpenBB is AGPLv3 and the
+  network-use clause would apply if it were ever imported directly).
+
 ### Security / Fixed (audit remediation)
 - **C1 (Critical) — SPA path traversal closed.** `runtime/serve.py` now resolves the
   requested path and serves a file only when it is inside `dashboard/dist`

@@ -199,14 +199,3 @@ def delete_exchange(
     """Remove exchange credentials."""
     _settings_store().delete_exchange(venue)
     return _settings_store().get_exchanges()
-
-
-# ---------------------------------------------------------------------------
-# Cookie helpers for SPA
-# ---------------------------------------------------------------------------
-
-
-def set_auth_cookies(response: Any, access_token: str, refresh_token: str) -> None:
-    """Attach secure cookies to a response (used by dashboard SPA callbacks)."""
-    response.set_cookie("access_token", access_token, httponly=True, samesite="lax")
-    response.set_cookie("refresh_token", refresh_token, httponly=True, samesite="lax")

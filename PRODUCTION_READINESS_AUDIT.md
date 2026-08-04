@@ -321,7 +321,7 @@ password change), not new views.
 | # | Question | Why it matters |
 |---|---|---|
 | PD1 | Is AIMOS ever exposed beyond localhost/VPN, or is "operator's machine only" a hard constraint? | Decides whether H1 is a blocker or an accepted risk with a documented network control. It does **not** affect C1, which is exploitable from the operator's own browser. |
-| PD2 | Should the vestigial multi-tenant schema be deleted or retained? | Retaining it keeps dead auth code and an org-header contract alive (M1). |
+| PD2 | Should the vestigial multi-tenant schema be deleted or retained? | **Auth-code half resolved:** operator chose deletion — `oauth.py`, `sms.py`, and every retired `auth_service.py` function/model are gone (finding M1). **Schema half still open:** `Organization`/`OrganizationMember` tables and the `X-Organization-Id` tenant-scoping middleware remain — the single admin still operates through exactly one org, and that contract is unchanged. |
 | PD3 | Is AIMOS ever distributed to third parties? | If yes, the two GPL-origin files must be clean-room rewritten first (M7). |
 | PD4 | Is SMTP mandatory in production, or is `state/maildrop` an accepted fallback? | Affects the H2 fix shape — maildrop may need to be removed entirely rather than gated. |
 | PD5 | Target RPO/RTO for the journal? | Sizes the G1 backup design. |
@@ -1211,11 +1211,12 @@ CI fails on `lint-imports` and the merge is blocked. Revert; confirm green.
 | **Classification** | Confirmed Defect + spec contradiction |
 | **Severity** | Medium |
 | **Category** | Architecture / maintainability / security surface |
-| **Disposition** | **Needs Product Decision** (PD2) |
-| **Release impact** | Does not block; resolve before it is re-exposed |
+| **Disposition** | **Fixed — Awaiting Verification** (PD2 resolved: operator chose deletion — email OTP is the only login flow. `oauth.py`, `sms.py`, and every retired `auth_service.py` function/ORM model deleted; `Authlib` dropped from `pyproject.toml`. All 26 `test_saas.py` tests pass unchanged, confirming the surface was truly dead.) |
+| **Release impact** | Was a maintainability/security-surface risk; removed |
 
-**Location:** `aimos/saas/auth_service.py:133-436`, `aimos/saas/oauth.py` (199 lines),
-`aimos/saas/sms.py` (111 lines), `aimos/saas/router.py:209-212`.
+**Location (historical — now deleted):** `aimos/saas/auth_service.py:133-436`,
+`aimos/saas/oauth.py` (199 lines), `aimos/saas/sms.py` (111 lines),
+`aimos/saas/router.py:209-212`.
 
 `specs/AIMOS_SaaS_Requirements_and_Task_Tracker.md` §8 marks as complete: "Removed
 public registration, Google/Apple OAuth, phone OTP, and forgot-password endpoints."
@@ -1507,6 +1508,12 @@ comparison on the not-found path.
 
 ## Remediation Plan
 
+> All release-blocking items in this plan (Groups 1–2, including H4/H5) are fixed
+> — see *Remediation Applied* above. The residual items in Groups 3–4, plus the
+> product decisions PD1–PD5 and a competitive-feature review, are now tracked as
+> individually scoped requirements in **`specs/REQUIREMENTS_BACKLOG.md`** rather
+> than duplicated here — this table is kept as the historical audit record.
+
 ### Group 1 — Immediate release blockers
 
 | Order | ID | Work | Depends on |
@@ -1537,11 +1544,11 @@ second and strictly after C1. H2 can proceed in parallel.
 
 | ID | Work |
 |---|---|
-| **M1** | Delete (or repair and test) the retired auth surface; drop `Authlib` — pending PD2 |
-| **M3** | Refresh token to `httpOnly; Secure` cookie; add CSP and security headers |
-| **M5** | Bound the `limit` query parameter |
-| **L3** | Sequential go-live gate prerequisites |
-| **L5** | Add `<html lang="en">`; run a full keyboard/contrast/screen-reader a11y audit |
+| **M1** | ~~Delete (or repair and test) the retired auth surface; drop `Authlib`~~ — **done**, PD2's auth-code half resolved (operator chose deletion; see finding above). The multi-tenant *schema* half of PD2 (`Organization`/`OrganizationMember` tables, tenant-scoping middleware) is intentionally retained and still in active use — see `specs/REQUIREMENTS_BACKLOG.md`. |
+| **M3** | Refresh token to `httpOnly; Secure` cookie; add CSP and security headers — tracked as REQ-17 |
+| **M5** | Bound the `limit` query parameter — tracked as REQ-3 |
+| **L3** | Sequential go-live gate prerequisites — tracked as REQ-8 |
+| **L5** | ~~Add `<html lang="en">`~~ — done. Full a11y audit tracked as REQ-15. |
 | **G5/G7** | Session listing + global revoke; alert on repeated failed logins |
 
 ### Group 4 — Long-term architectural

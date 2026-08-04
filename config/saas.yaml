@@ -15,8 +15,18 @@ refresh_token_expire_days: 30
 otp_expire_minutes: 10            # login one-time code lifetime
 
 # SMTP for sending the login OTP to the admin email (operator-supplied).
+# Recommended for operators with no existing mail infra: Brevo's free-tier SMTP
+# relay (300 emails/day free, no card required for that tier). Create an SMTP
+# key at https://app.brevo.com -> Settings -> SMTP & API, then:
+#   host: smtp-relay.brevo.com
+#   port: 587
+#   username: <your Brevo account login email>
+#   password: <the generated SMTP key>            (env: AIMOS__SAAS__SMTP__PASSWORD)
+#   from_address: <a sender verified in Brevo>
+# Any standard SMTP provider works the same way (Gmail app password, Postfix,
+# SES SMTP, etc.) — email.py speaks plain SMTP, no provider-specific code.
 smtp:
-  host: ""                        # e.g. smtp.gmail.com or a self-hosted Postfix
+  host: ""                        # e.g. smtp-relay.brevo.com
   port: 587
   username: ""
   password: ""                    # env override AIMOS__SAAS__SMTP__PASSWORD

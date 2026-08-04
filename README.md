@@ -77,6 +77,8 @@ LLM is a sensor/explainer only — **never** in the decision or control path (§
 | **[specs/TESTNET.md](specs/TESTNET.md)** | Validate the live path against Binance testnet (free) before real money. |
 | **[specs/ASSISTANT.md](specs/ASSISTANT.md)** | The read-only AI analyst — grounding, guardrails, providers. |
 | **[specs/STATUS.md](specs/STATUS.md)** | What's built, what's dormant, what's next. |
+| **[specs/REQUIREMENTS_BACKLOG.md](specs/REQUIREMENTS_BACKLOG.md)** | Robustness/security/ops backlog — audit residuals + competitive review, prioritized. |
+| **[PRODUCTION_READINESS_AUDIT.md](PRODUCTION_READINESS_AUDIT.md)** | Full security/product audit, findings, and remediation status. |
 | **[specs/MODELS.md](specs/MODELS.md)** | Model risk register. |
 | **[CHANGELOG.md](CHANGELOG.md)** | Chronological record — updated after every change. |
 | `CLAUDE.md` / `.cursor/rules/` | Assistant rules: read STATUS + CHANGELOG first, update the changelog after. |

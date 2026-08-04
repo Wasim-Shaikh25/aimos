@@ -98,11 +98,17 @@ Performance · Config · Agents · Settings.
 - **Live multi-venue executor** wired into the serve loop (router exists; routing
   live arb through it end-to-end is the next execution step).
 - **Streaming layer** for real 1m scalp + real cross-venue top-of-book + lead-lag.
-- **Persist runtime state** (equity/balances) across restarts (currently in-memory;
-  journal + go-live + heartbeat persist).
 - **TimescaleDB dashboards / retention** on the time-series it now writes.
 - The **12-month recorded dataset** download (P1-T6) and upstream **vendoring** at
   pinned SHAs (P15-T4).
+
+Runtime state (equity/balances/broker/sim/ladder) persists across restarts via
+`RuntimeStateStore` (`aimos/runtime/state_store.py`, atomic writes since the M8
+fix) — this was previously listed here as not-built; corrected.
+
+**Robustness/security/ops backlog:** see **`specs/REQUIREMENTS_BACKLOG.md`** —
+19 tracked requirements from the production-readiness audit's residual items and
+a competitive review against TradingAgents / OpenBB, prioritized into four tiers.
 
 ---
 
