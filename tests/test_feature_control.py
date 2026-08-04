@@ -47,6 +47,16 @@ def test_api_feature_toggle_is_confirm_gated_and_locks_live():
         assert bad.status_code == 400 and "LOCKED" in bad.json()["detail"]
 
 
+def test_api_features_includes_halted():
+    app = build_app(offline=True)
+    with TestClient(app) as c:
+        assert c.get("/api/features").json()["halted"] is False
+        c.post("/api/control/killswitch", json={"confirm": "CONFIRM"})
+        assert c.get("/api/features").json()["halted"] is True
+        c.post("/api/control/unhalt", json={"confirm": "CONFIRM"})
+        assert c.get("/api/features").json()["halted"] is False
+
+
 def test_telegram_enable_disable_features():
     from aimos.core.clock import LiveClock
     from aimos.telegram.bot import CommandRouter
