@@ -119,3 +119,24 @@ def test_golive_atomic_write_leaves_no_tmp(tmp_path):
     lad.mark("backtest_validated")
     leftovers = [p.name for p in path.parent.iterdir() if p.name.endswith(".tmp")]
     assert leftovers == []
+
+
+def test_golive_mark_rejects_out_of_order(tmp_path):
+    lad = GoLiveLadder(state_path=str(tmp_path / "gl.json"))
+    # cannot skip the first gate and mark scaling
+    res = lad.mark("scaling")
+    assert res["ok"] is False and "out of order" in res["error"]
+
+
+def test_golive_unmark_invalidates_subsequent_gates(tmp_path):
+    path = tmp_path / "gl.json"
+    lad = GoLiveLadder(state_path=str(path))
+    gate_ids = [g[0] for g in GATES]
+    for gid in gate_ids:
+        assert lad.mark(gid)["ok"] is True
+    # unmark the middle gate
+    lad.unmark("testnet_1wk")
+    st = GoLiveLadder(state_path=str(path)).status()
+    passed = {g["id"] for g in st["gates"] if g["status"] == "passed"}
+    # first two remain; testnet and everything after removed
+    assert passed == {"backtest_validated", "paper_4wk"}

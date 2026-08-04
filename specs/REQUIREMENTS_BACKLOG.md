@@ -61,7 +61,7 @@ removed once folded into STATUS.md).
 - **Priority:** High. **Effort:** Small (verification, not new code).
 - **Dependencies:** none — can run today.
 
-### REQ-3: Bound the `/api/decisions?limit=` query parameter
+### [x] REQ-3: Bound the `/api/decisions?limit=` query parameter
 
 - **Source:** `PRODUCTION_READINESS_AUDIT.md` finding M5.
 - **Evidence:** `aimos/api/server.py` passes `limit` straight into a SQL `LIMIT ?`
@@ -105,7 +105,7 @@ removed once folded into STATUS.md).
 - **Priority:** Medium. **Effort:** Small.
 - **Dependencies:** none.
 
-### REQ-6: `/healthz` and `/readyz` endpoints
+### [x] REQ-6: `/healthz` and `/readyz` endpoints
 
 - **Source:** `PRODUCTION_READINESS_AUDIT.md` finding M6 / gap G4.
 - **Evidence:** `docker-compose.yml` has `restart: unless-stopped` and a watchdog
@@ -128,7 +128,7 @@ removed once folded into STATUS.md).
 - **Priority:** Low-Medium. **Effort:** Small.
 - **Dependencies:** REQ-5 (auth log events are the natural trigger source).
 
-### REQ-8: Sequential go-live gate prerequisites
+### [x] REQ-8: Sequential go-live gate prerequisites
 
 - **Source:** `PRODUCTION_READINESS_AUDIT.md` finding L3.
 - **Evidence:** `GoLiveLadder.mark()` validates only that a gate ID exists —
@@ -167,7 +167,7 @@ removed once folded into STATUS.md).
   this answer.
 - **Output:** a decision recorded in `specs/OPERATIONS.md`.
 
-### REQ-11 / PD3: Copyleft dependency policy (GPL/AGPL)
+### [x] REQ-11 / PD3: Copyleft dependency policy (GPL/AGPL)
 
 - **Source:** `PRODUCTION_READINESS_AUDIT.md` finding M7, sharpened by today's
   OpenBB research.
@@ -254,7 +254,7 @@ removed once folded into STATUS.md).
   header added.
 - **Priority:** Low. **Effort:** Small.
 
-### REQ-18: Dummy bcrypt comparison on the login not-found path
+### [x] REQ-18: Dummy bcrypt comparison on the login not-found path
 
 - **Source:** `PRODUCTION_READINESS_AUDIT.md` finding L4 (accepted risk).
 - **Note:** low value target — one known admin account, not a discoverable user

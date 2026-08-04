@@ -413,7 +413,7 @@ Use `ta` library for indicator math; the evidence rules are:
 
 1. **ATR(14)** exported in meta for every bundle (used everywhere).
 2. **Compression:** `ATR(14)/ATR(100) < 0.6` → `"vol_compression"` (NEUTRAL — context for breakout plugins). strength = 1 − ratio/0.6.
-3. **Expansion:** ratio > 1.5 → `"vol_expansion"` (NEUTRAL). 
+3. **Expansion:** ratio > 1.5 → `"vol_expansion"` (NEUTRAL).
 4. **Volatility shock:** single-bar true range > 3× ATR(14) → `"vol_shock"` (NEUTRAL, meta contains bar direction). This evidence GATES risk (Layer 2 risk engine raises risk_score).
 
 ## 5.5 Liquidity Engine — `liquidity.py`
@@ -626,7 +626,7 @@ risk_score = clamp( 25·vol_component + 25·liquidity_component
   portfolio_component: from Layer 3 risk manager (current exposure, correlation of open positions)
 
 opportunity = clamp( 40·|p_up−0.5|·2·100·confidence + 25·regime_alignment
-             + 20·(coin_health/100)·100 + 15·rr_potential ) 
+             + 20·(coin_health/100)·100 + 15·rr_potential )
   regime_alignment: 100 if direction_bias agrees with regime trend direction, 50 ranging, 0 conflict
   rr_potential: distance to nearest opposing key level ÷ ATR, scaled ×25 capped 100
 ```
@@ -1526,6 +1526,7 @@ The single most battle-tested idea to steal: **Protections** — small stateful 
 - `MaxDrawdownGuard`: trailing 7d drawdown > threshold → risk_pct halved until recovery (complements our daily stop).
 Their dynamic pairlist chain (VolumePairList → SpreadFilter → AgeFilter → VolatilityFilter) independently validates our §16.1B filter design — adopt one missing piece: a **VolatilityFilter** (reject assets with ATR% > 15%/day from T1; untradeably wild).
 License stance (project is PRIVATE, non-distributed): GPL obligations trigger only on distribution, so the agent MAY copy/adapt Freqtrade source directly for these guards — but every borrowed block MUST carry a header `# GPL-3.0 origin: freqtrade@<sha>:<path> — REWRITE BEFORE ANY DISTRIBUTION` and be listed in `vendor/GPL_TRIPWIRE.md`. Hard rule: if AIMOS is ever sold, shared, offered as a service to others, or open-sourced, every file in GPL_TRIPWIRE.md must first be clean-room rewritten from the spec above. CI prints a reminder whenever that file is non-empty.
+**Standing dependency rule:** no copyleft (GPL/AGPL) package is ever imported into `aimos/`. If an AGPL capability such as OpenBB Platform is wanted, it is called as an isolated out-of-process service (same pattern as `services/research`) over its API; `scripts/check_gpl_tripwire.py` now also flags copyleft dependency pins in `pyproject.toml`.
 
 ## 21.2 Hummingbot — Market-Making Plugin P9 (Apache-2, vendorable)
 

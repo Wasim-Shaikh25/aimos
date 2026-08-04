@@ -72,6 +72,8 @@ Markets · Prices (multi-venue matrix) · Decision Anatomy · Mind-map · Engine
 Balances · Connections · Controls · Go-Live · Monitor · AI Analyst · Decisions ·
 Performance · Config · Agents · Settings.
 - Risk analytics (`/api/risk`) live on the **Positions & Risk** stress panel and **Performance** alpha/beta tiles (REQ-1).
+- Go-Live ladder enforces sequential gate sign-off (REQ-8).
+- Public `/healthz` and `/readyz` probes are live, with `docker-compose.yml` healthcheck wired (REQ-6).
 
 ---
 
