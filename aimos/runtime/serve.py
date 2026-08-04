@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import os
 from contextlib import asynccontextmanager
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -50,6 +50,13 @@ from aimos.telegram.sink import TelegramSink
 from aimos.execution.risk_manager import RiskState
 from aimos.runtime.pipeline import PipelineOrchestrator
 from aimos.runtime.watchdog import Heartbeat
+from aimos.risk.analytics_runner import compute_risk_report
+
+
+try:
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+except Exception:  # pragma: no cover - apscheduler is a runtime optional dep
+    AsyncIOScheduler = None
 
 log = structlog.get_logger(__name__)
 DIST = Path(__file__).resolve().parents[2] / "dashboard" / "dist"
@@ -63,6 +70,7 @@ def build_app(offline: Optional[bool] = None):
     features = params.features.model_dump()
     paper = params.paper.model_dump()
     costs_cfg = params.costs.model_dump()
+    primary_venue = paper["data_exchange"]
     live_data = features["live_data"] if offline is None else (not offline)
     # per-tenant journal path when SaaS is enabled; single-user journal_path otherwise
     jpath = tenant_journal_path(org_id, params)
@@ -124,6 +132,7 @@ def build_app(offline: Optional[bool] = None):
         "tick": 0,
         "features": features,  # mutable — the loop reads this so runtime toggles apply
         "monitor": {},         # latest self-test/coverage report (feature monitor agent)
+        "risk_report": {},     # cached daily risk-analytics report
     }
 
     # Restore previous broker/sim/curve state if a snapshot exists.
@@ -265,6 +274,27 @@ def build_app(offline: Optional[bool] = None):
                 log.exception("serve_loop_error")
             await asyncio.sleep(float(paper["loop_seconds"]))
 
+    def _compute_risk_report() -> dict:
+        """Compute the VaR/ES + alpha/beta + factor-decomposition report."""
+        try:
+            report = compute_risk_report(
+                equity=holder["equity"],
+                params=params,
+                data_source=src(primary_venue).fetch,
+                universe=holder["universe"],
+                clock=clock,
+            )
+            holder["risk_report"] = report
+            log.info("risk_analytics_updated", sample_size=report.get("sample_size"))
+            return report
+        except Exception:  # noqa: BLE001 — analytics must never kill the loop
+            log.exception("risk_analytics_error")
+            return holder.get("risk_report", {})
+
+    async def _risk_job() -> None:
+        """APScheduler wrapper that runs the heavy analytics off the event loop."""
+        await asyncio.to_thread(_compute_risk_report)
+
     async def monitor_loop() -> None:
         """Run the feature monitor on an interval: force safe coverage, probe every
         feature, publish the report to /api/monitor and ``state/monitor_report.json``."""
@@ -324,6 +354,25 @@ def build_app(offline: Optional[bool] = None):
         tg_task = asyncio.create_task(telegram_inbound())
         mon_task = asyncio.create_task(monitor_loop())
         stream_task = asyncio.create_task(stream_loop())
+
+        # APScheduler daily risk-analytics job (REQ-1).  Off when apscheduler is not
+        # installed; the /api/risk endpoint still computes on demand if empty.
+        scheduler = None
+        if AsyncIOScheduler is not None:
+            risk_cfg = params.model_dump().get("risk", {}) or {}
+            if bool(risk_cfg.get("enabled", True)):
+                scheduler = AsyncIOScheduler()
+                scheduler.add_job(
+                    _risk_job, "interval",
+                    seconds=float(risk_cfg.get("interval_seconds", 86400)),
+                    next_run_time=datetime.now(timezone.utc),
+                    id="risk_analytics",
+                    replace_existing=True,
+                )
+                scheduler.start()
+                log.info("risk_analytics_scheduler_started",
+                         interval_seconds=float(risk_cfg.get("interval_seconds", 86400)))
+
         log.info("serve_started", live_data=live_data, dashboard=DIST.exists(),
                  universe=holder["universe"].source, symbols=len(holder["universe"].selected))
         yield
@@ -331,6 +380,8 @@ def build_app(offline: Optional[bool] = None):
         tg_task.cancel()
         mon_task.cancel()
         stream_task.cancel()
+        if scheduler is not None:
+            scheduler.shutdown()
         ts_store.close()
 
     state = AppState(
@@ -360,6 +411,8 @@ def build_app(offline: Optional[bool] = None):
         golive_setter=lambda gate, passed: ladder.mark(gate) if passed else ladder.unmark(gate),
         monitor_provider=lambda: holder["monitor"] or {"features": [], "summary": {}, "coverage_pct": 0.0,
                                                        "note": "monitor disabled — set monitor.enabled: true"},
+        risk_provider=lambda: holder.get("risk_report", {}),
+        risk_analyzer=_compute_risk_report,
         assistant=assistant,
     )
     app = create_app(state)

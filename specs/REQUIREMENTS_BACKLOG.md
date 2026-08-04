@@ -19,7 +19,7 @@ removed once folded into STATUS.md).
 
 ## Tier 1 — finish what's already built (highest value, lowest effort)
 
-### REQ-1: Wire `aimos/risk/analytics.py` to an API endpoint and the dashboard
+### [x] REQ-1: Wire `aimos/risk/analytics.py` to an API endpoint and the dashboard
 
 - **Source:** competitive research (TradingAgents tracks "alpha vs. SPY"; AIMOS's
   own `specs/ARCHITECTURE.md` §24.3/§24.4 specifies the same thing against BTC + an

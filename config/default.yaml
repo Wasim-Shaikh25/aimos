@@ -238,6 +238,13 @@ monitor:
   force_coverage: true              # enable cross_exchange + scalp once, to exercise them
   interval_seconds: 20              # how often to re-probe and republish the report
 
+# Risk analytics (VaR/ES, alpha/beta, BTC-beta factor split) — cached daily (REQ-1)
+risk:
+  enabled: true                   # env `AIMOS__RISK__ENABLED=false` to disable
+  interval_seconds: 86400         # daily recompute; env `AIMOS__RISK__INTERVAL_SECONDS`
+  timeframe: ""                   # fallback to `paper.timeframe` when empty
+  min_samples: 30                 # minimum equity-return samples before computing metrics
+
 # Read-only AI analyst (specs/ASSISTANT.md) — answers questions and writes reports
 # grounded in the journal + metrics. LLM is a sensor/explainer only (§15.3): it
 # never trades, flips flags, or edits config. Off unless enabled + ANTHROPIC_API_KEY.

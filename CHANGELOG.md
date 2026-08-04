@@ -71,6 +71,18 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   an independent verification pass + product decisions PD1–PD5).
 
 ### Added
+- **REQ-1 — wired `aimos/risk/analytics.py` to a live endpoint and the dashboard.**
+  New `aimos/risk/analytics_runner.py` fetches BTC + equal-weight T1-basket returns,
+  aligns them with the equity curve, and computes VaR/ES (95%/99%), alpha/beta + t-stat
+  vs both benchmarks, and the BTC-beta / idiosyncratic factor split. A daily
+  APScheduler job in `runtime/serve.py` caches the report; `GET /api/risk` serves it
+  (and computes on demand when empty). `PositionsRisk.jsx` renders the stress panel
+  and `Performance.jsx` shows alpha/beta attribution. Config added to `config/default.yaml`
+  (`risk.enabled`, `interval_seconds`, `timeframe`, `min_samples`); tests in
+  `tests/test_risk_analytics_api.py`.
+- **Fixed `dashboard/src/components/EquityChart.jsx` for `lightweight-charts` v5.**
+  Replaced the removed `chart.addLineSeries()` with `chart.addSeries(LineSeries, {...})`
+  so the **Performance** screen mounts and the new alpha/beta tiles are reachable.
 - **`PRODUCTION_READINESS_AUDIT.md`** — end-to-end product and production-readiness
   audit at commit `5fd1b88`. Audit-only; **no application source was modified**.
   18 findings (2 Critical, 5 High, 7 Medium, 4 Low); recommendation **CONTINUE — NO-GO**.
