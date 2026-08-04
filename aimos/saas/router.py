@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
@@ -42,7 +42,6 @@ class RefreshRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
     user_id: str
     organization_id: str
@@ -93,9 +92,24 @@ def _tracker_from(request: Request) -> auth_service.FailedLoginTracker:
 def _token_response(result: auth_service.AuthResult) -> TokenResponse:
     return TokenResponse(
         access_token=result.access_token,
-        refresh_token=result.refresh_token,
         user_id=result.user.id,
         organization_id=result.organization.id if result.organization else "",
+    )
+
+
+def _set_refresh_cookie(
+    response: Response, refresh_token: str, secure: bool = False, max_age: int = 30 * 86400
+) -> None:
+    """Store the refresh token in an httpOnly Secure SameSite=Strict cookie."""
+    # secure is set from request.url.scheme so local HTTP tests still work.
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=secure,
+        samesite="strict",
+        max_age=max_age,
+        path="/",
     )
 
 
@@ -131,7 +145,12 @@ def login(req: LoginRequest, request: Request, session: Session = Depends(get_db
 
 
 @auth_router.post("/login/verify", response_model=TokenResponse)
-def login_verify(req: LoginVerifyRequest, request: Request, session: Session = Depends(get_db)):
+def login_verify(
+    req: LoginVerifyRequest,
+    request: Request,
+    response: Response,
+    session: Session = Depends(get_db),
+):
     """Step 2: verify the email OTP and issue tokens."""
     info = _client_info(request)
     tracker = _tracker_from(request)
@@ -147,6 +166,7 @@ def login_verify(req: LoginVerifyRequest, request: Request, session: Session = D
             success=True,
             **info,
         )
+        _set_refresh_cookie(response, result.refresh_token, secure=request.url.scheme == "https")
         return _token_response(result)
     except auth_service.AuthError as exc:
         tracker.record(req.email, success=False, message=f"Failed OTP verify for {req.email}")
@@ -162,10 +182,24 @@ def login_verify(req: LoginVerifyRequest, request: Request, session: Session = D
 
 
 @auth_router.post("/refresh", response_model=TokenResponse)
-def refresh(req: RefreshRequest, request: Request, session: Session = Depends(get_db)):
+def refresh(
+    request: Request,
+    response: Response,
+    req: RefreshRequest | None = None,
+    session: Session = Depends(get_db),
+):
+    """Issue a new access token; the refresh token may be supplied in the body or
+    the httpOnly cookie (cookie is the production path; body is kept for tests).
+    """
     info = _client_info(request)
+    refresh_token = (req and req.refresh_token) or request.cookies.get("refresh_token")
+    if not refresh_token:
+        auth_service.audit_auth_event(
+            session, "refresh", success=False, detail="missing refresh token", **info
+        )
+        raise auth_service.AuthError("Missing refresh token")
     try:
-        access, refresh, user_id = auth_service.refresh_access_token(session, req.refresh_token)
+        access, new_refresh, user_id = auth_service.refresh_access_token(session, refresh_token)
         auth_service.audit_auth_event(
             session, "refresh", user_id=user_id, success=True, **info
         )
@@ -176,9 +210,9 @@ def refresh(req: RefreshRequest, request: Request, session: Session = Depends(ge
             .order_by(Organization.created_at.asc())
             .first()
         )
+        _set_refresh_cookie(response, new_refresh, secure=request.url.scheme == "https")
         return TokenResponse(
             access_token=access,
-            refresh_token=refresh,
             user_id=user_id,
             organization_id=org.id if org else "",
         )
@@ -190,25 +224,34 @@ def refresh(req: RefreshRequest, request: Request, session: Session = Depends(ge
 
 
 @auth_router.post("/logout")
-def logout(req: RefreshRequest, request: Request, session: Session = Depends(get_db)):
+def logout(
+    request: Request,
+    response: Response,
+    req: RefreshRequest | None = None,
+    session: Session = Depends(get_db),
+):
+    """Revoke the current refresh token and clear its httpOnly cookie."""
     info = _client_info(request)
+    refresh_token = (req and req.refresh_token) or request.cookies.get("refresh_token")
     user_id: str | None = None
-    try:
-        payload = decode_token(req.refresh_token, token_type="refresh")
-        user_id = payload.get("sub")
-    except Exception:  # noqa: BLE001 — logout audit is best-effort
-        pass
-    try:
-        auth_service.revoke_refresh_token(session, req.refresh_token)
-        auth_service.audit_auth_event(
-            session, "logout", user_id=user_id, success=True, **info
-        )
-        return {"ok": True}
-    except auth_service.AuthError as exc:
-        auth_service.audit_auth_event(
-            session, "logout", user_id=user_id, success=False, detail=str(exc.detail), **info
-        )
-        raise
+    if refresh_token:
+        try:
+            payload = decode_token(refresh_token, token_type="refresh")
+            user_id = payload.get("sub")
+        except Exception:  # noqa: BLE001 — logout audit is best-effort
+            pass
+        try:
+            auth_service.revoke_refresh_token(session, refresh_token)
+            auth_service.audit_auth_event(
+                session, "logout", user_id=user_id, success=True, **info
+            )
+        except auth_service.AuthError as exc:
+            auth_service.audit_auth_event(
+                session, "logout", user_id=user_id, success=False, detail=str(exc.detail), **info
+            )
+            raise
+    response.delete_cookie(key="refresh_token", path="/")
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------

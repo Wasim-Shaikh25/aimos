@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -218,6 +218,29 @@ def create_app(state: AppState) -> FastAPI:
                 )
         return await call_next(request)
 
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        """Add a default Content-Security-Policy and other hardening headers to
+        every response (audit finding G3/G7). The policy allows inline styles
+        because the dashboard uses element-level styles, but blocks external
+        scripts, frames, and object/embed sources."""
+        response: Response = await call_next(request)
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "font-src 'self'; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self';"
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
     @app.get("/api/v2/status")
     def status():
         """Public status endpoint so the dashboard can detect SaaS mode."""
@@ -406,6 +429,17 @@ def create_app(state: AppState) -> FastAPI:
                                 detail="assistant disabled (set assistant.enabled + ANTHROPIC_API_KEY)")
         try:
             return state.assistant.report(timeframe)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=502, detail=f"assistant error: {exc}")
+
+    @app.get("/api/assistant/debate/{decision_id}")
+    def assistant_debate(decision_id: str):
+        # post-hoc case-for / case-against narrative for a completed decision (REQ-19)
+        if state.assistant is None:
+            raise HTTPException(status_code=503,
+                                detail="assistant disabled (set assistant.enabled + ANTHROPIC_API_KEY)")
+        try:
+            return state.assistant.debate(decision_id)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=502, detail=f"assistant error: {exc}")
 

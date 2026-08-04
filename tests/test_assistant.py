@@ -37,6 +37,7 @@ def _providers():
         "golive": lambda: {"percent": 0},
         "strategies": lambda: {"strategies": [{"name": "TrendFollowing", "chosen": 3}]},
         "equity": lambda: [10000.0, 10012.5],
+        "graph": lambda did: {"nodes": [{"id": did, "layer": "decision", "label": "BTC long"}], "edges": []},
     }
 
 
@@ -106,6 +107,27 @@ def test_report_uses_timeframe():
     assert out["timeframe"] == "7d"
     assert out["report"] == "report body"
     assert "last 7d" in seen["user"]
+
+
+def test_debate_is_two_sided_and_grounded():
+    seen = {}
+
+    def fake_caller(system, user, **kw):
+        seen["user"] = user
+        seen["system"] = system
+        return "Case for: X\nCase against: Y"
+
+    a = Assistant(_providers(), caller=fake_caller)
+    out = a.debate("d-123")
+    assert out["decision_id"] == "d-123"
+    assert out["narrative"] == "Case for: X\nCase against: Y"
+    assert out["grounded_on"]["decision_id"] == "d-123"
+    # decision graph and grounding evidence are both in the prompt
+    assert "d-123" in seen["user"]
+    assert "Case for" in seen["user"]
+    assert "post-hoc" in seen["user"]
+    # read-only role is in system prompt
+    assert "READ-ONLY" in seen["system"]
 
 
 def test_empty_question_no_llm_call():
@@ -185,6 +207,16 @@ def test_api_answers_and_reports():
     assert c.get("/api/assistant").json() == {"enabled": True}
     assert c.post("/api/assistant", json={"question": "why"}).json()["answer"] == "A:why"
     assert c.get("/api/assistant/report", params={"timeframe": "7d"}).json()["report"] == "R:7d"
+
+
+def test_api_debate():
+    class Fake:
+        def debate(self, decision_id):
+            return {"decision_id": decision_id, "narrative": "Case for... Case against..."}
+    c = _client(Fake())
+    out = c.get("/api/assistant/debate/d-42").json()
+    assert out["decision_id"] == "d-42"
+    assert "Case for" in out["narrative"]
 
 
 # -- Telegram ----------------------------------------------------------------

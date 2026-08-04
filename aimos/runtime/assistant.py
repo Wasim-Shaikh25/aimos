@@ -58,6 +58,15 @@ _REPORT_Q = (
 )
 
 
+_DEBATE_Q = (
+    "Write a two-sided post-hoc explanation for decision {decision_id}.\n"
+    "Provide a short 'Case for' the decision (why the evidence at the time "
+    "supported it) and a 'Case against' (what could invalidate it, what risks "
+    "were present, or what the outcome showed). Ground every claim in the "
+    "evidence. Label this as a post-hoc narrative only — it is not a trading signal."
+)
+
+
 class AssistantDisabled(RuntimeError):
     """The analyst is off or has no API key — callers should surface a 503."""
 
@@ -224,6 +233,16 @@ class Assistant:
         g = build_grounding(self.providers, recent=max(self.recent, 200), timeframe=timeframe)
         text = self._llm(_user_prompt(_REPORT_Q.format(tf=timeframe), g))
         return {"report": text, "timeframe": timeframe, "grounded_on": _grounding_summary(g)}
+
+    def debate(self, decision_id: str) -> dict:
+        """Post-hoc case-for / case-against narrative for a completed decision."""
+        graph = _call(self.providers.get("graph"), decision_id) or {"nodes": [], "edges": []}
+        g = build_grounding(self.providers, recent=max(self.recent, 100))
+        g["decision_graph"] = graph
+        text = self._llm(_user_prompt(_DEBATE_Q.format(decision_id=decision_id), g))
+        summary = _grounding_summary(g)
+        summary["decision_id"] = decision_id
+        return {"decision_id": decision_id, "narrative": text, "grounded_on": summary}
 
     def _model(self) -> str:
         if str(self.cfg.get("provider", "anthropic")).lower() == "openai":

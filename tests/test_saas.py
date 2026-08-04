@@ -103,8 +103,13 @@ class TestAdminLogin:
         assert resp.status_code == 200
         data = resp.json()
         assert "access_token" in data
-        assert "refresh_token" in data
+        assert "refresh_token" not in data
         assert data["user_id"] == "admin-test"
+        # Refresh token is returned in an httpOnly cookie.
+        set_cookie = resp.headers.get("set-cookie", "")
+        assert "refresh_token" in set_cookie
+        assert "HttpOnly" in set_cookie
+        assert "SameSite=strict" in set_cookie or "SameSite=Strict" in set_cookie
 
     def test_me_requires_auth(self, client):
         resp = client.get("/api/v2/me")
@@ -118,18 +123,19 @@ class TestAdminLogin:
         assert resp.json()["email"] == "admin@example.com"
 
     def test_refresh_rotates_token(self, client, admin_tokens):
-        refresh = admin_tokens["refresh_token"]
-        resp = client.post("/auth/refresh", json={"refresh_token": refresh})
+        # The fixture left the refresh token in the httpOnly cookie.
+        resp = client.post("/auth/refresh")
         assert resp.status_code == 200
         data = resp.json()
         assert data["access_token"] != admin_tokens["access_token"]
-        assert data["refresh_token"] != refresh
+        assert "refresh_token" not in data
+        assert "refresh_token" in resp.headers.get("set-cookie", "")
 
     def test_logout_revokes_refresh_token(self, client, admin_tokens):
-        refresh = admin_tokens["refresh_token"]
-        resp = client.post("/auth/logout", json={"refresh_token": refresh})
+        resp = client.post("/auth/logout")
         assert resp.status_code == 200
-        resp2 = client.post("/auth/refresh", json={"refresh_token": refresh})
+        # After logout the httpOnly cookie is cleared and the refresh token is revoked.
+        resp2 = client.post("/auth/refresh")
         assert resp2.status_code == 401
 
 
@@ -373,7 +379,7 @@ class TestPasswordChange:
         assert resp.json()["ok"] is True
 
         # Old refresh token is revoked.
-        resp = client.post("/auth/refresh", json={"refresh_token": admin_tokens["refresh_token"]})
+        resp = client.post("/auth/refresh")
         assert resp.status_code == 401
 
         # Login with the new password works; old password fails.
@@ -433,11 +439,10 @@ class TestAuthAudit:
         }, headers={"Authorization": f"Bearer {token}"})
         client.delete("/api/v2/settings/exchange/binance", headers={"Authorization": f"Bearer {token}"})
 
-        # Refresh, then logout with the new refresh token.
-        resp = client.post("/auth/refresh", json={"refresh_token": admin_tokens["refresh_token"]})
+        # Refresh, then logout with the new refresh token (both via httpOnly cookie).
+        resp = client.post("/auth/refresh")
         assert resp.status_code == 200
-        new_refresh = resp.json()["refresh_token"]
-        client.post("/auth/logout", json={"refresh_token": new_refresh})
+        client.post("/auth/logout")
 
         # Change password (revokes all refresh tokens; access token is still valid).
         client.post("/api/v2/me/password", json={
@@ -485,3 +490,12 @@ class TestFailedLoginAlerts:
         # One more failure should not trigger an alert (streak was cleared).
         client.post("/auth/login", json={"email": "admin@example.com", "password": "wrong"})
         assert len(captured) == 0
+
+
+class TestSecurityHeaders:
+    def test_csp_and_hardening_headers_present(self, client):
+        resp = client.get("/api/v2/status")
+        assert resp.status_code == 200
+        assert "Content-Security-Policy" in resp.headers
+        assert "default-src 'self'" in resp.headers["Content-Security-Policy"]
+        assert resp.headers["X-Frame-Options"] == "DENY"
