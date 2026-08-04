@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { createChart } from 'lightweight-charts';
+import { createChart, LineSeries } from 'lightweight-charts';
 
 export default function EquityChart({ data }) {
   const chartRef = useRef(null);
@@ -17,7 +17,7 @@ export default function EquityChart({ data }) {
     });
     chartRef.current = chart;
 
-    const line = chart.addLineSeries({ color: '#22c55e', lineWidth: 2 });
+    const line = chart.addSeries(LineSeries, { color: '#22c55e', lineWidth: 2 });
     const points = data.map((v, i) => ({ time: i, value: Number(v) || 0 }));
     line.setData(points);
     chart.timeScale().fitContent();
