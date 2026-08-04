@@ -31,7 +31,7 @@ def test_migrations_create_attempts_column(tmp_path, downgrade_first):
         repo_root = Path(__file__).resolve().parents[1]
         cfg = Config(str(repo_root / "alembic.ini"))
         cfg.set_main_option("sqlalchemy.url", url)
-        command.downgrade(cfg, "-1")
+        command.downgrade(cfg, "9e39a21ad11b")
         assert "attempts" not in _table_cols(db)
         command.upgrade(cfg, "head")
         assert "attempts" in _table_cols(db)

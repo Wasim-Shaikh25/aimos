@@ -19,7 +19,7 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import structlog
 
@@ -43,7 +43,7 @@ from aimos.execution.broker.paper import PaperBroker
 from aimos.execution.position_sizer import SizingInputs
 from aimos.journal.backup import backup_journal
 from aimos.journal.journal import Journal
-from aimos.runtime.state_store import RuntimeStateStore, build_snapshot
+from aimos.runtime.state_store import ControlStore, RuntimeStateStore, build_snapshot
 from aimos.saas.auth_service import FailedLoginTracker
 from aimos.saas.config_tenant import load_params_for_org
 from aimos.saas.journal_tenant import tenant_journal_path
@@ -64,8 +64,105 @@ except Exception:  # pragma: no cover - apscheduler is a runtime optional dep
 log = structlog.get_logger(__name__)
 DIST = Path(__file__).resolve().parents[2] / "dashboard" / "dist"
 
+_PROCESS_MODES = ("combined", "api", "loop")
 
-def build_app(offline: Optional[bool] = None):
+
+def _process_mode() -> str:
+    """How this process participates in the runtime.
+
+    * ``combined`` (default) — API + trading loop in one process (legacy/dev).
+    * ``api``                — API only; state is rehydrated from RuntimeStateStore.
+    * ``loop``               — trading loop only; no HTTP server.
+    """
+    return os.environ.get("AIMOS_PROCESS", "combined").lower().strip() or "combined"
+
+
+def _apply_controls(components: dict[str, Any], controls: dict[str, Any]) -> None:
+    """Apply operator controls from the cross-process control channel."""
+    if not controls:
+        return
+    orch = components["orch"]
+    params = components["params"]
+    _rebuild_orch = components["_rebuild_orch"]
+    if controls.get("halted") and not orch.state.halted:
+        orch.halt()
+    if not controls.get("halted") and orch.state.halted:
+        orch.unhalt()
+    if controls.get("global_pause") and not orch.state.global_pause:
+        orch.pause()
+    if not controls.get("global_pause") and orch.state.global_pause:
+        orch.resume()
+    if "paused_assets" in controls:
+        orch.state.paused_assets = set(controls["paused_assets"])
+    if "features" in controls:
+        current = params.features.model_dump()
+        if current != controls["features"]:
+            params.features = params.features.__class__(**controls["features"])
+            _rebuild_orch()
+
+
+def _rehydrate_from_snapshot(components: dict[str, Any],
+                             snapshot: dict[str, Any],
+                             controls: dict[str, Any]) -> None:
+    """Reload a saved runtime snapshot into the local API process objects."""
+    if not snapshot and not controls:
+        return
+    holder = components["holder"]
+    if snapshot.get("broker"):
+        try:
+            components["broker"].load_state(snapshot["broker"])
+        except Exception:  # noqa: BLE001
+            log.exception("broker_rehydrate_failed")
+    if snapshot.get("sim"):
+        try:
+            components["sim"].load_state(snapshot["sim"])
+        except Exception:  # noqa: BLE001
+            log.exception("sim_rehydrate_failed")
+    if snapshot.get("equity"):
+        holder["equity"] = snapshot["equity"]
+    view = snapshot.get("view", {})
+    if view:
+        for key in ("latest", "evidence", "venue_state", "prices", "candles_view",
+                    "monitor", "risk_report", "connections", "chosen"):
+            if key in view:
+                holder.setdefault(key, {}).clear()
+                holder[key].update(view[key])
+        if "matrix" in view:
+            holder.setdefault("matrix_view", {}).clear()
+            holder["matrix_view"].update(view["matrix"])
+        holder["updated"] = view.get("updated")
+        holder["tick"] = view.get("tick", holder["tick"])
+    _apply_controls(components, controls)
+
+
+def _build_view(holder: dict[str, Any], connections: dict[str, Any],
+                params: Any, paper: dict[str, Any]) -> dict[str, Any]:
+    """Serializable view of the loop state for the API process (REQ-13)."""
+    candles_view = {
+        base: _candles_payload(holder, base)
+        for base in holder.get("candles", {})
+    }
+    return {
+        "latest": dict(holder.get("latest", {})),
+        "evidence": dict(holder.get("evidence", {})),
+        "venue_state": dict(holder.get("venue_state", {})),
+        "prices": dict(holder.get("prices", {})),
+        "candles_view": dict(candles_view),
+        "matrix": _universe_payload(holder["universe"], paper, holder),
+        "connections": {
+            "venues": list(connections.values()),
+            "any_live": any(c.get("connected") for c in connections.values()),
+        },
+        "risk_report": dict(holder.get("risk_report", {})),
+        "monitor": dict(holder.get("monitor", {})),
+        "updated": holder.get("updated"),
+        "tick": holder.get("tick", 0),
+        "chosen": dict(holder.get("chosen", {})),
+    }
+
+
+def _build_components(offline: Optional[bool] = None) -> dict[str, Any]:
+    """Construct the shared runtime components used by the API, the loop, or both."""
     Path("state").mkdir(exist_ok=True)
     clock = LiveClock()
     org_id = os.environ.get("AIMOS_RUNTIME_ORG_ID", "local")
@@ -76,22 +173,21 @@ def build_app(offline: Optional[bool] = None):
     primary_venue = paper["data_exchange"]
     live_data = features["live_data"] if offline is None else (not offline)
     health_cfg = params.model_dump().get("health", {}) or {}
-    # per-tenant journal path when SaaS is enabled; single-user journal_path otherwise
     jpath = tenant_journal_path(org_id, params)
-    # Keep runtime state beside the journal so persistent deployments keep both
-    # together. An in-memory journal skips state persistence (tests/dev).
     state_dir: Optional[Path] = None
     if jpath != ":memory:":
         state_dir = Path(jpath).parent / f"tenant_{org_id}_state"
     state_store = RuntimeStateStore(org_id, state_dir=state_dir)
+    control_store = ControlStore(org_id, state_dir=state_dir)
     saved_state = state_store.load()
-    orch = PipelineOrchestrator(params, clock=clock, journal=Journal(jpath))
+    controls = control_store.load()
+    halt_file = str(state_dir / "RUNTIME_HALT") if state_dir else "RUNTIME_HALT"
+    orch = PipelineOrchestrator(params, clock=clock, journal=Journal(jpath), halt_file=halt_file)
     broker = PaperBroker(float(paper["starting_equity_usdt"]), cost_mod.from_config(costs_cfg),
                          venue=paper["data_exchange"])
     heartbeat = Heartbeat("state/heartbeat", clock=clock)
 
     def _readyz_payload() -> dict:
-        """Readiness: journal writable + loop heartbeat fresh (REQ-6)."""
         stale_after = float(health_cfg.get("heartbeat_stale_seconds", 30))
         last = heartbeat.last_beat()
         age = float("inf") if last is None else (clock.now() - last).total_seconds()
@@ -111,7 +207,7 @@ def build_app(offline: Optional[bool] = None):
         }
 
     caps = _caps(params)
-    sources: dict = {}  # venue -> DataSource (lazy, per-venue)
+    sources: dict = {}
     streaming_cfg = params.model_dump().get("streaming", {})
     stream_feed = StreamFeed(
         book_window_minutes=float(streaming_cfg.get("book_window_minutes", 1.0)),
@@ -125,54 +221,50 @@ def build_app(offline: Optional[bool] = None):
             sources[venue] = _make_source(live_data, venue, seed_salt=_venue_seed(venue))
         return sources[venue]
 
-    # Telegram: same process as the dashboard + loop (one deployable). Dry-run
-    # (logs, never sends) when no token, so this is safe with the flag off too.
     sink = None
     if features.get("telegram_enabled"):
-        sink = TelegramSink()  # token/allowed-ids from env
-        sink.attach(orch.bus)  # → trade-opened / risk-alert messages
+        sink = TelegramSink()
+        sink.attach(orch.bus)
         sink.send("🤖 AIMOS paper server started — analyzing the universe.")
     status_every = int(paper.get("telegram_status_ticks", 0))
 
     universe = _build_universe(params, live_data)
-    # simulated per-venue balances + two-leg arb ledger, seeded across ALL venues
-    # the universe spans (not just cross_venues) so arb flows are all accounted (§4)
     from aimos.execution.broker.multivenue import MultiVenueSim
     analysis_venues = sorted({v for row in universe.matrix().values() for v in row}) \
         or [paper["data_exchange"]]
     sim = MultiVenueSim(venues=analysis_venues,
                         start_usdt_total=float(paper["starting_equity_usdt"]),
                         taker_bps=float(costs_cfg["taker_bps"]))
-    connections = _run_preflight(params, analysis_venues)  # Phase D read-only self-check
+    connections = _run_preflight(params, analysis_venues)
     holder = {
-        "latest": {},          # base -> primary-venue MarketUnderstanding (Markets/Anatomy)
-        "evidence": {},        # base -> {venue: [Evidence dict]} (Engines screen, per venue)
-        "venue_state": {},     # base -> {venue: {regime,p_up,confidence,action,plugin}} (§3.1)
-        "prices": {},          # base -> {venues:{v:mid}, dislocation_bps, cheap, rich}
-        "candles": {},         # base -> {venue -> DataFrame} (OHLC for candlestick chart)
+        "latest": {},
+        "evidence": {},
+        "venue_state": {},
+        "prices": {},
+        "candles": {},
+        "candles_view": {},
         "equity": [broker.equity()],
         "universe": universe,
         "chosen": {},
         "updated": None,
         "tick": 0,
-        "features": features,  # mutable — the loop reads this so runtime toggles apply
-        "monitor": {},         # latest self-test/coverage report (feature monitor agent)
-        "risk_report": {},     # cached daily risk-analytics report
+        "features": features,
+        "monitor": {},
+        "risk_report": {},
+        "matrix_view": {},
+        "connections": {},
     }
 
-    # Restore previous broker/sim/curve state if a snapshot exists.
-    # ``features`` is intentionally not restored from the snapshot: it comes from
-    # the current config so explicit env overrides (e.g. tests enabling arb) win.
     if saved_state:
         try:
             broker.load_state(saved_state.get("broker", {}))
             sim.load_state(saved_state.get("sim", {}))
             if saved_state.get("equity"):
                 holder["equity"] = saved_state["equity"]
-        except Exception:  # noqa: BLE001 — don't fail to boot on a stale snapshot
+        except Exception:  # noqa: BLE001
             log.exception("state_restore_failed")
 
-    def _rebuild_orch() -> None:  # after a runtime feature toggle (§ features.py)
+    def _rebuild_orch() -> None:
         from aimos.execution.decide import ExecutionLayer
         from aimos.observation.runner import build_engines
         orch.obs_engines = build_engines(params, clock)
@@ -186,15 +278,12 @@ def build_app(offline: Optional[bool] = None):
 
     from aimos.runtime.golive import GoLiveLadder, guard_live_boot
     ladder = GoLiveLadder(journal=orch.journal)
-    guard_live_boot(params, ladder)  # fail-closed: refuse to boot live before the ladder is complete
+    guard_live_boot(params, ladder)
     live_router = _build_live_router(params, ladder, analysis_venues)
 
     from aimos.storage.timescale import TimescaleStore
     ts_store = TimescaleStore(params.model_dump().get("storage", {}).get("timescale_dsn", ""))
 
-    # Feature monitor agent — probes every feature on an interval, produces a
-    # coverage report, and (optionally) forces the safe keyless flags on so every
-    # code path is exercised without waiting for organic conditions (§ monitor_agent).
     from aimos.runtime.monitor_agent import FeatureMonitorAgent
     mon_cfg = params.model_dump().get("monitor", {}) or {}
     monitor = FeatureMonitorAgent(
@@ -203,8 +292,6 @@ def build_app(offline: Optional[bool] = None):
         force_coverage=bool(mon_cfg.get("force_coverage", True)),
     )
 
-    # Read-only AI analyst (specs/ASSISTANT.md). Grounded in the journal + metrics;
-    # never in the decision path. Off unless enabled + ANTHROPIC_API_KEY.
     asst_cfg = params.model_dump().get("assistant", {}) or {}
     assistant = None
     if asst_cfg.get("enabled"):
@@ -221,6 +308,67 @@ def build_app(offline: Optional[bool] = None):
             "graph": lambda did: _decision_graph(orch.journal, did, params),
         }, cfg=asst_cfg)
 
+    return {
+        "clock": clock, "org_id": org_id, "params": params, "features": features,
+        "paper": paper, "costs_cfg": costs_cfg, "primary_venue": primary_venue,
+        "live_data": live_data, "health_cfg": health_cfg, "jpath": jpath,
+        "state_dir": state_dir, "state_store": state_store, "saved_state": saved_state,
+        "control_store": control_store, "controls": controls, "orch": orch,
+        "broker": broker, "heartbeat": heartbeat, "_readyz_payload": _readyz_payload,
+        "caps": caps, "sources": sources, "stream_feed": stream_feed, "src": src,
+        "sink": sink, "status_every": status_every, "universe": universe, "sim": sim,
+        "analysis_venues": analysis_venues, "connections": connections, "holder": holder,
+        "_rebuild_orch": _rebuild_orch, "feature_ctl": feature_ctl, "ladder": ladder,
+        "live_router": live_router, "ts_store": ts_store, "mon_cfg": mon_cfg,
+        "monitor": monitor, "asst_cfg": asst_cfg, "assistant": assistant,
+    }
+
+
+def build_app(offline: Optional[bool] = None):
+    mode = _process_mode()
+    if mode == "loop":
+        return _build_loop_app(offline)
+    components = _build_components(offline)
+    clock = components["clock"]
+    org_id = components["org_id"]
+    params = components["params"]
+    features = components["features"]
+    paper = components["paper"]
+    costs_cfg = components["costs_cfg"]
+    primary_venue = components["primary_venue"]
+    live_data = components["live_data"]
+    health_cfg = components["health_cfg"]
+    jpath = components["jpath"]
+    state_dir = components["state_dir"]
+    state_store = components["state_store"]
+    saved_state = components["saved_state"]
+    control_store = components["control_store"]
+    controls = components["controls"]
+    orch = components["orch"]
+    broker = components["broker"]
+    heartbeat = components["heartbeat"]
+    _readyz_payload = components["_readyz_payload"]
+    caps = components["caps"]
+    sources = components["sources"]
+    stream_feed = components["stream_feed"]
+    src = components["src"]
+    sink = components["sink"]
+    status_every = components["status_every"]
+    universe = components["universe"]
+    sim = components["sim"]
+    analysis_venues = components["analysis_venues"]
+    connections = components["connections"]
+    holder = components["holder"]
+    _rebuild_orch = components["_rebuild_orch"]
+    feature_ctl = components["feature_ctl"]
+    ladder = components["ladder"]
+    live_router = components["live_router"]
+    ts_store = components["ts_store"]
+    mon_cfg = components["mon_cfg"]
+    monitor = components["monitor"]
+    asst_cfg = components["asst_cfg"]
+    assistant = components["assistant"]
+
     async def loop() -> None:
         tf = paper["timeframe"]
         bars = int(paper["history_bars"])
@@ -228,6 +376,7 @@ def build_app(offline: Optional[bool] = None):
         primary_venue = paper["data_exchange"]
         while True:
             try:
+                _apply_controls(components, control_store.load())
                 if refresh > 0 and holder["tick"] > 0 and holder["tick"] % refresh == 0:
                     holder["universe"] = _build_universe(params, live_data)
                 registry = holder["universe"].registry
@@ -287,9 +436,12 @@ def build_app(offline: Optional[bool] = None):
                 holder["updated"] = clock.now().isoformat()
                 holder["tick"] += 1
                 heartbeat.beat()
+                view = _build_view(holder, connections, params, paper)
+                controls = control_store.load()
                 try:
                     await asyncio.to_thread(state_store.save,
-                                            build_snapshot(holder, broker, sim, ladder))
+                                            build_snapshot(holder, broker, sim, ladder,
+                                                           view=view, controls=controls))
                 except Exception:  # noqa: BLE001 — persistence must not kill the loop
                     log.exception("state_save_failed")
                 if sink and status_every > 0 and holder["tick"] % status_every == 0:
@@ -392,17 +544,33 @@ def build_app(offline: Optional[bool] = None):
         log.info("stream_started", venue=source.venue, symbols=len(symbols))
         await source.run()
 
+    async def _api_state_loader() -> None:
+        """API-only process: rehydrate local objects from the loop's snapshot."""
+        refresh = float(paper.get("api_state_refresh_seconds", 1.0))
+        while True:
+            await asyncio.sleep(refresh)
+            try:
+                snapshot = state_store.load()
+                controls = control_store.load()
+                _rehydrate_from_snapshot(components, snapshot, controls)
+                heartbeat.beat()
+                log.debug("api_state_rehydrated", tick=components["holder"].get("tick"))
+            except Exception:  # noqa: BLE001
+                log.exception("api_state_loader_error")
+
     @asynccontextmanager
     async def lifespan(app):
-        task = asyncio.create_task(loop())
-        tg_task = asyncio.create_task(telegram_inbound())
-        mon_task = asyncio.create_task(monitor_loop())
-        stream_task = asyncio.create_task(stream_loop())
+        tasks = []
+        if mode == "api":
+            tasks.append(asyncio.create_task(_api_state_loader()))
+        else:
+            tasks.append(asyncio.create_task(loop()))
+            tasks.append(asyncio.create_task(telegram_inbound()))
+            tasks.append(asyncio.create_task(monitor_loop()))
+            tasks.append(asyncio.create_task(stream_loop()))
 
-        # APScheduler daily risk-analytics job (REQ-1).  Off when apscheduler is not
-        # installed; the /api/risk endpoint still computes on demand if empty.
         scheduler = None
-        if AsyncIOScheduler is not None:
+        if mode != "api" and AsyncIOScheduler is not None:
             risk_cfg = params.model_dump().get("risk", {}) or {}
             if bool(risk_cfg.get("enabled", True)):
                 scheduler = AsyncIOScheduler()
@@ -429,23 +597,35 @@ def build_app(offline: Optional[bool] = None):
                     log.info("journal_backup_scheduler_started",
                              interval_seconds=float(backup_cfg.get("interval_seconds", 3600)))
 
-        log.info("serve_started", live_data=live_data, dashboard=DIST.exists(),
+        log.info("serve_started", mode=mode, live_data=live_data, dashboard=DIST.exists(),
                  universe=holder["universe"].source, symbols=len(holder["universe"].selected))
         yield
-        task.cancel()
-        tg_task.cancel()
-        mon_task.cancel()
-        stream_task.cancel()
+        for task in tasks:
+            task.cancel()
         if scheduler is not None:
             scheduler.shutdown()
         ts_store.close()
 
+    def _feature_setter(name: str, enabled: bool) -> dict:
+        result = feature_ctl.set(name, enabled)
+        controls = control_store.load()
+        controls["features"] = params.features.model_dump()
+        control_store.save(controls)
+        return result
+
+    if mode == "loop":
+        async def _run_forever() -> None:
+            async with lifespan(None):
+                await asyncio.Event().wait()
+        asyncio.run(_run_forever())
+        return None
+
     state = AppState(
-        journal=orch.journal, orchestrator=orch,
+        journal=orch.journal, orchestrator=orch, control_store=control_store,
         positions_provider=lambda: [p.model_dump(mode="json") for p in broker.positions()],
         equity_provider=lambda: holder["equity"],
         latest_state=holder["latest"], effective_config=params.model_dump(),
-        matrix_provider=lambda: _universe_payload(holder["universe"], paper, holder),
+        matrix_provider=lambda: holder.get("matrix_view") or _universe_payload(holder["universe"], paper, holder),
         evidence_provider=lambda sym, venue=None: {
             "evidences": _pick_evidence(holder["evidence"].get(base_of(sym), {}), venue),
             "venues": sorted(holder["evidence"].get(base_of(sym), {})),
@@ -456,14 +636,14 @@ def build_app(offline: Optional[bool] = None):
         candles_provider=lambda sym: _candles_payload(holder, base_of(sym)),
         venue_state_provider=lambda sym: holder["venue_state"].get(base_of(sym), {}),
         trades_provider=lambda: _trades_payload(broker, sim),
-        balances_provider=lambda: _balances_payload(broker, sim, connections),
-        connections_provider=lambda: {"venues": list(connections.values()),
-                                      "any_live": any(c.get("connected") for c in connections.values())},
+        balances_provider=lambda: _balances_payload(broker, sim, holder.get("connections", connections)),
+        connections_provider=lambda: {"venues": list(holder.get("connections", connections).values()),
+                                      "any_live": any(c.get("connected") for c in holder.get("connections", connections).values())},
         performance_provider=lambda: _performance_payload(broker, sim, holder["equity"]),
         graph_provider=lambda did: _decision_graph(orch.journal, did, params),
         features_provider=lambda: {**feature_ctl.snapshot(),
                                    "halted": orch.state.halted if orch else False},
-        feature_setter=feature_ctl.set,
+        feature_setter=_feature_setter,
         golive_provider=ladder.status,
         golive_setter=lambda gate, passed: ladder.mark(gate) if passed else ladder.unmark(gate),
         monitor_provider=lambda: holder["monitor"] or {"features": [], "summary": {}, "coverage_pct": 0.0,
@@ -962,6 +1142,9 @@ def _pick_evidence(by_venue: dict, venue):
 
 def _candles_payload(holder, base: str) -> dict:
     """Return OHLC history for ``base`` across venues (Candlestick chart, §5.1)."""
+    cached = holder.get("candles_view", {}).get(base)
+    if cached:
+        return cached
     venue_dfs = holder.get("candles", {}).get(base, {})
     if not venue_dfs:
         return {"venues": [], "candles": []}
@@ -1054,11 +1237,16 @@ def _caps(params) -> CapacityCaps:
     )
 
 
-app = build_app()  # module-level ASGI app for `uvicorn aimos.runtime.serve:app`
+if _process_mode() == "loop":
+    app = None
+else:
+    app = build_app()  # module-level ASGI app for `uvicorn aimos.runtime.serve:app`
 
 
 def main() -> int:  # pragma: no cover - launches the server
     import uvicorn
+    if app is None:
+        raise RuntimeError("ASGI app unavailable in AIMOS_PROCESS=loop mode — use aimos.runtime.loop_process")
     # Default to loopback so a bare `python -m aimos.runtime.serve` is never
     # publicly reachable by accident (audit finding H1). Set AIMOS_HOST=0.0.0.0
     # explicitly (behind a VPN/tunnel/proxy) to bind all interfaces.

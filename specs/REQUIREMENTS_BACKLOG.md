@@ -215,12 +215,17 @@ removed once folded into STATUS.md).
 
 ## Tier 4 — longer-term architecture
 
-### REQ-13: Separate the API process from the trading loop
+### [x] REQ-13: Separate the API process from the trading loop
 
 - **Source:** `PRODUCTION_READINESS_AUDIT.md` Remediation Plan, Group 4.
 - **Rationale:** H3's CPU-exhaustion impact (bcrypt work starving the decision
   loop) exists *because* `runtime/serve.py` runs both the HTTP API and the trading
   loop in one process. Splitting them converts a trading outage into a UI outage.
+- **Implementation:** `AIMOS_PROCESS` modes (`combined`/`api`/`loop`), a shared
+  `RuntimeStateStore` snapshot with `view`/`controls`, a `ControlStore` cross-process
+  command channel, and `aimos/runtime/loop_process.py` entrypoint. The API process
+  rehydrates broker/sim/equity and the `view` dict on a 1-second interval, so all
+  existing API providers keep working without a rewrite.
 - **Priority:** Low (structural; the H3 throttle already bounds the immediate
   risk). **Effort:** Large.
 

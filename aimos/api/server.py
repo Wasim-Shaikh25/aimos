@@ -80,6 +80,7 @@ class AppState:
     risk_provider: Any = None  # callable -> risk analytics report dict
     risk_analyzer: Any = None  # callable that recomputes and caches the risk report
     health_provider: Any = None  # callable -> readiness dict for /readyz
+    control_store: Any = None  # ControlStore for cross-process control commands (REQ-13)
     auth_alert_tracker: Any = field(default_factory=FailedLoginTracker)  # failed-login alert state
     assistant: Any = None  # read-only AI analyst (Assistant) or None when disabled
 
@@ -312,11 +313,21 @@ def create_app(state: AppState) -> FastAPI:
         return {"n_decisions": n, "n_traded": traded,
                 "no_trade_rate": (n - traded) / n if n else 0.0}
 
+    def _persist_controls(controls: dict[str, Any]) -> None:
+        if state.control_store:
+            current = state.control_store.load()
+            current.update(controls)
+            state.control_store.save(current)
+
     @app.post("/api/control/pause")
     def pause(body: ConfirmBody):
         _require_confirm(body)
         if state.orchestrator:
             state.orchestrator.pause(body.symbol)
+            _persist_controls({
+                "global_pause": state.orchestrator.state.global_pause,
+                "paused_assets": sorted(state.orchestrator.state.paused_assets),
+            })
         return {"ok": True, "paused": body.symbol or "global"}
 
     @app.post("/api/control/resume")
@@ -324,6 +335,10 @@ def create_app(state: AppState) -> FastAPI:
         _require_confirm(body)
         if state.orchestrator:
             state.orchestrator.resume(body.symbol)
+            _persist_controls({
+                "global_pause": state.orchestrator.state.global_pause,
+                "paused_assets": sorted(state.orchestrator.state.paused_assets),
+            })
         return {"ok": True, "resumed": body.symbol or "global"}
 
     @app.post("/api/control/killswitch")
@@ -331,6 +346,7 @@ def create_app(state: AppState) -> FastAPI:
         _require_confirm(body)
         if state.orchestrator:
             state.orchestrator.halt()
+            _persist_controls({"halted": True})
         return {"ok": True, "halted": True}
 
     @app.post("/api/control/unhalt")
@@ -338,6 +354,7 @@ def create_app(state: AppState) -> FastAPI:
         _require_confirm(body)
         if state.orchestrator:
             state.orchestrator.unhalt()
+            _persist_controls({"halted": False})
         return {"ok": True, "halted": False}
 
     @app.get("/api/markets")

@@ -25,7 +25,7 @@ prerequisite) · ⏭️ not built yet.
 | SaaS P2/P3 (partial) | Runtime state persistence, per-tenant config/journal/state store, broker/sim resume, streaming scaffold + feed into paper loop, ML registry, dashboard equity + candlestick charts, evidence tables, decision anatomy, org settings, auth screens, org scoping, migration, Dockerfile, vendor manifest + vendoring script, live multi-venue executor wiring (fail-closed), tests | ✅ |
 
 The §25.9 golden worked example reproduces exactly (fusion 0.766/0.428; execution
-NO_TRADE, EV −0.018). **528 passed, 1 xfailed**; magic-number + naive-datetime lints
+NO_TRADE, EV −0.018). **535 passed, 1 xfailed**; magic-number + naive-datetime lints
 clean; import-linter 6/6.
 
 > ✅ **Production readiness: STOP — CONDITIONAL GO.** See **`PRODUCTION_READINESS_AUDIT.md`**.
@@ -41,6 +41,12 @@ clean; import-linter 6/6.
 > blockers it found are fixed: killswitch can now be reset via `POST
 > /api/control/unhalt` and the dashboard Controls screen, and `/api/v2/status` now
 > surfaces runtime feature flags plus `halted` state.
+>
+> **REQ-13 (API/loop process split) is implemented.** `AIMOS_PROCESS=combined/api/loop`
+> selects whether `serve.py` runs both the API and loop, only the API with a
+> `RuntimeStateStore`/ControlStore rehydration task, or only the loop via
+> `python -m aimos.runtime.loop_process`. `OrganizationState` gained `view` and
+> `controls` JSON columns with an Alembic migration.
 
 ---
 

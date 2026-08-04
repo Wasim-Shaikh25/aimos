@@ -6,6 +6,30 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added (REQ-13 — separate API process from trading loop)
+- **Process modes via `AIMOS_PROCESS`**: `combined` (default, legacy), `api` (API-only),
+  and `loop` (loop-only). `python -m aimos.runtime.serve` stays the default entrypoint;
+  `python -m aimos.runtime.loop_process` runs the loop worker with no HTTP server.
+- **Shared runtime state bus**: `RuntimeStateStore.save()`/`load()` now carry a
+  serializable `view` (prices, candles, evidence, venue state, matrix, monitor,
+  risk report, connections, tick) and `controls` (halt, pause, feature toggles).
+  `OrganizationState` gained `view` and `controls` JSON columns with an Alembic
+  migration so SaaS deployments share state in the tenant DB.
+- **Cross-process control channel**: `ControlStore` writes/reads `control.json`
+  (or `organization_states.controls`) so the API process can send operator
+  commands (halt, pause, feature toggles) and the loop process applies them at
+  the start of each tick.
+- **API-only state rehydration**: `serve.py` builds the same runtime components,
+  then a background loader refreshes `broker`/`sim`/`equity` and the `view` dict
+  from the loop's snapshot every `paper.api_state_refresh_seconds` (default 1s).
+  All API providers (`/api/markets`, `/api/prices`, `/api/candles`, `/api/trades`,
+  `/api/positions`, `/api/balances`, `/api/monitor`, `/api/risk`, etc.) read the
+  rehydrated objects, so the API process never needs the trading loop in memory.
+- **Loop process isolation**: `AIMOS_PROCESS=loop` runs the paper loop + Telegram,
+  monitor, stream, risk analytics, and journal backups without building the FastAPI
+  app. The module-level `app` is `None` in loop mode to prevent accidental `uvicorn`
+  use.
+
 ### Fixed (go-live verification blockers)
 - **Killswitch reset gap closed**: added `POST /api/control/unhalt`, `PipelineOrchestrator.halt()` / `unhalt()` (persists/removes the `RUNTIME_HALT` file), and surfaced `halted` state in both `/api/features` and `/api/v2/status`. The dashboard **Controls** screen now shows a halt/reset panel and disables feature toggles while halted. Telegram killswitch falls back to the `halt()` method when available.
 - **`/api/v2/status` now returns runtime feature flags and `halted`**: previously only returned `{"saas_enabled": true}`; now includes `features` and `halted` so public health/status clients see the same runtime state as `/api/features`.
