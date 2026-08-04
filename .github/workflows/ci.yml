@@ -1,0 +1,76 @@
+# CI quality gates (audit finding H5). Runs the four gates that CLAUDE.md
+# mandates after every change, plus the dashboard build and a backup/restore
+# drill. A failing gate blocks the merge — the gates are no longer discipline-only.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# Cancel superseded runs on the same ref to save minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    name: Python gates + backup drill
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install (modern build toolchain first)
+        # Upgrading setuptools avoids the ta==0.11.0 sdist build break seen on
+        # older/patched setuptools (audit finding L2).
+        run: |
+          python -m pip install -U pip setuptools wheel
+          pip install -e '.[dev,data,serve,saas]'
+
+      - name: Unit + integration tests
+        run: python -m pytest -q
+
+      - name: Magic-number lint (decision-path tunables)
+        run: python scripts/check_magic_numbers.py
+
+      - name: Naive-datetime lint
+        run: python scripts/check_no_naive_datetime.py
+
+      - name: Import-linter (layer direction)
+        run: lint-imports
+
+      - name: GPL tripwire (informational — see M7 / PD3)
+        run: python scripts/check_gpl_tripwire.py
+
+      - name: Backup + restore drill (H4 smoke)
+        run: |
+          python - <<'PY'
+          from aimos.journal.journal import Journal
+          import pathlib
+          pathlib.Path("state").mkdir(exist_ok=True)
+          j = Journal("state/aimos.sqlite")
+          for i in range(3):
+              j._append("decisions", f"d{i}", "SOL", "2026-07-30T00:00:00+00:00", {"i": i})
+          j.close()
+          PY
+          python scripts/backup_journal.py --src state/aimos.sqlite --dest backups --keep 5
+          bash scripts/restore_drill.sh backups/journal-latest.sqlite
+
+  dashboard:
+    name: Dashboard build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build the React dashboard
+        working-directory: dashboard
+        run: |
+          npm install --no-audit --no-fund
+          npm run build

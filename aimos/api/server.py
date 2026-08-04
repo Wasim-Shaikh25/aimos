@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import json
 import os
+import time
+from collections import deque
 from dataclasses import dataclass, field
+from threading import Lock
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, Request
@@ -96,20 +99,96 @@ def _extract_bearer(request: Request) -> str | None:
     return request.cookies.get("access_token")
 
 
+# Public paths in SaaS mode: auth endpoints, the status probe, self-authenticating
+# /api/v2 tenant routes, and the static SPA shell + its client-side routes. The
+# protected surface is exactly the trading API (/api/* excluding /api/v2/*) and
+# /metrics — those require a token. Anything that is not one of those is treated
+# as the SPA shell so the login page and assets can load (audit finding C2).
+_PROTECTED_PREFIXES = ("/api/",)
+_PROTECTED_EXACT = {"/metrics"}
+
+
+def _is_public_path(path: str) -> bool:
+    if path.startswith("/auth/") or path.startswith("/api/v2/"):
+        return True
+    if path in _PROTECTED_EXACT:
+        return False
+    return not path.startswith(_PROTECTED_PREFIXES)
+
+
+def _is_control_path(path: str) -> bool:
+    """State-changing / billable endpoints that must never be anonymous over the
+    network (audit finding H1): the control actions and the LLM assistant."""
+    return path.startswith("/api/control/") or path == "/api/assistant"
+
+
+# "testclient" is Starlette's synthetic host for TestClient — not a routable
+# network host, so allowing it keeps the in-process test suite green without
+# widening the guard for real callers.
+_LOCAL_HOSTS = frozenset({"127.0.0.1", "::1", "testclient"})
+
+
+def _client_is_local(host: str | None) -> bool:
+    return (host or "") in _LOCAL_HOSTS
+
+
+# Fixed-window in-process throttle for the auth endpoints (audit finding H3).
+# One uvicorn worker is the deployed topology, so per-process state is correct;
+# multi-worker deployments would need a shared store. Structural constants.
+_AUTH_WINDOW_SECONDS = 60.0
+_AUTH_MAX_PER_WINDOW = 10
+
+
+class _FixedWindowLimiter:
+    """Thread-safe per-key request counter over a sliding time window."""
+
+    def __init__(self, max_hits: int, window: float) -> None:
+        self.max_hits = max_hits
+        self.window = window
+        self._hits: dict[str, deque[float]] = {}
+        self._lock = Lock()
+
+    def allow(self, key: str, now: float | None = None) -> bool:
+        now = time.monotonic() if now is None else now
+        with self._lock:
+            dq = self._hits.setdefault(key, deque())
+            cutoff = now - self.window
+            while dq and dq[0] < cutoff:
+                dq.popleft()
+            if len(dq) >= self.max_hits:
+                return False
+            dq.append(now)
+            return True
+
+
 def create_app(state: AppState) -> FastAPI:
     app = FastAPI(title="AIMOS API")
+    auth_limiter = _FixedWindowLimiter(_AUTH_MAX_PER_WINDOW, _AUTH_WINDOW_SECONDS)
+
+    @app.middleware("http")
+    async def throttle_auth(request: Request, call_next):
+        """Rate-limit the auth endpoints per client IP (audit finding H3): bounds
+        password/OTP brute force and the per-request bcrypt CPU-exhaustion vector
+        against the process that also runs the trading loop."""
+        if request.url.path.startswith("/auth/"):
+            key = request.client.host if request.client else "unknown"
+            if not auth_limiter.allow(key):
+                return JSONResponse({"detail": "too many requests"}, status_code=429)
+        return await call_next(request)
 
     @app.middleware("http")
     async def saas_tenant_scope(request: Request, call_next):
         """In SaaS mode, trading API requests (``/api/*`` outside ``/api/v2/*``)
         must carry a valid access token whose ``org`` claim matches the
         ``X-Organization-Id`` header and this runtime's ``AIMOS_RUNTIME_ORG_ID``.
-        Auth endpoints, the public status probe, and ``/api/v2/*`` tenant routes
-        are exempt; tenant routes validate their own auth context."""
+        Auth endpoints, the public status probe, ``/api/v2/*`` tenant routes, and
+        the static SPA shell (``/``, ``/assets/*``, client-side routes) are exempt;
+        tenant routes validate their own auth context. The SPA is public static
+        content — it holds no secrets and authenticates itself against ``/auth/*``
+        before calling the protected ``/api/*`` surface with a token."""
         if get_saas_config().enabled:
             path = request.url.path
-            public = path == "/api/v2/status" or path.startswith("/auth/") or path.startswith("/api/v2/")
-            if not public:
+            if not _is_public_path(path):
                 token = _extract_bearer(request)
                 if not token:
                     return JSONResponse({"detail": "Authorization required"}, status_code=401)
@@ -122,6 +201,16 @@ def create_app(state: AppState) -> FastAPI:
                     return JSONResponse({"detail": "X-Organization-Id required"}, status_code=403)
                 if payload.get("org") != org_id or org_id != _runtime_org():
                     return JSONResponse({"detail": "organization not served by this runtime"}, status_code=403)
+        elif _is_control_path(request.url.path):
+            # Local single-user mode (SaaS off): control actions and the billable
+            # LLM endpoint must not be reachable from a non-loopback client, so a
+            # misconfigured public bind cannot expose the kill switch, the go-live
+            # ladder, or the assistant (audit finding H1). Reads stay open here.
+            if not _client_is_local(request.client.host if request.client else None):
+                return JSONResponse(
+                    {"detail": "control requires authentication or a loopback client"},
+                    status_code=401,
+                )
         return await call_next(request)
 
     @app.get("/api/v2/status")

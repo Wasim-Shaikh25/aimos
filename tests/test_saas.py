@@ -21,6 +21,8 @@ def _saas_env(monkeypatch, tmp_path):
     monkeypatch.setenv("AIMOS__SAAS__ADMIN__EMAIL", "admin@example.com")
     monkeypatch.setenv("AIMOS__SAAS__ADMIN__PASSWORD", "AdminPass123!")
     monkeypatch.setenv("AIMOS__SAAS__ADMIN__USER_ID", "admin-test")
+    # Dev maildrop is opt-in since finding H2; tests read login codes from it.
+    monkeypatch.setenv("AIMOS_DEV_MAILDROP", "1")
     # Reset the singleton engine so every test gets a fresh database.
     saas_db._engine = None
     saas_db._SessionLocal = None
@@ -165,6 +167,158 @@ class TestSettings:
         resp = client.delete("/api/v2/settings/exchange/binance", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 200
         assert "binance" not in resp.json()
+
+
+class TestSpaReachableWhenSaasEnabled:
+    """Audit finding C2: enabling SaaS must NOT lock out the static SPA shell,
+    or there is no way to reach the login page. But the trading API stays gated."""
+
+    def _spa_app(self, tmp_path, monkeypatch):
+        # Build the full app (with the SPA mount) pointing at a temp dist dir.
+        import aimos.runtime.serve as serve
+        dist = tmp_path / "dist"
+        (dist / "assets").mkdir(parents=True)
+        (dist / "index.html").write_text('<!doctype html><div id="root"></div>')
+        (dist / "assets" / "app.js").write_text("console.log('spa')")
+        monkeypatch.setattr(serve, "DIST", dist)
+        app = serve.build_app(offline=True)
+        return TestClient(app)
+
+    def test_spa_index_reachable(self, tmp_path, monkeypatch):
+        c = self._spa_app(tmp_path, monkeypatch)  # no lifespan → no bg loop
+        r = c.get("/")
+        assert r.status_code == 200 and 'id="root"' in r.text
+
+    def test_spa_assets_reachable(self, tmp_path, monkeypatch):
+        c = self._spa_app(tmp_path, monkeypatch)
+        assert c.get("/assets/app.js").status_code == 200
+
+    def test_spa_client_route_reachable(self, tmp_path, monkeypatch):
+        c = self._spa_app(tmp_path, monkeypatch)
+        assert c.get("/positions").status_code == 200  # SPA deep-link
+
+    def test_api_still_requires_token(self, tmp_path, monkeypatch):
+        c = self._spa_app(tmp_path, monkeypatch)
+        assert c.get("/api/decisions").status_code == 401  # not over-broadly exempt
+
+    def test_metrics_still_protected(self, tmp_path, monkeypatch):
+        c = self._spa_app(tmp_path, monkeypatch)
+        assert c.get("/metrics").status_code == 401
+
+
+class TestSpaTraversalBlocked:
+    """Audit finding C1: the SPA catch-all must not serve files outside dist."""
+
+    def _app(self, tmp_path, monkeypatch):
+        import aimos.runtime.serve as serve
+        dist = tmp_path / "dist"
+        dist.mkdir(parents=True)
+        (dist / "index.html").write_text('<!doctype html><div id="root"></div>')
+        # a secret sibling of dist, mimicking state/.jwt_secret
+        (tmp_path / "secret.txt").write_text("TOP-SECRET-VALUE")
+        monkeypatch.setattr(serve, "DIST", dist)
+        return TestClient(serve.build_app(offline=True)), tmp_path
+
+    def test_encoded_traversal_returns_spa_not_secret(self, tmp_path, monkeypatch):
+        c, _ = self._app(tmp_path, monkeypatch)
+        for attack in (
+            "/%2e%2e%2fsecret.txt",
+            "/%2e%2e%2f%2e%2e%2fsecret.txt",
+            "/..%2fsecret.txt",
+            "/%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd",
+        ):
+            r = c.get(attack)
+            assert "TOP-SECRET-VALUE" not in r.text
+            assert "root:" not in r.text
+
+
+class TestOtpNotLeaked:
+    """Audit finding H2: login codes are not written to disk or logged by default."""
+
+    def test_maildrop_not_written_without_dev_flag(self, client, monkeypatch):
+        monkeypatch.delenv("AIMOS_DEV_MAILDROP", raising=False)
+        drop = Path("state") / "maildrop" / "login-admin@example.com.txt"
+        if drop.exists():
+            drop.unlink()  # clear any leftover from another test sharing state/
+        r = client.post("/auth/login", json={"email": "admin@example.com", "password": "AdminPass123!"})
+        assert r.status_code == 200
+        assert not drop.exists()  # this login must not (re)create it
+
+    def test_code_not_in_log_body(self, client, monkeypatch):
+        monkeypatch.delenv("AIMOS_DEV_MAILDROP", raising=False)
+        import aimos.saas.email as email_mod
+        captured = {}
+        orig = email_mod.log.warning
+
+        def _spy(event, **kw):
+            captured["event"] = event
+            captured["kw"] = kw
+            return orig(event, **kw)
+
+        monkeypatch.setattr(email_mod.log, "warning", _spy)
+        # Trigger the no-SMTP warning path.
+        email_mod.send_login_code_email("admin@example.com", "424242")
+        # The warning must NOT carry the code in any field.
+        assert "body" not in captured.get("kw", {})
+        assert "424242" not in repr(captured.get("kw", {}))
+
+
+class TestOtpBruteForceBounded:
+    """Audit finding H3: a live login code is burned after MAX_OTP_ATTEMPTS."""
+
+    def test_code_burned_after_max_attempts(self, client):
+        from aimos.saas import auth_service
+        client.post("/auth/login", json={"email": "admin@example.com", "password": "AdminPass123!"})
+        code = (Path("state") / "maildrop" / "login-admin@example.com.txt").read_text().strip()
+        wrong = "000000" if code != "000000" else "111111"
+        for _ in range(auth_service.MAX_OTP_ATTEMPTS):
+            r = client.post("/auth/login/verify", json={"email": "admin@example.com", "code": wrong})
+            assert r.status_code == 401
+        # Even the CORRECT code is now rejected — the code was burned.
+        r = client.post("/auth/login/verify", json={"email": "admin@example.com", "code": code})
+        assert r.status_code == 401
+
+
+class TestAuthThrottle:
+    """Audit finding H3: the /auth/* endpoints are rate-limited per client."""
+
+    def test_login_throttled_after_window_cap(self, client):
+        from aimos.api import server
+        seen_429 = False
+        for _ in range(server._AUTH_MAX_PER_WINDOW + 5):
+            r = client.post("/auth/login", json={"email": "admin@example.com", "password": "x"})
+            if r.status_code == 429:
+                seen_429 = True
+                break
+        assert seen_429
+
+
+class TestControlPathGuards:
+    """Audit finding H1: predicate logic that keeps control/metrics protected and
+    the SPA public, and blocks non-loopback control callers in local mode."""
+
+    def test_public_vs_protected_paths(self):
+        from aimos.api import server
+        assert server._is_public_path("/") is True
+        assert server._is_public_path("/login") is True
+        assert server._is_public_path("/assets/app.js") is True
+        assert server._is_public_path("/auth/login") is True
+        assert server._is_public_path("/api/v2/status") is True
+        assert server._is_public_path("/api/decisions") is False
+        assert server._is_public_path("/metrics") is False
+
+    def test_control_paths(self):
+        from aimos.api import server
+        assert server._is_control_path("/api/control/killswitch") is True
+        assert server._is_control_path("/api/assistant") is True
+        assert server._is_control_path("/api/decisions") is False
+
+    def test_local_client_detection(self):
+        from aimos.api import server
+        assert server._client_is_local("127.0.0.1") is True
+        assert server._client_is_local("::1") is True
+        assert server._client_is_local("203.0.113.7") is False
+        assert server._client_is_local(None) is False
 
 
 class TestOrgScoping:

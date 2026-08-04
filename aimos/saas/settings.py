@@ -38,55 +38,6 @@ class SMTPConfig(BaseModel):
         return self
 
 
-class GoogleOAuthConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    client_id: str = ""
-    client_secret: str = ""
-    redirect_uri: str = "/auth/google/callback"
-
-
-class AppleOAuthConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    client_id: str = ""
-    team_id: str = ""
-    key_id: str = ""
-    private_key: str = ""
-    redirect_uri: str = "/auth/apple/callback"
-
-
-class OAuthConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    google: GoogleOAuthConfig = Field(default_factory=GoogleOAuthConfig)
-    apple: AppleOAuthConfig = Field(default_factory=AppleOAuthConfig)
-
-
-class TwilioConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    account_sid: str = ""
-    auth_token: str = ""
-    from_number: str = ""
-
-
-class VonageConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    api_key: str = ""
-    api_secret: str = ""
-    from_name: str = "AIMOS"
-
-
-class SMSConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    driver: str = "console"
-    twilio: TwilioConfig = Field(default_factory=TwilioConfig)
-    vonage: VonageConfig = Field(default_factory=VonageConfig)
-
-
 class AdminConfig(BaseModel):
     """Single admin user seeded at startup.  ``password`` is hashed on first run."""
 
@@ -117,13 +68,10 @@ class SaasConfig(BaseModel):
     jwt_secret: str = ""
     access_token_expire_minutes: int = Field(default=15, ge=1, le=1440)
     refresh_token_expire_days: int = Field(default=30, ge=1, le=365)
-    verification_code_expire_minutes: int = Field(default=15, ge=1, le=1440)
     otp_expire_minutes: int = Field(default=10, ge=1, le=1440)
     require_email_verification: bool = True
     require_strong_password: bool = True
     smtp: SMTPConfig = Field(default_factory=SMTPConfig)
-    oauth: OAuthConfig = Field(default_factory=OAuthConfig)
-    sms: SMSConfig = Field(default_factory=SMSConfig)
     tenant: TenantDefaults = Field(default_factory=TenantDefaults)
     admin: AdminConfig = Field(default_factory=AdminConfig)
 

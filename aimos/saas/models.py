@@ -39,9 +39,6 @@ class User(Base):
     memberships: Mapped[list["OrganizationMember"]] = relationship(
         "OrganizationMember", back_populates="user", lazy="selectin"
     )
-    identities: Mapped[list["UserIdentity"]] = relationship(
-        "UserIdentity", back_populates="user", lazy="selectin"
-    )
 
 
 class Organization(Base):
@@ -80,45 +77,6 @@ class OrganizationMember(Base):
     organization: Mapped["Organization"] = relationship("Organization", back_populates="members")
 
 
-class UserIdentity(Base):
-    """OAuth2 / phone provider identities linked to a user."""
-
-    __tablename__ = "user_identities"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
-    provider: Mapped[str] = mapped_column(String(32), index=True)  # google / apple / phone
-    provider_subject: Mapped[str] = mapped_column(String(255), index=True)  # sub / phone number
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
-
-    user: Mapped["User"] = relationship("User", back_populates="identities")
-
-    __table_args__ = (
-        # One identity per provider+subject.
-        {"sqlite_autoincrement": False},
-    )
-
-
-class EmailVerificationCode(Base):
-    __tablename__ = "email_verification_codes"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
-    code: Mapped[str] = mapped_column(String(8))
-    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    used: Mapped[bool] = mapped_column(Boolean, default=False)
-
-
-class PasswordResetToken(Base):
-    __tablename__ = "password_reset_tokens"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
-    token_hash: Mapped[str] = mapped_column(String(255), index=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    used: Mapped[bool] = mapped_column(Boolean, default=False)
-
-
 class EmailLoginCode(Base):
     """One-time login code sent to the admin email (2FA step)."""
 
@@ -129,17 +87,9 @@ class EmailLoginCode(Base):
     code_hash: Mapped[str] = mapped_column(String(255))
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     used: Mapped[bool] = mapped_column(Boolean, default=False)
-
-
-class PhoneVerificationCode(Base):
-    __tablename__ = "phone_verification_codes"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
-    phone_number: Mapped[str] = mapped_column(String(32))
-    code: Mapped[str] = mapped_column(String(8))
-    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    used: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Failed-guess counter so a live code is burned after too many wrong tries
+    # (audit finding H3 — bounds OTP brute force).
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
 class RefreshToken(Base):

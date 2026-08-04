@@ -201,17 +201,54 @@ The single admin user is seeded from `config/saas.yaml` `admin.*` or env vars:
 `AIMOS__SAAS__ADMIN__PHONE`, `AIMOS__SAAS__ADMIN__PASSWORD` (hashed on first run,
 never logged or returned). No public registration is exposed.
 
+**The only login flow is email + password, then an email OTP.** There is no phone/SMS
+login, no OAuth (Google/Apple), and no self-service password reset — that
+service-layer code was removed entirely, not just left unrouted, so there is
+nothing dormant to audit or accidentally re-expose. `admin.phone` /
+`AIMOS__SAAS__ADMIN__PHONE` is stored only as an informational profile field
+(returned by `/api/v2/me`); it does not enable a phone login path.
+
 ### Operator-supplied credentials
 
 All external auth services are operator-supplied; AIMOS itself uses only
-free/open-source libraries.
+free/open-source libraries. No paid third-party auth services are required.
 
 | Service | Config / env | What for |
 |---|---|---|
 | SMTP | `config/saas.yaml` `smtp.*` or `AIMOS__SAAS__SMTP__*` | send login OTP to the admin email |
 | Admin account | `config/saas.yaml` `admin.*` or `AIMOS__SAAS__ADMIN__*` | single user seeded at startup |
 
-If SMTP is not configured, the login code is written to `state/maildrop/login-<email>.txt` for local development. No paid third-party auth services are used.
+**Recommended SMTP provider: [Brevo](https://www.brevo.com)** (formerly Sendinblue).
+Free tier includes an SMTP relay (300 emails/day, no card required) — more than
+enough for one operator's login codes, and `email.py` already speaks plain SMTP, so
+no provider-specific code is needed. Create an SMTP key at Brevo → Settings → SMTP &
+API, then set:
+
+```yaml
+smtp:
+  host: smtp-relay.brevo.com
+  port: 587
+  username: "<your Brevo account login email>"
+  password: "<the generated SMTP key>"   # or AIMOS__SAAS__SMTP__PASSWORD
+  use_tls: true
+  from_address: "<a sender verified in Brevo>"
+```
+
+Any standard SMTP provider (Gmail app password, self-hosted Postfix, SES SMTP, etc.)
+works the same way — Brevo is a recommendation, not a hard dependency.
+
+If SMTP is not configured, the login OTP is **not** delivered by default (it is not
+logged and not dropped to disk — a one-time code in a plaintext file defeats the
+second factor). For local development with no SMTP, set **`AIMOS_DEV_MAILDROP=1`** to
+write the code to `state/maildrop/login-<email>.txt` (mode `0600`). Never set this in
+production.
+
+**Bind host.** `python -m aimos.runtime.serve` binds **`127.0.0.1`** by default (never
+publicly reachable by accident). Set `AIMOS_HOST=0.0.0.0` explicitly — behind a
+VPN/SSH tunnel or an authenticated reverse proxy — to bind all interfaces. The Docker
+image sets `0.0.0.0` because Compose already publishes only `127.0.0.1:8000` on the
+host. When SaaS auth is **off**, control endpoints (`/api/control/*`, `/api/assistant`)
+accept only loopback callers.
 
 ### Endpoints
 
@@ -293,3 +330,24 @@ Telegram locks, the fail-closed `mandate.yaml`, and the boot guard.
   Telegram `/killswitch` (nonce-confirmed); or `touch RUNTIME_HALT` in the working
   dir (loop halts, forces NO_TRADE).
 - **Watchdog:** heartbeat at `state/heartbeat`; 3× miss → restart + alert (§23.5).
+
+### Backups & restore (§23.5)
+
+The hash-chained journal (`state/aimos.sqlite`) is the system of record — back it up.
+
+```bash
+# Create a verified, consistent snapshot (SQLite online-backup API; verifies the
+# hash chain before accepting it) and update backups/journal-latest.sqlite.
+python scripts/backup_journal.py --src state/aimos.sqlite --dest backups --keep 14
+
+# Monthly restore DRILL — restores the latest backup and re-verifies the chain.
+# Exits non-zero if there is no backup (a drill with no backup is not a pass).
+bash scripts/restore_drill.sh
+```
+
+Schedule `backup_journal.py` at your target RPO (cron, a compose timer, or the
+APScheduler runtime). Back up **separately and securely**: the auth/settings DB
+(`state/auth.sqlite` or Postgres via `AIMOS__SAAS__DATABASE_URL`) and
+`state/.settings_key` — without the key, encrypted exchange credentials are
+unrecoverable. Never drop `state/.settings_key` into `backups/` alongside the
+journal; treat it as a secret.

@@ -36,6 +36,23 @@ def test_state_store_roundtrip(tmp_path):
     assert loaded["features"]["scalp_enabled"] is True
 
 
+def test_state_store_survives_torn_write(tmp_path):
+    # Audit finding M8: a truncated/torn state.json (unclean shutdown mid-write)
+    # must not crash boot — load() returns {} instead of raising.
+    store = RuntimeStateStore("local", state_dir=tmp_path / "tenant_local_state")
+    store.file_path.write_text('{"broker": {"cash": 1000.0, "positi')  # torn
+    assert store.load() == {}
+
+
+def test_state_store_writes_atomically_no_tmp_left(tmp_path):
+    store = RuntimeStateStore("local", state_dir=tmp_path / "tenant_local_state")
+    store.save({"equity": [1.0, 2.0]})
+    # No leftover temp files beside the state file.
+    leftovers = [p.name for p in store.file_path.parent.iterdir() if p.name.endswith(".tmp")]
+    assert leftovers == []
+    assert store.load()["equity"] == [1.0, 2.0]
+
+
 def test_state_store_noop_for_memory():
     store = RuntimeStateStore("local", state_dir=None)
     assert store.load() == {}

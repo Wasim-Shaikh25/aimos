@@ -94,3 +94,28 @@ def test_testnet_probe_reports_place_failure(tmp_path):
             return OrderResult(ok=False, status="rejected", error="mandate not enabled", raw={})
     res = run_testnet_probe(_Broker(), GoLiveLadder(state_path=str(tmp_path / "gl.json")))
     assert res["ok"] is False and "mandate" in res["error"]
+
+
+def test_golive_torn_write_preserves_signoffs_via_bak(tmp_path):
+    # Audit finding M8: a torn go_live.json must not silently wipe operator
+    # sign-offs — the last-good .bak is restored instead.
+    path = tmp_path / "gl.json"
+    lad = GoLiveLadder(state_path=str(path))
+    for gid, *_ in GATES:
+        lad.mark(gid)              # each mark() rewrites and rotates .bak
+    lad.set_marker("_flush")       # one more save so .bak also holds the full state
+    assert lad.live_allowed() is True
+    # Simulate a crash mid-write: primary file left truncated.
+    path.write_text('{"gates": {"backtest_validated": {"stat')
+    reloaded = GoLiveLadder(state_path=str(path))
+    # Falls back to the last-good .bak, not an empty reset that wipes sign-offs.
+    assert reloaded.status()["passed"] == len(GATES)
+    assert reloaded.live_allowed() is True
+
+
+def test_golive_atomic_write_leaves_no_tmp(tmp_path):
+    path = tmp_path / "gl.json"
+    lad = GoLiveLadder(state_path=str(path))
+    lad.mark("backtest_validated")
+    leftovers = [p.name for p in path.parent.iterdir() if p.name.endswith(".tmp")]
+    assert leftovers == []

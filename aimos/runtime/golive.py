@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from aimos.runtime.atomic_io import atomic_write_json
+
 # (id, title, kind, detail, auto_days) — auto_days drives the progress bar for
 # time-based gates; None = a pure operator sign-off.
 GATES = [
@@ -40,16 +42,26 @@ class GoLiveLadder:
         self._state = self._load()
 
     def _load(self) -> dict:
-        if self.path.exists():
-            try:
-                return json.loads(self.path.read_text(encoding="utf-8"))
-            except ValueError:
-                pass
+        for candidate in (self.path, self.path.with_suffix(self.path.suffix + ".bak")):
+            if candidate.exists():
+                try:
+                    return json.loads(candidate.read_text(encoding="utf-8"))
+                except ValueError:
+                    # torn primary — fall through to the last-good .bak so a bad
+                    # shutdown cannot silently wipe operator sign-offs (finding M8)
+                    continue
         return {"gates": {}, "markers": {}}
 
     def _save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self._state, indent=2), encoding="utf-8")
+        # Keep the previous good file as .bak, then write atomically. The go-live
+        # sign-off record is high-value (it gates real money) — a torn write must
+        # never destroy it (audit finding M8).
+        if self.path.exists():
+            try:
+                self.path.replace(self.path.with_suffix(self.path.suffix + ".bak"))
+            except OSError:
+                pass
+        atomic_write_json(self.path, self._state)
 
     # -- markers set by automation (e.g. the testnet script) ----------------
 

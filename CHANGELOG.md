@@ -6,6 +6,102 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Removed / Changed (auth surface — operator decision on PD2)
+- **Deleted the retired auth surface entirely** (resolves audit finding M1;
+  operator's answer to PD2 for the auth-code half): `aimos/saas/oauth.py` and
+  `aimos/saas/sms.py` removed; `register_email_password`, `verify_email`,
+  `resend_email_verification`, `forgot_password`, `reset_password`,
+  `login_email_password`, `send_phone_verification`, `verify_phone_and_login`,
+  `login_with_google`, `login_with_apple`, and the dead `set_auth_cookies` removed
+  from `aimos/saas/auth_service.py` / `router.py`. Removed the now-unused
+  `UserIdentity`, `EmailVerificationCode`, `PasswordResetToken`,
+  `PhoneVerificationCode` ORM models and the `oauth`/`sms` config blocks from
+  `SaasConfig`. Dropped `Authlib` from `pyproject.toml`.
+- **The only login flow is now email + password + email OTP** — no phone/SMS
+  login, no Google/Apple OAuth, no self-service password reset. Nothing dormant
+  remains to audit or accidentally re-expose. `admin.phone` is kept as an
+  informational profile field only (returned by `/api/v2/me`), not a login path.
+  Verified: all 26 `test_saas.py` tests pass unchanged (the surface was fully
+  dead — zero test coverage of it existed), and a live end-to-end login
+  (password → OTP → token) still works after the removal.
+- **Documented [Brevo](https://www.brevo.com) as the recommended SMTP provider**
+  for the login OTP (`config/saas.yaml`, `specs/OPERATIONS.md`) — free-tier SMTP
+  relay, no code change since `email.py` already speaks plain SMTP.
+- Corrected a stale `specs/STATUS.md` line: runtime state (equity/balances/
+  broker/sim/ladder) already persists across restarts via `RuntimeStateStore`
+  (wired into `serve.py`'s boot/save loop) — it was listed as not-built.
+- **New `specs/REQUIREMENTS_BACKLOG.md`** — 19 prioritized requirements
+  consolidating the production-readiness audit's residual items (M2–M9, PD1/PD3/
+  PD5, Group 3/4 remediation items) with a competitive-feature review against
+  TradingAgents (Tauric Research) and the OpenBB Platform. Notably: REQ-1 (wire
+  the already-built, already-tested `risk/analytics.py` alpha/beta/VaR-ES to an
+  API endpoint and the dashboard — currently unreachable) and REQ-11 (formalize a
+  no-copyleft-in-`aimos/` dependency policy, since OpenBB is AGPLv3 and the
+  network-use clause would apply if it were ever imported directly).
+
+### Security / Fixed (audit remediation)
+- **C1 (Critical) — SPA path traversal closed.** `runtime/serve.py` now resolves the
+  requested path and serves a file only when it is inside `dashboard/dist`
+  (`is_relative_to`), else returns the SPA shell. Verified live: `…/state/.jwt_secret`,
+  `…/config/mandate.yaml`, `…/CLAUDE.md` all return the shell, not the file.
+- **C2 (Critical) — dashboard reachable with auth on.** `api/server.py` middleware
+  exemption rewritten (`_is_public_path`): the SPA shell + `/assets/*` are public,
+  `/api/*` and `/metrics` stay token-gated. Verified live + login page renders in a
+  browser under SaaS.
+- **H1 — control API hardened.** Default `AIMOS_HOST` is now `127.0.0.1`; control and
+  assistant endpoints refuse non-loopback callers when SaaS is off.
+- **H2 — OTP no longer leaked.** The no-SMTP log no longer includes the email body;
+  `state/maildrop` / `state/smsdrop` are opt-in via `AIMOS_DEV_MAILDROP` and written
+  `0600`. Fixed a `NameError` in `_render_password_reset_email`.
+- **H3 — auth brute force bounded.** Login codes are burned after 5 wrong guesses
+  (`EmailLoginCode.attempts`); `/auth/*` is rate-limited per client (429).
+- **M8 — atomic state writes.** New `runtime/atomic_io.py` (temp + fsync + rename);
+  `state_store.load` tolerates a torn file; `golive` keeps a `.bak` and restores it.
+- **H4 — journal backups.** New `scripts/backup_journal.py` — SQLite online-backup
+  API (consistent under writes) + immediate hash-chain verify + retention + an
+  atomic `journal-latest.sqlite` pointer. `scripts/restore_drill.sh` now **exits 1**
+  when no backup exists (a drill with no backup is not a pass).
+- **H5 — CI.** New `.github/workflows/ci.yml` runs pytest + all three lints + the
+  GPL tripwire + a backup/restore drill, plus a dashboard-build job, on every
+  push/PR so the gates are enforced rather than discipline-only.
+- **L5 — accessibility.** `dashboard/index.html` sets `<html lang="en">`.
+- Suite grew 466 → **488 passed / 1 xfailed**; magic-number, naive-datetime, and
+  import-linter (6/6) gates remain green. **All Critical/High/Medium audit blockers
+  are now fixed**; recommendation moves to **STOP — CONDITIONAL GO** (conditional on
+  an independent verification pass + product decisions PD1–PD5).
+
+### Added
+- **`PRODUCTION_READINESS_AUDIT.md`** — end-to-end product and production-readiness
+  audit at commit `5fd1b88`. Audit-only; **no application source was modified**.
+  18 findings (2 Critical, 5 High, 7 Medium, 4 Low); recommendation **CONTINUE — NO-GO**.
+  Baseline recorded: 466 passed / 1 xfailed, magic-number + naive-datetime lints
+  clean, import-linter 6/6, GPL tripwire armed (2 files).
+  - **C1 (Critical)** — unauthenticated path traversal in the SPA catch-all
+    (`runtime/serve.py:892`): percent-encoded `../` escapes `dashboard/dist` and
+    serves `state/.jwt_secret`, `state/.settings_key`, `state/maildrop/*`,
+    `secrets.yaml`, `.env`, `/etc/passwd`. Reproduced by execution.
+  - **C2 (Critical)** — enabling `saas_enabled` makes the dashboard, its login page,
+    and `/assets/*` return 401 (`api/server.py:111` exemption list omits non-API
+    paths), so auth cannot be switched on. Reproduced by execution.
+  - **H1** — control API (killswitch, feature toggles, go-live sign-off, LLM
+    assistant) is unauthenticated when `saas_enabled` is false (the default).
+  - **H2** — login OTPs logged at WARNING and written unconditionally to
+    `state/maildrop/` in plaintext, violating the "secrets are never logged" rule.
+  - **H3** — no inbound rate limiting or lockout; OTP codes are not invalidated on
+    failed attempts; 275 ms of bcrypt per unauthenticated request is a DoS vector
+    against the process that also runs the trading loop.
+  - **H4** — no backup mechanism exists and `scripts/restore_drill.sh` exits 0 when
+    no backup is found.
+  - **H5** — no CI/CD; the four documented quality gates are unenforced.
+  - **Pass 2 (live-server execution):** built the dashboard and ran the real app.
+    C1 confirmed against the running server and the full kill chain proven
+    (traversal → leak `state/.jwt_secret` → forge a token that `decode_token`
+    accepts as admin). Dashboard renders (21 screens, 0 console errors); no XSS
+    sink exists; the Telegram channel verified as a genuine strength. Added **M8**
+    (non-atomic `state.json`/`go_live.json` writes — torn write crashes boot or
+    silently wipes go-live sign-offs, both reproduced) and **L5** (`<html>` missing
+    `lang`). **No new Critical/High** — recommendation unchanged at **NO-GO**.
+
 ### Changed
 - **Single-admin mode + email OTP 2FA** (`aimos/saas/`):
   - Removed public registration, Google/Apple OAuth, phone OTP, and forgot-password
