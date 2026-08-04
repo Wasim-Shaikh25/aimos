@@ -127,6 +127,13 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   /api/assistant/debate/{decision_id}` returns a two-sided post-hoc explanation
   for a completed decision, grounded in the decision graph + journal/metrics
   evidence and clearly labeled as read-only, post-hoc commentary.
+- **REQ-9 — Alembic migrations for the SaaS/auth DB.** Replaced
+  `Base.metadata.create_all` with Alembic `upgrade head` in
+  `aimos.saas.db.run_migrations()` and `scripts/migrate_to_saas.py`.
+  Added `alembic/` environment wired to `aimos.saas.models` + `settings_store`,
+  a baseline migration (`001`) creating all auth/tenant/settings tables, and
+  `002` adding the `EmailLoginCode.attempts` brute-force counter. `alembic` is
+  added to the `saas` extra in `pyproject.toml`.
 - **`PRODUCTION_READINESS_AUDIT.md`** — end-to-end product and production-readiness
   audit at commit `5fd1b88`. Audit-only; **no application source was modified**.
   18 findings (2 Critical, 5 High, 7 Medium, 4 Low); recommendation **CONTINUE — NO-GO**.

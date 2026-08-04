@@ -23,7 +23,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from aimos.saas.db import Base, get_engine, get_session_maker
+from aimos.saas.db import get_engine, get_session_maker
 from aimos.saas.models import Organization, OrganizationConfig, OrganizationMember, User
 from aimos.saas.security import hash_password
 
@@ -43,8 +43,8 @@ def main(argv=None) -> int:
     state_dir = Path(args.state_dir)
     state_dir.mkdir(parents=True, exist_ok=True)
 
-    engine = get_engine()
-    Base.metadata.create_all(engine)
+    # get_engine() runs Alembic migrations and seeds the admin user.
+    get_engine()
     session = get_session_maker()()
 
     user: User | None = None
