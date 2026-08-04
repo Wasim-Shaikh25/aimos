@@ -363,9 +363,32 @@ Telegram locks, the fail-closed `mandate.yaml`, and the boot guard.
   dir (loop halts, forces NO_TRADE).
 - **Watchdog:** heartbeat at `state/heartbeat`; 3× miss → restart + alert (§23.5).
 
+### Network exposure model
+
+AIMOS defaults to **loopback-only** (`AIMOS_HOST=127.0.0.1`). This is the safe
+configuration for a single-operator machine or a deployment behind a trusted
+reverse proxy / VPN on the same host.
+
+- **No SaaS:** control endpoints (`/kill`, `/feature`, `/go-live`,
+  `/api/assistant/*`) refuse non-loopback callers. `/healthz` and `/readyz` are
+  public for load-balancer probes. Do **not** bind to `0.0.0.0` and expose the
+  port to the internet; the control surface is not authenticated in this mode.
+- **External reach:** use an authenticated reverse proxy (mTLS or a VPN) on the
+  same trust boundary, or enable SaaS (`features.saas_enabled: true`) so the
+  control surface requires a valid access token + `X-Organization-Id` header.
+  SaaS mode still expects to sit behind a TLS-terminating proxy; the runtime
+  does not terminate public TLS itself.
+
 ### Backups & restore (§23.5)
 
 The hash-chained journal (`state/aimos.sqlite`) is the system of record — back it up.
+
+**Default RPO/RTO:**
+- **RPO = 1 hour** — the runtime schedules an APScheduler job (`journal_backup`)
+  that creates a verified snapshot every 3600 seconds.
+- **RTO = manual restore from latest** — `backups/journal-latest.sqlite` is an
+  atomic pointer to the most recent verified snapshot; restart with that file
+  as `paper.journal_path`.
 
 ```bash
 # Create a verified, consistent snapshot (SQLite online-backup API; verifies the
@@ -377,8 +400,12 @@ python scripts/backup_journal.py --src state/aimos.sqlite --dest backups --keep 
 bash scripts/restore_drill.sh
 ```
 
-Schedule `backup_journal.py` at your target RPO (cron, a compose timer, or the
-APScheduler runtime). Back up **separately and securely**: the auth/settings DB
+Tuning: `config/default.yaml` `backup.*` or env `AIMOS__BACKUP__INTERVAL_SECONDS`,
+`AIMOS__BACKUP__DEST`, `AIMOS__BACKUP__KEEP`. The job runs in
+`aimos/runtime/serve.py` and uses `aimos.journal.backup.backup_journal` with the
+per-tenant journal path.
+
+Back up **separately and securely**: the auth/settings DB
 (`state/auth.sqlite` or Postgres via `AIMOS__SAAS__DATABASE_URL`) and
 `state/.settings_key` — without the key, encrypted exchange credentials are
 unrecoverable. Never drop `state/.settings_key` into `backups/` alongside the

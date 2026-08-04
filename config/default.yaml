@@ -251,6 +251,15 @@ risk:
 health:
   heartbeat_stale_seconds: 30      # env `AIMOS__HEALTH__HEARTBEAT_STALE_SECONDS`
 
+# Journal backup scheduler (REQ-12). A verified snapshot of the hash-chained
+# journal is taken on this interval; older timestamped snapshots are pruned to `keep`.
+# Defaults give an RPO of 1 hour and 2 weeks of retained snapshots.
+backup:
+  enabled: true                    # env `AIMOS__BACKUP__ENABLED=false` to disable
+  interval_seconds: 3600           # env `AIMOS__BACKUP__INTERVAL_SECONDS`
+  dest: "backups"                  # env `AIMOS__BACKUP__DEST`
+  keep: 14                         # env `AIMOS__BACKUP__KEEP`
+
 # Read-only AI analyst (specs/ASSISTANT.md) — answers questions and writes reports
 # grounded in the journal + metrics. LLM is a sensor/explainer only (§15.3): it
 # never trades, flips flags, or edits config. Off unless enabled + ANTHROPIC_API_KEY.

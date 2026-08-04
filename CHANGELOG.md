@@ -134,6 +134,16 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   a baseline migration (`001`) creating all auth/tenant/settings tables, and
   `002` adding the `EmailLoginCode.attempts` brute-force counter. `alembic` is
   added to the `saas` extra in `pyproject.toml`.
+- **REQ-10 / PD1 — network-exposure model decision.** Default deployment is
+  loopback-only; external reach requires an authenticated reverse proxy/VPN or
+  SaaS-enabled token auth. Documented in `specs/OPERATIONS.md`; H1 loopback-gate
+  behavior is unchanged.
+- **REQ-12 / PD5 — scheduled journal backups.** Refactored
+  `scripts/backup_journal.py` into `aimos/journal/backup.py` so the runtime can
+  call `backup_journal` directly. Added `backup` config (`config/default.yaml`)
+  with default `interval_seconds: 3600` (RPO = 1 hour) and `keep: 14`.
+  `aimos/runtime/serve.py` registers an APScheduler `journal_backup` job using
+  the per-tenant journal path. `specs/OPERATIONS.md` records the default RPO/RTO.
 - **`PRODUCTION_READINESS_AUDIT.md`** — end-to-end product and production-readiness
   audit at commit `5fd1b88`. Audit-only; **no application source was modified**.
   18 findings (2 Critical, 5 High, 7 Medium, 4 Low); recommendation **CONTINUE — NO-GO**.

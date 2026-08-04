@@ -41,6 +41,7 @@ from aimos.execution.broker.live import LiveBroker, MandateGate
 from aimos.execution.broker.live_router import MultiVenueLiveRouter
 from aimos.execution.broker.paper import PaperBroker
 from aimos.execution.position_sizer import SizingInputs
+from aimos.journal.backup import backup_journal
 from aimos.journal.journal import Journal
 from aimos.runtime.state_store import RuntimeStateStore, build_snapshot
 from aimos.saas.auth_service import FailedLoginTracker
@@ -320,6 +321,24 @@ def build_app(offline: Optional[bool] = None):
         """APScheduler wrapper that runs the heavy analytics off the event loop."""
         await asyncio.to_thread(_compute_risk_report)
 
+    def _backup_job() -> None:
+        """Verified journal backup running off the event loop (REQ-12)."""
+        try:
+            backup_cfg = params.model_dump().get("backup", {}) or {}
+            if not bool(backup_cfg.get("enabled", True)):
+                return
+            out = backup_journal(
+                src=str(jpath),
+                dest_dir=str(backup_cfg.get("dest", "backups")),
+                keep=int(backup_cfg.get("keep", 14)),
+            )
+            log.info("journal_backup_ok", path=str(out))
+        except FileNotFoundError:
+            # Journal may not exist yet on first boot; the next interval will retry.
+            log.warning("journal_backup_skipped_no_journal")
+        except Exception:  # noqa: BLE001 — backup must never kill the loop
+            log.exception("journal_backup_error")
+
     async def monitor_loop() -> None:
         """Run the feature monitor on an interval: force safe coverage, probe every
         feature, publish the report to /api/monitor and ``state/monitor_report.json``."""
@@ -397,6 +416,18 @@ def build_app(offline: Optional[bool] = None):
                 scheduler.start()
                 log.info("risk_analytics_scheduler_started",
                          interval_seconds=float(risk_cfg.get("interval_seconds", 86400)))
+
+                backup_cfg = params.model_dump().get("backup", {}) or {}
+                if bool(backup_cfg.get("enabled", True)):
+                    scheduler.add_job(
+                        _backup_job, "interval",
+                        seconds=float(backup_cfg.get("interval_seconds", 3600)),
+                        next_run_time=datetime.now(timezone.utc),
+                        id="journal_backup",
+                        replace_existing=True,
+                    )
+                    log.info("journal_backup_scheduler_started",
+                             interval_seconds=float(backup_cfg.get("interval_seconds", 3600)))
 
         log.info("serve_started", live_data=live_data, dashboard=DIST.exists(),
                  universe=holder["universe"].source, symbols=len(holder["universe"].selected))
