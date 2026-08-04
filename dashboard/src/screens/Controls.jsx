@@ -12,10 +12,17 @@ export default function Controls() {
   const feats = data?.features || {}
   const toggleable = data?.toggleable || []
   const locked = data?.locked || {}
+  const halted = !!data?.halted
 
   async function flip(name, next) {
     setBusy(name)
     await api.setFeature(name, next)
+    setBusy(null)
+  }
+
+  async function doControl(action) {
+    setBusy(action)
+    await api.control(action, { confirm: 'CONFIRM' })
     setBusy(null)
   }
 
@@ -24,6 +31,19 @@ export default function Controls() {
       no restart. Live/funded features are locked here and require the §23.8 go-live ladder + funded keys.
       Everything here is also available on Telegram: <span className="mono">/features · /enable &lt;name&gt; · /disable &lt;name&gt;</span>.</p>
 
+    <h2>Killswitch</h2>
+    <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, padding: 16, marginBottom: 18 }}>
+      <p className="muted" style={{ marginTop: 0 }}>
+        {halted
+          ? 'The system is HALTED. No trades will be placed until reset.'
+          : 'The system is running. Trigger a halt to force NO_TRADE across all symbols.'}
+      </p>
+      {halted
+        ? <button onClick={() => doControl('unhalt')} disabled={busy === 'unhalt'}>{busy === 'unhalt' ? '…' : 'Reset halt'}</button>
+        : <button onClick={() => doControl('killswitch')} disabled={busy === 'killswitch'} style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>{busy === 'killswitch' ? '…' : 'Halt trading'}</button>}
+      &nbsp;<span>Status: <Badge dir={halted ? 'down' : 'up'}>{halted ? 'halted' : 'running'}</Badge></span>
+    </div>
+
     <h2>Runtime-toggleable</h2>
     <table><thead><tr><th>Feature</th><th>State</th><th>Action</th></tr></thead>
       <tbody>{toggleable.map(name => {
@@ -31,7 +51,7 @@ export default function Controls() {
         return <tr key={name}>
           <td className="mono">{name}</td>
           <td><Badge dir={on ? 'up' : 'flat'}>{on ? 'on' : 'off'}</Badge></td>
-          <td><button disabled={busy === name} onClick={() => flip(name, !on)}>
+          <td><button disabled={busy === name || halted} onClick={() => flip(name, !on)}>
             {busy === name ? '…' : (on ? 'Disable' : 'Enable')}</button></td>
         </tr>
       })}</tbody></table>

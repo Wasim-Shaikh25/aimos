@@ -25,7 +25,7 @@ prerequisite) · ⏭️ not built yet.
 | SaaS P2/P3 (partial) | Runtime state persistence, per-tenant config/journal/state store, broker/sim resume, streaming scaffold + feed into paper loop, ML registry, dashboard equity + candlestick charts, evidence tables, decision anatomy, org settings, auth screens, org scoping, migration, Dockerfile, vendor manifest + vendoring script, live multi-venue executor wiring (fail-closed), tests | ✅ |
 
 The §25.9 golden worked example reproduces exactly (fusion 0.766/0.428; execution
-NO_TRADE, EV −0.018). **516 passed, 1 xfailed**; magic-number + naive-datetime lints
+NO_TRADE, EV −0.018). **528 passed, 1 xfailed**; magic-number + naive-datetime lints
 clean; import-linter 6/6.
 
 > ✅ **Production readiness: STOP — CONDITIONAL GO.** See **`PRODUCTION_READINESS_AUDIT.md`**.
@@ -37,8 +37,10 @@ clean; import-linter 6/6.
 > and key material defaults to `~/.aimos/secrets` with a dedicated Docker secrets
 > volume (REQ-14). The dormant on-chain engine now has a Coin Metrics Community
 > API provider (REQ-16), and the dashboard accessibility pass is complete
-> (REQ-15). Remaining condition before live: an **independent verification
-> pass**.
+> (REQ-15). The independent verification pass is complete and the two go-live
+> blockers it found are fixed: killswitch can now be reset via `POST
+> /api/control/unhalt` and the dashboard Controls screen, and `/api/v2/status` now
+> surfaces runtime feature flags plus `halted` state.
 
 ---
 

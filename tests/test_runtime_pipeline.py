@@ -79,9 +79,22 @@ def test_portfolio_lock_serializes_ticks():
     assert orch.journal.decision_count() == 2  # both completed, no corruption
 
 
-def test_killswitch_halts():
-    orch = PipelineOrchestrator(load_params())
-    orch.state.halted = True
+def test_killswitch_halts(tmp_path):
+    params = load_params()
+    orch = PipelineOrchestrator(params, halt_file=str(tmp_path / "RUNTIME_HALT"))
+    orch.halt()
+    assert orch.halt_file.exists()
     result = asyncio.run(orch.tick(_bullish_ctx(), make_exec_ctx()))
     assert result.plan.action is Action.NO_TRADE
+    assert result.forced_no_trade
+    orch.unhalt()
+    assert not orch.state.halted
+    assert not orch.halt_file.exists()
+
+
+def test_halt_file_triggers_halt(tmp_path):
+    params = load_params()
+    orch = PipelineOrchestrator(params, halt_file=str(tmp_path / "RUNTIME_HALT"))
+    orch.halt_file.touch()
+    result = asyncio.run(orch.tick(_bullish_ctx(), make_exec_ctx()))
     assert result.forced_no_trade

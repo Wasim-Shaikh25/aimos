@@ -96,6 +96,19 @@ class PipelineOrchestrator:
     def is_paused(self, symbol: str) -> bool:
         return self.state.global_pause or symbol in self.state.paused_assets
 
+    def halt(self) -> None:
+        """Emergency stop — set halted state and persist the kill-switch file (§7.4)."""
+        self.state.halted = True
+        self.halt_file.touch()
+
+    def unhalt(self) -> None:
+        """Clear a previous halt and remove the kill-switch file."""
+        self.state.halted = False
+        try:
+            self.halt_file.unlink(missing_ok=True)
+        except Exception:  # noqa: BLE001
+            pass
+
     def check_halt(self) -> bool:
         if self.halt_file.exists():
             self.state.halted = True
