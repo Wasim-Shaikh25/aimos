@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from aimos.journal.journal import Journal
+from aimos.saas.auth_service import FailedLoginTracker
 from aimos.saas.router import auth_router, tenant_router
 from aimos.saas.security import AuthError, decode_token
 from aimos.saas.settings import get_saas_config
@@ -79,6 +80,7 @@ class AppState:
     risk_provider: Any = None  # callable -> risk analytics report dict
     risk_analyzer: Any = None  # callable that recomputes and caches the risk report
     health_provider: Any = None  # callable -> readiness dict for /readyz
+    auth_alert_tracker: Any = field(default_factory=FailedLoginTracker)  # failed-login alert state
     assistant: Any = None  # read-only AI analyst (Assistant) or None when disabled
 
 
@@ -456,6 +458,9 @@ def create_app(state: AppState) -> FastAPI:
         app.include_router(auth_router)
         app.include_router(tenant_router)
 
+    # Expose the injected state and failed-login tracker to request-time code.
+    app.state.aimos = state
+    app.state.auth_alert_tracker = state.auth_alert_tracker
     return app
 
 

@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from aimos.api.server import AppState, create_app
 from aimos.journal.journal import Journal
 from aimos.saas import db as saas_db
+from aimos.saas.models import AuthAuditLog
 
 
 @pytest.fixture(autouse=True)
@@ -345,3 +346,142 @@ class TestOrgScoping:
         })
         assert resp.status_code == 200
         assert "equity" in resp.json()
+
+
+class TestPasswordChange:
+    def test_change_password_weak_fails(self, client, admin_tokens):
+        resp = client.post("/api/v2/me/password", json={
+            "current_password": "AdminPass123!",
+            "new_password": "weak",
+        }, headers={"Authorization": f"Bearer {admin_tokens['access_token']}"})
+        assert resp.status_code == 400
+
+    def test_change_password_wrong_current_fails(self, client, admin_tokens):
+        resp = client.post("/api/v2/me/password", json={
+            "current_password": "WrongPass123!",
+            "new_password": "NewStrongPass1!",
+        }, headers={"Authorization": f"Bearer {admin_tokens['access_token']}"})
+        assert resp.status_code == 401
+
+    def test_change_password_updates_and_revokes_refresh(self, client, admin_tokens):
+        # Change password.
+        resp = client.post("/api/v2/me/password", json={
+            "current_password": "AdminPass123!",
+            "new_password": "NewStrongPass1!",
+        }, headers={"Authorization": f"Bearer {admin_tokens['access_token']}"})
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+
+        # Old refresh token is revoked.
+        resp = client.post("/auth/refresh", json={"refresh_token": admin_tokens["refresh_token"]})
+        assert resp.status_code == 401
+
+        # Login with the new password works; old password fails.
+        resp = client.post("/auth/login", json={
+            "email": "admin@example.com",
+            "password": "AdminPass123!",
+        })
+        assert resp.status_code == 401
+
+        resp = client.post("/auth/login", json={
+            "email": "admin@example.com",
+            "password": "NewStrongPass1!",
+        })
+        assert resp.status_code == 200
+
+    def test_ensure_admin_user_does_not_overwrite_password(self, monkeypatch):
+        from aimos.saas import auth_service
+        from aimos.saas.models import User
+
+        # Seed the admin once.
+        SessionLocal = saas_db.get_session_maker()
+        with SessionLocal() as session:
+            user = auth_service.ensure_admin_user(session)
+            old_hash = user.password_hash
+
+        # Change the configured password; existing user must keep the old hash.
+        monkeypatch.setenv("AIMOS__SAAS__ADMIN__PASSWORD", "DifferentPass1!")
+        with SessionLocal() as session:
+            user = session.query(User).filter(User.email == "admin@example.com").first()
+            user_after = auth_service.ensure_admin_user(session)
+            assert user_after is user
+            assert user_after.password_hash == old_hash
+            assert auth_service.verify_password("AdminPass123!", user_after.password_hash)
+            assert not auth_service.verify_password("DifferentPass1!", user_after.password_hash)
+
+
+class TestAuthAudit:
+    def _audit_rows(self):
+        SessionLocal = saas_db.get_session_maker()
+        with SessionLocal() as session:
+            return [(r.event_type, r.email, r.user_id, r.success) for r in session.query(AuthAuditLog).all()]
+
+    def test_login_audit_recorded(self, client):
+        client.post("/auth/login", json={"email": "admin@example.com", "password": "AdminPass123!"})
+        rows = self._audit_rows()
+        assert any(e == "login_attempt" and s is True for e, _, _, s in rows)
+
+        client.post("/auth/login", json={"email": "admin@example.com", "password": "wrong"})
+        rows = self._audit_rows()
+        assert any(e == "login_attempt" and s is False for e, _, _, s in rows)
+
+    def test_full_auth_lifecycle_audited(self, client, admin_tokens):
+        token = admin_tokens["access_token"]
+        # Add and remove an exchange key.
+        client.post("/api/v2/settings/exchange", json={
+            "venue": "binance", "apiKey": "abc", "secret": "def", "testnet": True, "withdraw": False,
+        }, headers={"Authorization": f"Bearer {token}"})
+        client.delete("/api/v2/settings/exchange/binance", headers={"Authorization": f"Bearer {token}"})
+
+        # Refresh, then logout with the new refresh token.
+        resp = client.post("/auth/refresh", json={"refresh_token": admin_tokens["refresh_token"]})
+        assert resp.status_code == 200
+        new_refresh = resp.json()["refresh_token"]
+        client.post("/auth/logout", json={"refresh_token": new_refresh})
+
+        # Change password (revokes all refresh tokens; access token is still valid).
+        client.post("/api/v2/me/password", json={
+            "current_password": "AdminPass123!", "new_password": "NewStrongPass1!",
+        }, headers={"Authorization": f"Bearer {token}"})
+
+        rows = self._audit_rows()
+        events = [r[0] for r in rows]
+        assert "exchange_key_add" in events
+        assert "exchange_key_remove" in events
+        assert "password_change" in events
+        assert "refresh" in events
+        assert "logout" in events
+
+
+class TestFailedLoginAlerts:
+    def test_alert_fires_after_threshold(self, client):
+        captured = []
+        client.app.state.auth_alert_tracker.alert_fn = captured.append
+        client.app.state.auth_alert_tracker.threshold = 3
+
+        for _ in range(3):
+            resp = client.post("/auth/login", json={
+                "email": "admin@example.com",
+                "password": "wrong",
+            })
+            assert resp.status_code == 401
+
+        assert len(captured) >= 1
+        assert "admin@example.com" in captured[0]
+
+    def test_successful_login_resets_failure_streak(self, client):
+        captured = []
+        client.app.state.auth_alert_tracker.alert_fn = captured.append
+        client.app.state.auth_alert_tracker.threshold = 3
+
+        # Two failures.
+        for _ in range(2):
+            client.post("/auth/login", json={"email": "admin@example.com", "password": "wrong"})
+
+        # One success.
+        resp = client.post("/auth/login", json={"email": "admin@example.com", "password": "AdminPass123!"})
+        assert resp.status_code == 200
+
+        # One more failure should not trigger an alert (streak was cleared).
+        client.post("/auth/login", json={"email": "admin@example.com", "password": "wrong"})
+        assert len(captured) == 0

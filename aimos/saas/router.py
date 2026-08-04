@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
@@ -13,7 +13,7 @@ from aimos.saas import auth_service
 from aimos.saas.config_tenant import _deep_merge
 from aimos.saas.db import get_db
 from aimos.saas.models import Organization, OrganizationMember, User
-from aimos.saas.security import get_current_user
+from aimos.saas.security import decode_token, get_current_user
 from aimos.saas.settings import get_saas_config
 from aimos.saas.settings_store import SettingsStore
 
@@ -69,9 +69,25 @@ class ConfigPatchRequest(BaseModel):
     overrides: dict[str, Any]
 
 
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _client_info(request: Request) -> dict[str, str | None]:
+    return {
+        "ip_address": request.client.host if request.client else None,
+        "user_agent": request.headers.get("user-agent"),
+    }
+
+
+def _tracker_from(request: Request) -> auth_service.FailedLoginTracker:
+    return getattr(request.app.state, "auth_alert_tracker", auth_service.FailedLoginTracker())
 
 
 def _token_response(result: auth_service.AuthResult) -> TokenResponse:
@@ -89,41 +105,110 @@ def _token_response(result: auth_service.AuthResult) -> TokenResponse:
 
 
 @auth_router.post("/login")
-def login(req: LoginRequest, session: Session = Depends(get_db)):
+def login(req: LoginRequest, request: Request, session: Session = Depends(get_db)):
     """Step 1: verify admin password and email a one-time login code."""
-    auth_service.send_login_otp(session, req.email, req.password)
-    return {"ok": True, "message": "Check your email for a login code."}
+    info = _client_info(request)
+    tracker = _tracker_from(request)
+    try:
+        auth_service.send_login_otp(session, req.email, req.password)
+        tracker.clear(req.email)
+        tracker.clear(info["ip_address"] or "")
+        auth_service.audit_auth_event(
+            session, "login_attempt", email=req.email, success=True, **info
+        )
+        return {"ok": True, "message": "Check your email for a login code."}
+    except auth_service.AuthError as exc:
+        tracker.record(req.email, success=False, message=f"Failed login for {req.email}")
+        tracker.record(
+            info["ip_address"] or "",
+            success=False,
+            message=f"Failed login from {info['ip_address']}",
+        )
+        auth_service.audit_auth_event(
+            session, "login_attempt", email=req.email, success=False, detail=str(exc.detail), **info
+        )
+        raise
 
 
 @auth_router.post("/login/verify", response_model=TokenResponse)
-def login_verify(req: LoginVerifyRequest, session: Session = Depends(get_db)):
+def login_verify(req: LoginVerifyRequest, request: Request, session: Session = Depends(get_db)):
     """Step 2: verify the email OTP and issue tokens."""
-    result = auth_service.verify_login_otp(session, req.email, req.code)
-    return _token_response(result)
+    info = _client_info(request)
+    tracker = _tracker_from(request)
+    try:
+        result = auth_service.verify_login_otp(session, req.email, req.code)
+        tracker.clear(req.email)
+        tracker.clear(info["ip_address"] or "")
+        auth_service.audit_auth_event(
+            session,
+            "otp_verify",
+            email=req.email,
+            user_id=result.user.id,
+            success=True,
+            **info,
+        )
+        return _token_response(result)
+    except auth_service.AuthError as exc:
+        tracker.record(req.email, success=False, message=f"Failed OTP verify for {req.email}")
+        tracker.record(
+            info["ip_address"] or "",
+            success=False,
+            message=f"Failed OTP verify from {info['ip_address']}",
+        )
+        auth_service.audit_auth_event(
+            session, "otp_verify", email=req.email, success=False, detail=str(exc.detail), **info
+        )
+        raise
 
 
 @auth_router.post("/refresh", response_model=TokenResponse)
-def refresh(req: RefreshRequest, session: Session = Depends(get_db)):
-    access, refresh, user_id = auth_service.refresh_access_token(session, req.refresh_token)
-    org = (
-        session.query(Organization)
-        .join(OrganizationMember)
-        .filter(OrganizationMember.user_id == user_id)
-        .order_by(Organization.created_at.asc())
-        .first()
-    )
-    return TokenResponse(
-        access_token=access,
-        refresh_token=refresh,
-        user_id=user_id,
-        organization_id=org.id if org else "",
-    )
+def refresh(req: RefreshRequest, request: Request, session: Session = Depends(get_db)):
+    info = _client_info(request)
+    try:
+        access, refresh, user_id = auth_service.refresh_access_token(session, req.refresh_token)
+        auth_service.audit_auth_event(
+            session, "refresh", user_id=user_id, success=True, **info
+        )
+        org = (
+            session.query(Organization)
+            .join(OrganizationMember)
+            .filter(OrganizationMember.user_id == user_id)
+            .order_by(Organization.created_at.asc())
+            .first()
+        )
+        return TokenResponse(
+            access_token=access,
+            refresh_token=refresh,
+            user_id=user_id,
+            organization_id=org.id if org else "",
+        )
+    except auth_service.AuthError as exc:
+        auth_service.audit_auth_event(
+            session, "refresh", success=False, detail=str(exc.detail), **info
+        )
+        raise
 
 
 @auth_router.post("/logout")
-def logout(req: RefreshRequest, session: Session = Depends(get_db)):
-    auth_service.revoke_refresh_token(session, req.refresh_token)
-    return {"ok": True}
+def logout(req: RefreshRequest, request: Request, session: Session = Depends(get_db)):
+    info = _client_info(request)
+    user_id: str | None = None
+    try:
+        payload = decode_token(req.refresh_token, token_type="refresh")
+        user_id = payload.get("sub")
+    except Exception:  # noqa: BLE001 — logout audit is best-effort
+        pass
+    try:
+        auth_service.revoke_refresh_token(session, req.refresh_token)
+        auth_service.audit_auth_event(
+            session, "logout", user_id=user_id, success=True, **info
+        )
+        return {"ok": True}
+    except auth_service.AuthError as exc:
+        auth_service.audit_auth_event(
+            session, "logout", user_id=user_id, success=False, detail=str(exc.detail), **info
+        )
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +225,25 @@ def me(current_user: User = Depends(get_current_user)):
         phone_number=current_user.phone_number,
         phone_verified=current_user.phone_verified,
     )
+
+
+@tenant_router.post("/me/password")
+def change_password(
+    req: PasswordChangeRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+):
+    """Change the admin password; revokes all outstanding refresh tokens."""
+    auth_service.change_admin_password(session, current_user, req.current_password, req.new_password)
+    auth_service.audit_auth_event(
+        session,
+        "password_change",
+        user_id=current_user.id,
+        success=True,
+        **_client_info(request),
+    )
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------
@@ -184,18 +288,38 @@ def patch_settings(
 @tenant_router.post("/settings/exchange")
 def add_exchange(
     req: ExchangeKeyRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
 ) -> dict[str, dict[str, Any]]:
     """Store encrypted exchange API credentials."""
     _settings_store().set_exchange(req.venue, req.model_dump())
+    auth_service.audit_auth_event(
+        session,
+        "exchange_key_add",
+        user_id=current_user.id,
+        success=True,
+        detail=f"venue={req.venue}",
+        **_client_info(request),
+    )
     return _settings_store().get_exchanges()
 
 
 @tenant_router.delete("/settings/exchange/{venue}")
 def delete_exchange(
     venue: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
 ) -> dict[str, dict[str, Any]]:
     """Remove exchange credentials."""
     _settings_store().delete_exchange(venue)
+    auth_service.audit_auth_event(
+        session,
+        "exchange_key_remove",
+        user_id=current_user.id,
+        success=True,
+        detail=f"venue={venue}",
+        **_client_info(request),
+    )
     return _settings_store().get_exchanges()
