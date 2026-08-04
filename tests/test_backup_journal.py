@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from aimos.journal.backup import backup_journal
 from aimos.journal.journal import Journal
-from scripts.backup_journal import backup
 
 
 def _populate(path: Path, n: int = 5) -> None:
@@ -24,7 +24,7 @@ def _populate(path: Path, n: int = 5) -> None:
 def test_backup_creates_verifiable_copy(tmp_path):
     src = tmp_path / "aimos.sqlite"
     _populate(src)
-    out = backup(str(src), str(tmp_path / "backups"), keep=14)
+    out = backup_journal(str(src), str(tmp_path / "backups"), keep=14)
     assert out.exists()
     # The backup's own hash chain verifies.
     j = Journal(out)
@@ -41,7 +41,7 @@ def test_backup_creates_verifiable_copy(tmp_path):
 
 def test_backup_missing_source_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
-        backup(str(tmp_path / "nope.sqlite"), str(tmp_path / "backups"))
+        backup_journal(str(tmp_path / "nope.sqlite"), str(tmp_path / "backups"))
 
 
 def test_backup_retention_prunes_oldest(tmp_path):
@@ -49,14 +49,14 @@ def test_backup_retention_prunes_oldest(tmp_path):
     _populate(src)
     dest = tmp_path / "backups"
     # Force several distinct snapshots with an explicit timestamped name each.
-    import scripts.backup_journal as bj
+    import aimos.journal.backup as bj
     stamps = ["20260101T000001Z", "20260101T000002Z", "20260101T000003Z"]
     it = iter(stamps)
     original = bj._stamp
     bj._stamp = lambda: next(it)  # type: ignore[assignment]
     try:
         for _ in stamps:
-            backup(str(src), str(dest), keep=2)
+            backup_journal(str(src), str(dest), keep=2)
     finally:
         bj._stamp = original
     snaps = sorted(p.name for p in dest.glob("journal-*.sqlite")
@@ -65,7 +65,7 @@ def test_backup_retention_prunes_oldest(tmp_path):
     assert "journal-20260101T000001Z.sqlite" not in snaps
 
 
-def test_restore_drill_fails_without_backup(tmp_path):
+def test_restore_drill_fails_without_backup_journal(tmp_path):
     res = subprocess.run(
         ["bash", "scripts/restore_drill.sh", str(tmp_path / "missing.sqlite")],
         capture_output=True, text=True,
@@ -73,10 +73,10 @@ def test_restore_drill_fails_without_backup(tmp_path):
     assert res.returncode == 1  # a drill with no backup is not a pass
 
 
-def test_restore_drill_passes_with_verified_backup(tmp_path):
+def test_restore_drill_passes_with_verified_backup_journal(tmp_path):
     src = tmp_path / "aimos.sqlite"
     _populate(src)
-    out = backup(str(src), str(tmp_path / "backups"), keep=14)
+    out = backup_journal(str(src), str(tmp_path / "backups"), keep=14)
     res = subprocess.run(
         ["bash", "scripts/restore_drill.sh", str(out)],
         capture_output=True, text=True,

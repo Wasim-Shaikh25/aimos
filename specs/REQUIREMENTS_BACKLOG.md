@@ -164,16 +164,17 @@ removed once folded into STATUS.md).
 
 ## Tier 3 — product decisions (not code — need an answer, then possibly code)
 
-### REQ-10 / PD1: Network-exposure model
+### [x] REQ-10 / PD1: Network-exposure model
 
-- **Question:** is AIMOS ever reachable beyond localhost / an authenticated
-  reverse proxy?
-- **Why it matters:** finalizes finding H1's disposition. The current fix
-  (loopback-default host + loopback-only control endpoints when SaaS is off)
-  closes accidental and anonymous-remote exposure; whether that's sufficient or
-  whether a proxy/VPN requirement should be documented as mandatory depends on
-  this answer.
-- **Output:** a decision recorded in `specs/OPERATIONS.md`.
+- **Decision:** AIMOS defaults to loopback-only. For external reach, it must sit
+  behind an authenticated reverse proxy (mTLS/VPN or a SaaS-enabled deployment
+  with strong token auth) on the same trust boundary; direct, anonymous remote
+  access to control endpoints is not supported. Control endpoints already refuse
+  non-loopback callers when SaaS is off (H1), and `/healthz`/`/readyz` remain
+  public for load-balancer probes.
+- **Implementation:** the default `AIMOS_HOST` stays `127.0.0.1`; the control
+  surface (`/kill`, `/feature`, `/go-live`, `/api/assistant/*`) is gated to
+  loopback or a valid SaaS access token. Recorded in `specs/OPERATIONS.md`.
 
 ### [x] REQ-11 / PD3: Copyleft dependency policy (GPL/AGPL)
 
@@ -195,15 +196,20 @@ removed once folded into STATUS.md).
 - **Output:** a written rule, and optionally extending `check_gpl_tripwire.py` to
   flag AGPL in `pyproject.toml` dependency pins, not just tracked source files.
 
-### REQ-12 / PD5: Backup schedule (RPO/RTO target)
+### [x] REQ-12 / PD5: Backup schedule (RPO/RTO target)
 
 - **Source:** `PRODUCTION_READINESS_AUDIT.md` finding H4 (script built, not
   scheduled).
-- **Question:** what RPO (max acceptable data loss) and RTO (max acceptable
-  downtime) for the journal? Determines the cron/timer interval for
-  `scripts/backup_journal.py` and the `--keep` retention value.
-- **Output:** a cron entry / compose timer / APScheduler job at the chosen
-  interval, documented in `specs/OPERATIONS.md`.
+- **Decision:** target **RPO = 1 hour** / **RTO = manual restore from latest**
+  for the decision journal. The auth/settings DB (`state/auth.sqlite` or Postgres)
+  and `state/.settings_key` are backed up separately by the operator.
+- **Implementation:** `config/default.yaml` gains a `backup` section
+  (`enabled: true`, `interval_seconds: 3600`, `dest: backups`, `keep: 14`).
+  `aimos/runtime/serve.py` schedules an APScheduler `journal_backup` job that
+  calls `aimos.journal.backup.backup_journal` with the per-tenant journal path
+  and the configured retention. The backup script was refactored into
+  `aimos/journal/backup.py` so the runtime can import it directly. Documented in
+  `specs/OPERATIONS.md`.
 
 ---
 

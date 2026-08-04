@@ -80,4 +80,11 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # Flush and os._exit avoids a rare pyarrow/pandas C++ terminate-on-shutdown
+    # that can return -6 instead of the intended exit code in subprocess tests.
+    import os
+
+    rc = main()
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(rc)

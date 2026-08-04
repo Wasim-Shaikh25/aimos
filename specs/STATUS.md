@@ -25,16 +25,17 @@ prerequisite) · ⏭️ not built yet.
 | SaaS P2/P3 (partial) | Runtime state persistence, per-tenant config/journal/state store, broker/sim resume, streaming scaffold + feed into paper loop, ML registry, dashboard equity + candlestick charts, evidence tables, decision anatomy, org settings, auth screens, org scoping, migration, Dockerfile, vendor manifest + vendoring script, live multi-venue executor wiring (fail-closed), tests | ✅ |
 
 The §25.9 golden worked example reproduces exactly (fusion 0.766/0.428; execution
-NO_TRADE, EV −0.018). **514 passed, 1 xfailed**; magic-number + naive-datetime lints
+NO_TRADE, EV −0.018). **516 passed, 1 xfailed**; magic-number + naive-datetime lints
 clean; import-linter 6/6.
 
 > ✅ **Production readiness: STOP — CONDITIONAL GO.** See **`PRODUCTION_READINESS_AUDIT.md`**.
 > **All Critical/High/Medium audit blockers are fixed** — the 2 Criticals (C1
 > traversal, C2 auth-lockout) verified live, and H1–H5 + M8 + L5 fixed with tests
-> (466 → 514). Remaining conditions before live: an **independent verification pass**,
-> product decision **PD1** (network-exposure model), and scheduling the new
-> `scripts/backup_journal.py` at the target RPO. The H3 `email_login_codes.attempts`
-> schema change is now an Alembic migration (REQ-9).
+> (466 → 516). The H3 `email_login_codes.attempts` schema change is now an Alembic
+> migration (REQ-9), the backup scheduler runs hourly by default (REQ-12), and the
+> network-exposure model is documented as loopback-only/proxy-or-SaaS (REQ-10).
+> Remaining conditions before live: an **independent verification pass** and
+> product decision **PD1** is recorded.
 
 ---
 
