@@ -64,6 +64,9 @@ export const api = {
   patchSettingsConfig: (overrides) => j('/api/v2/settings/config', { method: 'PATCH', body: JSON.stringify({ overrides }) }),
   addExchange: (data) => j('/api/v2/settings/exchange', { method: 'POST', body: JSON.stringify(data) }),
   deleteExchange: (venue) => j(`/api/v2/settings/exchange/${venue}`, { method: 'DELETE' }),
+  changePassword: (current_password, new_password) => j('/api/v2/me/password', {
+    method: 'POST', body: JSON.stringify({ current_password, new_password }),
+  }),
 
   // Runtime
   decisions: (n = 50) => j(`/api/decisions?limit=${n}`),

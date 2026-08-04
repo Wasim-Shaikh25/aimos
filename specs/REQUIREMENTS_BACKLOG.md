@@ -75,7 +75,7 @@ removed once folded into STATUS.md).
 
 ## Tier 2 — security/ops hardening
 
-### REQ-4: Admin password change endpoint + UI (closes M2)
+### [x] REQ-4: Admin password change endpoint + UI (closes M2)
 
 - **Source:** `PRODUCTION_READINESS_AUDIT.md` finding M2.
 - **Evidence:** `ensure_admin_user` re-hashes the password from config **on every
@@ -90,7 +90,7 @@ removed once folded into STATUS.md).
 - **Priority:** Medium. **Effort:** Small.
 - **Dependencies:** none.
 
-### REQ-5: Stop swallowing admin-seed failures; add an auth audit log
+### [x] REQ-5: Stop swallowing admin-seed failures; add an auth audit log
 
 - **Source:** `PRODUCTION_READINESS_AUDIT.md` finding M4.
 - **Evidence:** `aimos/saas/db.py` wraps `ensure_admin_user` in a bare
@@ -118,7 +118,7 @@ removed once folded into STATUS.md).
 - **Dependencies:** should be public even when `saas.enabled` — extend
   `_is_public_path` in `aimos/api/server.py` (the same allow-list from the C2 fix).
 
-### REQ-7: Alert on repeated failed logins
+### [x] REQ-7: Alert on repeated failed logins
 
 - **Source:** `PRODUCTION_READINESS_AUDIT.md` gaps G3/G7.
 - **Rationale:** the H3 throttle bounds brute force but produces no signal to the

@@ -116,6 +116,22 @@ class OrganizationConfig(Base):
     organization: Mapped["Organization"] = relationship("Organization", back_populates="config")
 
 
+class AuthAuditLog(Base):
+    """Persisted audit trail for authentication and settings lifecycle events."""
+
+    __tablename__ = "auth_audit_log"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    success: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    detail: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
 class OrganizationState(Base):
     """Per-tenant runtime state (equity, balances, positions, ladder, features)."""
 

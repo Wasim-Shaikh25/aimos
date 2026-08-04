@@ -9,10 +9,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import structlog
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from aimos.saas.settings import get_saas_config
+
+log = structlog.get_logger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -46,7 +49,10 @@ def get_engine():
             with _SessionLocal() as session:
                 auth_service.ensure_admin_user(session)
         except Exception:
-            pass
+            # A seeding failure with SaaS enabled is a fatal misconfiguration;
+            # booting without an admin would lock the operator out silently.
+            log.exception("admin_seed_failed")
+            raise
     return _engine
 
 

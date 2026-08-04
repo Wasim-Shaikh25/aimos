@@ -69,6 +69,8 @@ class SaasConfig(BaseModel):
     access_token_expire_minutes: int = Field(default=15, ge=1, le=1440)
     refresh_token_expire_days: int = Field(default=30, ge=1, le=365)
     otp_expire_minutes: int = Field(default=10, ge=1, le=1440)
+    failed_login_alert_threshold: int = Field(default=3, ge=1)
+    failed_login_alert_window_seconds: float = Field(default=300.0, ge=60)
     require_email_verification: bool = True
     require_strong_password: bool = True
     smtp: SMTPConfig = Field(default_factory=SMTPConfig)

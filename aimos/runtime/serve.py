@@ -43,8 +43,10 @@ from aimos.execution.broker.paper import PaperBroker
 from aimos.execution.position_sizer import SizingInputs
 from aimos.journal.journal import Journal
 from aimos.runtime.state_store import RuntimeStateStore, build_snapshot
+from aimos.saas.auth_service import FailedLoginTracker
 from aimos.saas.config_tenant import load_params_for_org
 from aimos.saas.journal_tenant import tenant_journal_path
+from aimos.saas.settings import get_saas_config
 from aimos.saas.settings_store import SettingsStore
 from aimos.telegram.sink import TelegramSink
 from aimos.execution.risk_manager import RiskState
@@ -437,6 +439,14 @@ def build_app(offline: Optional[bool] = None):
         risk_analyzer=_compute_risk_report,
         health_provider=_readyz_payload,
         assistant=assistant,
+    )
+    # Wire failed-login alerts to Telegram (REQ-7).  Uses the same sink as the
+    # runtime; tests use the default no-op alert_fn.
+    saas_cfg = get_saas_config()
+    state.auth_alert_tracker = FailedLoginTracker(
+        threshold=saas_cfg.failed_login_alert_threshold,
+        window_seconds=saas_cfg.failed_login_alert_window_seconds,
+        alert_fn=sink.send if sink is not None else None,
     )
     app = create_app(state)
     app.router.lifespan_context = lifespan

@@ -11,23 +11,31 @@ from __future__ import annotations
 
 import re
 import secrets
+import structlog
+import time
 import uuid
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from threading import Lock
 from typing import Any
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from aimos.saas.email import send_login_code_email
-from aimos.saas.models import EmailLoginCode, Organization, OrganizationMember, RefreshToken, User
+from aimos.saas.models import AuthAuditLog, EmailLoginCode, Organization, OrganizationMember, RefreshToken, User
 from aimos.saas.security import (
     AuthError,
     create_access_token,
     create_refresh_token,
     hash_password,
+    is_strong_password,
     verify_password,
 )
 from aimos.saas.settings import get_saas_config
+
+log = structlog.get_logger(__name__)
 
 # Dummy bcrypt hash used for the login "not found" path so invalid email and
 # invalid password take the same wall-clock time (REQ-18).  The plaintext is a
@@ -41,6 +49,90 @@ def _utcnow() -> datetime:
 
 # Max wrong OTP guesses before a live login code is burned (audit finding H3).
 MAX_OTP_ATTEMPTS = 5
+
+
+class FailedLoginTracker:
+    """In-process counter for failed /auth/login and /auth/login/verify
+    attempts.  When a configurable threshold is crossed inside the window,
+    ``alert_fn`` is called with a human-readable message.  The callback is
+    intentionally decoupled so ``serve.py`` can wire the Telegram sink while
+    tests can stub it."""
+
+    def __init__(
+        self,
+        threshold: int = 3,
+        window_seconds: float = 300.0,
+        alert_fn: Any | None = None,
+    ) -> None:
+        self.threshold = threshold
+        self.window = window_seconds
+        self.alert_fn = alert_fn
+        self._hits: dict[str, deque[float]] = {}
+        self._last_alert: dict[str, float] = {}
+        self._lock = Lock()
+
+    def record(self, key: str, success: bool, message: str = "") -> None:
+        now = time.monotonic()
+        with self._lock:
+            dq = self._hits.setdefault(key, deque())
+            if success:
+                # A successful login for this key resets the failure streak.
+                dq.clear()
+                self._last_alert.pop(key, None)
+                return
+            cutoff = now - self.window
+            while dq and dq[0] < cutoff:
+                dq.popleft()
+            dq.append(now)
+            last = self._last_alert.get(key, 0.0)
+            if len(dq) >= self.threshold and now - last > self.window:
+                self._last_alert[key] = now
+                if self.alert_fn:
+                    self.alert_fn(message or f"Repeated failed login attempts for {key}")
+
+    def clear(self, key: str) -> None:
+        with self._lock:
+            self._hits.pop(key, None)
+            self._last_alert.pop(key, None)
+
+
+def audit_auth_event(
+    session: Session,
+    event: str,
+    *,
+    email: str | None = None,
+    user_id: str | None = None,
+    success: bool | None = None,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+    detail: str | None = None,
+) -> None:
+    """Persist and structurally log one auth lifecycle event."""
+    log.info(
+        "auth_audit",
+        auth_event=event,
+        email=email,
+        user_id=user_id,
+        success=success,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        detail=detail,
+    )
+    try:
+        session.add(
+            AuthAuditLog(
+                event_type=event,
+                email=email,
+                user_id=user_id,
+                success=success,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                detail=detail,
+            )
+        )
+        session.commit()
+    except Exception:  # noqa: BLE001 — auth must never break because auditing failed
+        log.exception("auth_audit_write_failed")
 
 
 def _generate_code(length: int = 6) -> str:
@@ -178,9 +270,9 @@ def ensure_admin_user(session: Session) -> User | None:
         )
         session.add(user)
         session.flush()
-    else:
-        # Keep the configured password in sync so operator resets work.
-        user.password_hash = hash_password(cfg.admin.password)
+    # NOTE: do NOT re-hash the existing admin password on every boot.  The
+    # password is now changed through the /api/v2/me/password endpoint so
+    # config edits do not silently revert an out-of-band change (REQ-4).
     # Ensure a fallback organization exists for routes that still expect one.
     org = (
         session.query(Organization)
@@ -199,6 +291,20 @@ def ensure_admin_user(session: Session) -> User | None:
         session.add(OrganizationMember(user_id=user.id, organization_id=org.id, role="owner"))
     session.commit()
     return user
+
+
+def change_admin_password(session: Session, user: User, current_password: str, new_password: str) -> None:
+    """Change the admin password and revoke all outstanding refresh tokens."""
+    if user.password_hash is None or not verify_password(current_password, user.password_hash):
+        raise AuthError("Invalid current password")
+    if not is_strong_password(new_password):
+        raise HTTPException(status_code=400, detail="New password does not meet strength requirements")
+    user.password_hash = hash_password(new_password)
+    session.query(RefreshToken).filter(
+        RefreshToken.user_id == user.id,
+        RefreshToken.revoked_at.is_(None),
+    ).update({"revoked_at": _utcnow()})
+    session.commit()
 
 
 def _otp_expire() -> datetime:

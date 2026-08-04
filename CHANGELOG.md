@@ -65,7 +65,7 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   GPL tripwire + a backup/restore drill, plus a dashboard-build job, on every
   push/PR so the gates are enforced rather than discipline-only.
 - **L5 — accessibility.** `dashboard/index.html` sets `<html lang="en">`.
-- Suite grew 466 → **488 passed / 1 xfailed**; magic-number, naive-datetime, and
+- Suite grew 466 → **511 passed / 1 xfailed**; magic-number, naive-datetime, and
   import-linter (6/6) gates remain green. **All Critical/High/Medium audit blockers
   are now fixed**; recommendation moves to **STOP — CONDITIONAL GO** (conditional on
   an independent verification pass + product decisions PD1–PD5).
@@ -100,6 +100,22 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 - **REQ-18 — dummy bcrypt comparison on login not-found path.** `send_login_otp()`
   now runs `verify_password(password, DUMMY_PASSWORD_HASH)` before raising, so an
   unknown email is indistinguishable from a wrong password by timing.
+- **REQ-4 — admin password change endpoint and UI.** `POST /api/v2/me/password`
+  verifies the current password, enforces `is_strong_password`, updates the admin
+  hash, and revokes all outstanding refresh tokens. `ensure_admin_user()` no longer
+  re-hashes the existing admin password on every boot, so config edits cannot
+  silently revert an out-of-band password change. Settings screen includes a
+  "Change admin password" form.
+- **REQ-5 — auth audit log and fatal admin-seed failures.** `aimos/saas/db.py`
+  now logs and re-raises admin-seed failures when SaaS is enabled. A new
+  `AuthAuditLog` table records structured auth lifecycle events (login attempt,
+  OTP verify, refresh, logout, exchange-key add/remove, password change) with
+  email/user_id, success, client IP, user agent, and detail.
+- **REQ-7 — Telegram alert on repeated failed logins.** `FailedLoginTracker`
+  counts failed `/auth/login` and `/auth/login/verify` attempts per email and
+  IP; when the configured threshold is crossed, it calls the Telegram sink's
+  `send()` so the operator is alerted to brute-force attempts. Configurable via
+  `saas.failed_login_alert_threshold` and `failed_login_alert_window_seconds`.
 - **`PRODUCTION_READINESS_AUDIT.md`** — end-to-end product and production-readiness
   audit at commit `5fd1b88`. Audit-only; **no application source was modified**.
   18 findings (2 Critical, 5 High, 7 Medium, 4 Low); recommendation **CONTINUE — NO-GO**.
