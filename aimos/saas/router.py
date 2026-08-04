@@ -250,7 +250,13 @@ def logout(
                 session, "logout", user_id=user_id, success=False, detail=str(exc.detail), **info
             )
             raise
-    response.delete_cookie(key="refresh_token", path="/")
+    response.delete_cookie(
+        key="refresh_token",
+        path="/",
+        httponly=True,
+        secure=request.url.scheme == "https",
+        samesite="strict",
+    )
     return {"ok": True}
 
 

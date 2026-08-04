@@ -134,6 +134,10 @@ class TestAdminLogin:
     def test_logout_revokes_refresh_token(self, client, admin_tokens):
         resp = client.post("/auth/logout")
         assert resp.status_code == 200
+        # The clear-cookie directive matches the set-cookie attributes.
+        set_cookie = resp.headers.get("set-cookie", "")
+        assert "refresh_token=\"\"" in set_cookie or "Max-Age=0" in set_cookie or "expires=Thu" in set_cookie
+        assert "SameSite=strict" in set_cookie or "SameSite=Strict" in set_cookie
         # After logout the httpOnly cookie is cleared and the refresh token is revoked.
         resp2 = client.post("/auth/refresh")
         assert resp2.status_code == 401
