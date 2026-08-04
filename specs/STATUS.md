@@ -36,8 +36,9 @@ clean; import-linter 6/6.
 > network-exposure model is documented as loopback-only/proxy-or-SaaS (REQ-10),
 > and key material defaults to `~/.aimos/secrets` with a dedicated Docker secrets
 > volume (REQ-14). The dormant on-chain engine now has a Coin Metrics Community
-> API provider (REQ-16). The independent verification pass is complete and the two
-> go-live blockers it found are fixed: killswitch can now be reset via `POST
+> API provider (REQ-16), and the dashboard accessibility pass is complete
+> (REQ-15). The independent verification pass is complete and the two go-live
+> blockers it found are fixed: killswitch can now be reset via `POST
 > /api/control/unhalt` and the dashboard Controls screen, and `/api/v2/status` now
 > surfaces runtime feature flags plus `halted` state.
 

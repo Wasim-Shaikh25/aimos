@@ -11,7 +11,9 @@ export default function DecisionAnatomy() {
   if (!ids.length) return <div className="page"><h1>Decision Anatomy</h1><Empty what="decisions" /></div>
   const u = a?.understanding, c = a?.chosen
   return <div className="page"><h1>Decision Anatomy</h1>
-    <select value={sel} onChange={e => setSel(e.target.value)}>{ids.map(i => <option key={i}>{i}</option>)}</select>
+    <label className="muted">Decision&nbsp;
+      <select value={sel} onChange={e => setSel(e.target.value)}>{ids.map(i => <option key={i}>{i}</option>)}</select>
+    </label>
     {u && <div className="flow" style={{ marginTop: 14 }}>
       <div className="node"><div className="t">Evidence → Engines</div>
         rule {u.engine_votes.rule?.toFixed(2)} · bayes {u.engine_votes.bayes?.toFixed(2)} · ml {u.engine_votes.ml?.toFixed(2)}</div>

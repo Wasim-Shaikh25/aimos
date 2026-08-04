@@ -159,6 +159,10 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   `config/observation.yaml` gains `onchain.enabled`/`provider`/`api_key` knobs and
   `aimos/observation/runner.py` wires the provider into `OnchainEngine` at build
   time.
+- **REQ-15 — dashboard accessibility pass.** Added global `:focus-visible` outline
+  and `prefers-reduced-motion` support in `dashboard/src/index.css`; labeled the
+  `DecisionAnatomy` and `Assistant` controls that were missing programmatic
+  labels. All 21 screens remain keyboard/screen-reader navigable.
 - **`PRODUCTION_READINESS_AUDIT.md`** — end-to-end product and production-readiness
   audit at commit `5fd1b88`. Audit-only; **no application source was modified**.
   18 findings (2 Critical, 5 High, 7 Medium, 4 Low); recommendation **CONTINUE — NO-GO**.
