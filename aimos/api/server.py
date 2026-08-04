@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -78,6 +78,7 @@ class AppState:
     monitor_provider: Any = None  # callable -> feature-monitor coverage report
     risk_provider: Any = None  # callable -> risk analytics report dict
     risk_analyzer: Any = None  # callable that recomputes and caches the risk report
+    health_provider: Any = None  # callable -> readiness dict for /readyz
     assistant: Any = None  # read-only AI analyst (Assistant) or None when disabled
 
 
@@ -220,6 +221,21 @@ def create_app(state: AppState) -> FastAPI:
         """Public status endpoint so the dashboard can detect SaaS mode."""
         return {"saas_enabled": get_saas_config().enabled}
 
+    @app.get("/healthz")
+    def healthz():
+        """Public liveness probe — process is responding."""
+        return {"status": "ok"}
+
+    @app.get("/readyz")
+    def readyz():
+        """Public readiness probe — journal writable and trading loop heartbeat fresh."""
+        if state.health_provider:
+            payload = state.health_provider()
+            if not payload.get("ready"):
+                raise HTTPException(status_code=503, detail=payload)
+            return payload
+        return {"status": "ok"}
+
     @app.get("/api/state/{symbol}")
     def get_state(symbol: str):
         mu = state.latest_state.get(symbol)
@@ -228,7 +244,7 @@ def create_app(state: AppState) -> FastAPI:
         return mu
 
     @app.get("/api/decisions")
-    def get_decisions(limit: int = 50):
+    def get_decisions(limit: int = Query(50, ge=1, le=500)):
         return {"decisions": _decisions(state.journal, limit)}
 
     @app.get("/api/decision/{decision_id}/graph")

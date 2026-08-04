@@ -245,6 +245,12 @@ risk:
   timeframe: ""                   # fallback to `paper.timeframe` when empty
   min_samples: 30                 # minimum equity-return samples before computing metrics
 
+# Health/readiness probes (REQ-6). `/readyz` becomes 200 only after the paper loop
+# has written a heartbeat fresher than `heartbeat_stale_seconds` and the journal
+# is writable. `/healthz` is always 200 when the process responds.
+health:
+  heartbeat_stale_seconds: 30      # env `AIMOS__HEALTH__HEARTBEAT_STALE_SECONDS`
+
 # Read-only AI analyst (specs/ASSISTANT.md) — answers questions and writes reports
 # grounded in the journal + metrics. LLM is a sensor/explainer only (§15.3): it
 # never trades, flips flags, or edits config. Off unless enabled + ANTHROPIC_API_KEY.

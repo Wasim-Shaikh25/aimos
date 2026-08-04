@@ -83,6 +83,23 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 - **Fixed `dashboard/src/components/EquityChart.jsx` for `lightweight-charts` v5.**
   Replaced the removed `chart.addLineSeries()` with `chart.addSeries(LineSeries, {...})`
   so the **Performance** screen mounts and the new alpha/beta tiles are reachable.
+- **REQ-3 — bound `/api/decisions?limit=` to [1, 500].** Added `Query(..., ge=1, le=500)`
+  in `aimos/api/server.py` and the same clamp to `_assistant_decisions` in
+  `aimos/runtime/serve.py`; added `tests/test_decisions_limit.py`.
+- **REQ-6 — public `/healthz` and `/readyz` endpoints.** `/healthz` returns 200 when the
+  process responds; `/readyz` returns 200 only when the journal is writable and the
+  paper-loop heartbeat is fresher than `health.heartbeat_stale_seconds` (default 30 s).
+  Wired into `docker-compose.yml` as the `aimos` service healthcheck.
+- **REQ-8 — sequential go-live gate sign-off.** `GoLiveLadder.mark()` now rejects
+  out-of-order gate completion; `unmark()` removes the target gate and all subsequent
+  gates. `tests/test_golive.py` covers both behaviors.
+- **REQ-11 — copyleft dependency policy.** Added a standing hard rule: no GPL/AGPL
+  package is imported into `aimos/`; wanted capabilities run as isolated out-of-process
+  services. `scripts/check_gpl_tripwire.py` now also scans `pyproject.toml` dependency
+  pins for copyleft packages (OpenBB, etc.).
+- **REQ-18 — dummy bcrypt comparison on login not-found path.** `send_login_otp()`
+  now runs `verify_password(password, DUMMY_PASSWORD_HASH)` before raising, so an
+  unknown email is indistinguishable from a wrong password by timing.
 - **`PRODUCTION_READINESS_AUDIT.md`** — end-to-end product and production-readiness
   audit at commit `5fd1b88`. Audit-only; **no application source was modified**.
   18 findings (2 Critical, 5 High, 7 Medium, 4 Low); recommendation **CONTINUE — NO-GO**.

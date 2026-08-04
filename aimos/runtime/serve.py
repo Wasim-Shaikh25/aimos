@@ -72,6 +72,7 @@ def build_app(offline: Optional[bool] = None):
     costs_cfg = params.costs.model_dump()
     primary_venue = paper["data_exchange"]
     live_data = features["live_data"] if offline is None else (not offline)
+    health_cfg = params.model_dump().get("health", {}) or {}
     # per-tenant journal path when SaaS is enabled; single-user journal_path otherwise
     jpath = tenant_journal_path(org_id, params)
     # Keep runtime state beside the journal so persistent deployments keep both
@@ -85,6 +86,27 @@ def build_app(offline: Optional[bool] = None):
     broker = PaperBroker(float(paper["starting_equity_usdt"]), cost_mod.from_config(costs_cfg),
                          venue=paper["data_exchange"])
     heartbeat = Heartbeat("state/heartbeat", clock=clock)
+
+    def _readyz_payload() -> dict:
+        """Readiness: journal writable + loop heartbeat fresh (REQ-6)."""
+        stale_after = float(health_cfg.get("heartbeat_stale_seconds", 30))
+        last = heartbeat.last_beat()
+        age = float("inf") if last is None else (clock.now() - last).total_seconds()
+        journal_writable = True
+        try:
+            orch.journal.conn.execute("BEGIN IMMEDIATE")
+            orch.journal.conn.execute("ROLLBACK")
+        except Exception:  # noqa: BLE001
+            journal_writable = False
+        ready = journal_writable and age < stale_after
+        return {
+            "status": "ok" if ready else "not ready",
+            "ready": ready,
+            "journal_writable": journal_writable,
+            "heartbeat_age_seconds": age if last is not None else None,
+            "heartbeat_stale_seconds": stale_after,
+        }
+
     caps = _caps(params)
     sources: dict = {}  # venue -> DataSource (lazy, per-venue)
     streaming_cfg = params.model_dump().get("streaming", {})
@@ -413,6 +435,7 @@ def build_app(offline: Optional[bool] = None):
                                                        "note": "monitor disabled — set monitor.enabled: true"},
         risk_provider=lambda: holder.get("risk_report", {}),
         risk_analyzer=_compute_risk_report,
+        health_provider=_readyz_payload,
         assistant=assistant,
     )
     app = create_app(state)
@@ -424,9 +447,10 @@ def build_app(offline: Optional[bool] = None):
 def _assistant_decisions(journal, limit: int = 40) -> list:
     """Compact recent decisions for the analyst grounding (read-only, no secrets)."""
     import json as _json
+    limit = max(1, min(int(limit), 500))
     rows = journal.conn.execute(
         "SELECT decision_id, symbol, timestamp, payload FROM decisions ORDER BY seq DESC LIMIT ?",
-        (int(limit),),
+        (limit,),
     ).fetchall()
     out = []
     for r in rows:

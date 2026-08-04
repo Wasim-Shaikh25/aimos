@@ -80,6 +80,15 @@ class TestAdminLogin:
         })
         assert resp.status_code == 401
 
+    def test_login_unknown_email_fails_without_leak(self, client):
+        """REQ-18: unknown email returns 401 indistinguishable from wrong password."""
+        resp = client.post("/auth/login", json={
+            "email": "nobody@example.com",
+            "password": "AdminPass123!",
+        })
+        assert resp.status_code == 401
+        assert "ok" not in resp.json()
+
     def test_verify_login_issues_tokens(self, client):
         client.post("/auth/login", json={
             "email": "admin@example.com",

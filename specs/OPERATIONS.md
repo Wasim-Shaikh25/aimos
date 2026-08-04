@@ -139,6 +139,19 @@ the **Positions & Risk** stress panel and **Performance** alpha/beta tiles (REQ-
 
 Disable with `AIMOS__RISK__ENABLED=false` if you do not want the scheduler job.
 
+### Health probes (`/healthz`, `/readyz`)
+
+Public liveness/readiness endpoints (REQ-6), both exempt from SaaS auth:
+- `GET /healthz` — returns 200 `{"status":"ok"}` whenever the process responds.
+- `GET /readyz` — returns 200 only when the journal is writable **and** the paper
+  loop heartbeat is fresher than `health.heartbeat_stale_seconds`; otherwise 503.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `health.heartbeat_stale_seconds` | `30` | max age of the loop heartbeat for `/readyz` to be 200 |
+
+`docker-compose.yml` wires `healthz` into the `aimos` service healthcheck.
+
 ### Train the ML on older data (`scripts/train_from_history.py`)
 
 Replays historical candles as paper trades, labels them (triple-barrier), and

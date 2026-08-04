@@ -29,6 +29,11 @@ from aimos.saas.security import (
 )
 from aimos.saas.settings import get_saas_config
 
+# Dummy bcrypt hash used for the login "not found" path so invalid email and
+# invalid password take the same wall-clock time (REQ-18).  The plaintext is a
+# throwaway; the hash itself is not a secret, only the timing is relevant.
+DUMMY_PASSWORD_HASH = "$2b$12$SKrxDkdQxYIKGbaUJx0fAO8vlPgIGKiV0BgRD7/iReg5KBodUvDAS"
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -208,6 +213,9 @@ def send_login_otp(session: Session, email: str, password: str) -> str:
     """
     user = session.query(User).filter(User.email == email).first()
     if user is None or user.password_hash is None:
+        # Dummy bcrypt comparison keeps the timing of "not found" indistinguishable
+        # from "wrong password" (REQ-18).
+        verify_password(password, DUMMY_PASSWORD_HASH)
         raise AuthError("Invalid email or password")
     if not verify_password(password, user.password_hash):
         raise AuthError("Invalid email or password")

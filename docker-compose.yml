@@ -21,6 +21,12 @@ services:
     volumes: ["./data:/app/data", "./state:/app/state", "./config:/app/config:ro"]
     depends_on: [postgres]
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; urllib.request.urlopen('http://127.0.0.1:8000/healthz').read(); sys.exit(0)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   # INBOUND Telegram commands (/status, /pause) — optional; alerts already come
   # from the `aimos` service above. Enable with: docker compose --profile commands up -d

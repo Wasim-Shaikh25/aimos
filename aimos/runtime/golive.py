@@ -69,16 +69,32 @@ class GoLiveLadder:
         self._state.setdefault("markers", {})[key] = value or _now_iso()
         self._save()
 
+    def _passed(self, gate_id: str) -> bool:
+        return self._state.get("gates", {}).get(gate_id, {}).get("status") == "passed"
+
     def mark(self, gate_id: str, note: str = "") -> dict:
-        if gate_id not in {g[0] for g in GATES}:
+        gate_ids = [g[0] for g in GATES]
+        if gate_id not in gate_ids:
             return {"ok": False, "error": f"unknown gate {gate_id!r}"}
+        idx = gate_ids.index(gate_id)
+        if idx > 0:
+            prev = gate_ids[idx - 1]
+            if not self._passed(prev):
+                return {"ok": False, "error": f"out of order: gate {prev!r} must be passed first"}
         self._state.setdefault("gates", {})[gate_id] = {"status": "passed", "note": note,
                                                         "marked_at": _now_iso()}
         self._save()
         return {"ok": True, "gate": gate_id}
 
     def unmark(self, gate_id: str) -> dict:
-        self._state.get("gates", {}).pop(gate_id, None)
+        gate_ids = [g[0] for g in GATES]
+        if gate_id not in gate_ids:
+            return {"ok": False, "error": f"unknown gate {gate_id!r}"}
+        # Removing a gate invalidates everything that came after it.
+        idx = gate_ids.index(gate_id)
+        gates = self._state.get("gates", {})
+        for g in gate_ids[idx:]:
+            gates.pop(g, None)
         self._save()
         return {"ok": True, "gate": gate_id}
 

@@ -38,6 +38,9 @@ otherwise.
 - **All time via `clock.now()`** — never `datetime.now()` in library code.
 - **Never edit `aimos/core/schemas.py` or the evidence registry** without explicit
   human approval.
+- **No copyleft (GPL/AGPL) package is imported into `aimos/`** — if a capability is
+  wanted, it runs as an isolated out-of-process service called over its API
+  (§21.1/§22.3 rule 5).
 - **Live trading stays fail-closed:** mandate + go-live ladder + boot guard. Never
   add a path that reaches live orders without those gates.
 - Secrets are never logged, journaled, or returned to the UI.
