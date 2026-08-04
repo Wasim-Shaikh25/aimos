@@ -217,6 +217,7 @@ def build_app(offline: Optional[bool] = None):
             "golive": ladder.status,
             "strategies": lambda: _strategies_payload(params, holder["chosen"]),
             "equity": lambda: holder["equity"],
+            "graph": lambda did: _decision_graph(orch.journal, did, params),
         }, cfg=asst_cfg)
 
     async def loop() -> None:

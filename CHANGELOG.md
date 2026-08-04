@@ -65,7 +65,7 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   GPL tripwire + a backup/restore drill, plus a dashboard-build job, on every
   push/PR so the gates are enforced rather than discipline-only.
 - **L5 — accessibility.** `dashboard/index.html` sets `<html lang="en">`.
-- Suite grew 466 → **511 passed / 1 xfailed**; magic-number, naive-datetime, and
+- Suite grew 466 → **514 passed / 1 xfailed**; magic-number, naive-datetime, and
   import-linter (6/6) gates remain green. **All Critical/High/Medium audit blockers
   are now fixed**; recommendation moves to **STOP — CONDITIONAL GO** (conditional on
   an independent verification pass + product decisions PD1–PD5).
@@ -116,6 +116,17 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   IP; when the configured threshold is crossed, it calls the Telegram sink's
   `send()` so the operator is alerted to brute-force attempts. Configurable via
   `saas.failed_login_alert_threshold` and `failed_login_alert_window_seconds`.
+- **REQ-17 — httpOnly refresh-token cookie + CSP headers.** The refresh token
+  is no longer returned in JSON; `/auth/login/verify` and `/auth/refresh` set it
+  as an `httpOnly; Secure (HTTPS); SameSite=Strict` cookie and `/auth/logout`
+  clears it. The access token stays in memory only (no `localStorage`), and the
+  dashboard loads a session on boot by silently calling `/auth/refresh`. A
+  default `Content-Security-Policy` plus `X-Frame-Options: DENY` and
+  `X-Content-Type-Options: nosniff` is added to every response.
+- **REQ-19 — AI analyst case-for/case-against narrative.** New `GET
+  /api/assistant/debate/{decision_id}` returns a two-sided post-hoc explanation
+  for a completed decision, grounded in the decision graph + journal/metrics
+  evidence and clearly labeled as read-only, post-hoc commentary.
 - **`PRODUCTION_READINESS_AUDIT.md`** — end-to-end product and production-readiness
   audit at commit `5fd1b88`. Audit-only; **no application source was modified**.
   18 findings (2 Critical, 5 High, 7 Medium, 4 Low); recommendation **CONTINUE — NO-GO**.

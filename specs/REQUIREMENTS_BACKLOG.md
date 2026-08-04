@@ -243,7 +243,7 @@ removed once folded into STATUS.md).
 - **Priority:** Low (new scope, not a defect). **Effort:** Medium.
 - **Dependencies:** REQ-11 (copyleft policy) if OpenBB is the chosen path.
 
-### REQ-17: Refresh token to `httpOnly` cookie + CSP headers
+### [x] REQ-17: Refresh token to `httpOnly` cookie + CSP headers
 
 - **Source:** `PRODUCTION_READINESS_AUDIT.md` finding M3.
 - **Note:** exploitability is now low — Pass 2 confirmed zero `dangerouslySetInnerHTML`/
@@ -261,7 +261,7 @@ removed once folded into STATUS.md).
   list. Optional hardening only.
 - **Priority:** Low. **Effort:** Trivial.
 
-### REQ-19: Explanation-only "case for / case against" narrative in the AI Analyst
+### [x] REQ-19: Explanation-only "case for / case against" narrative in the AI Analyst
 
 - **Source:** competitive research (TradingAgents' bull/bear researcher debate
   pattern).

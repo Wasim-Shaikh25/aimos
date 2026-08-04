@@ -84,8 +84,8 @@ class FailedLoginTracker:
             while dq and dq[0] < cutoff:
                 dq.popleft()
             dq.append(now)
-            last = self._last_alert.get(key, 0.0)
-            if len(dq) >= self.threshold and now - last > self.window:
+            last = self._last_alert.get(key)
+            if len(dq) >= self.threshold and (last is None or now - last > self.window):
                 self._last_alert[key] = now
                 if self.alert_fn:
                     self.alert_fn(message or f"Repeated failed login attempts for {key}")

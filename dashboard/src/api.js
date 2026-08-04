@@ -1,11 +1,12 @@
 // Journal-backed API client (§15.1) + SaaS auth helpers.
-// Auth token is persisted in localStorage and sent as the Authorization header.
+// Access token is kept in memory; refresh token is an httpOnly cookie.
+let accessToken = ''
+let activeOrg = localStorage.getItem('aimos_org') || ''
+
 const authHeaders = () => {
   const h = { 'Content-Type': 'application/json' }
-  const token = localStorage.getItem('aimos_access_token')
-  const org = localStorage.getItem('aimos_org')
-  if (token) h.Authorization = `Bearer ${token}`
-  if (org) h['X-Organization-Id'] = org
+  if (accessToken) h.Authorization = `Bearer ${accessToken}`
+  if (activeOrg) h['X-Organization-Id'] = activeOrg
   return h
 }
 
@@ -27,36 +28,31 @@ const j = async (url, opts = {}) => {
   }
 }
 
-export const setAuth = ({ access_token, refresh_token, organization_id }) => {
-  if (access_token) localStorage.setItem('aimos_access_token', access_token)
-  if (refresh_token) localStorage.setItem('aimos_refresh_token', refresh_token)
-  if (organization_id) localStorage.setItem('aimos_org', organization_id)
+export const setAuth = ({ access_token, organization_id }) => {
+  if (access_token) accessToken = access_token
+  if (organization_id) {
+    activeOrg = organization_id
+    localStorage.setItem('aimos_org', organization_id)
+  }
 }
 
 export const clearAuth = () => {
-  localStorage.removeItem('aimos_access_token')
-  localStorage.removeItem('aimos_refresh_token')
+  accessToken = ''
+  activeOrg = ''
   localStorage.removeItem('aimos_org')
 }
 
 export const getAuth = () => ({
-  accessToken: localStorage.getItem('aimos_access_token'),
-  refreshToken: localStorage.getItem('aimos_refresh_token'),
-  activeOrg: localStorage.getItem('aimos_org'),
+  accessToken,
+  activeOrg,
 })
 
 export const api = {
   // SaaS auth (single admin, email OTP 2FA)
   login: (email, password) => j('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   verifyLogin: (email, code) => j('/auth/login/verify', { method: 'POST', body: JSON.stringify({ email, code }) }),
-  logout: () => {
-    const refresh = localStorage.getItem('aimos_refresh_token')
-    return j('/auth/logout', { method: 'POST', body: JSON.stringify({ refresh_token: refresh || '' }) })
-  },
-  refresh: () => {
-    const refresh = localStorage.getItem('aimos_refresh_token')
-    return j('/auth/refresh', { method: 'POST', body: JSON.stringify({ refresh_token: refresh || '' }) })
-  },
+  logout: () => j('/auth/logout', { method: 'POST' }),
+  refresh: () => j('/auth/refresh', { method: 'POST' }),
   me: () => j('/api/v2/me'),
 
   // Single-user settings (config + encrypted exchange secrets)
@@ -100,6 +96,7 @@ export const api = {
     body: JSON.stringify({ question }),
   }),
   report: (timeframe) => j(`/api/assistant/report?timeframe=${encodeURIComponent(timeframe || '24h')}`),
+  debate: (decision_id) => j(`/api/assistant/debate/${encodeURIComponent(decision_id)}`),
   setGolive: (gate, passed) => j('/api/control/golive', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ confirm: 'CONFIRM', gate, passed }),

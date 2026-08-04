@@ -17,9 +17,14 @@ export function AuthProvider({ children }) {
   }
 
   const loadSession = async () => {
-    const { accessToken } = getAuth()
-    if (!accessToken) { setLoading(false); return }
     try {
+      let { accessToken } = getAuth()
+      if (!accessToken) {
+        const data = await api.refresh()
+        if (!data) { throw new Error('Unauthorized') }
+        setAuth(data)
+        accessToken = data.access_token
+      }
       const me = await api.me()
       if (!me) { throw new Error('Unauthorized') }
       setUser(me)
