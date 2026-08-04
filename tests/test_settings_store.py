@@ -8,8 +8,10 @@ from aimos.saas.settings_store import SettingsStore, UserSettings
 
 def test_settings_store_encrypts_and_redacts_keys(monkeypatch, tmp_path):
     monkeypatch.setenv("AIMOS__SAAS__DATABASE_URL", f"sqlite:///{tmp_path / 'auth.db'}")
+    monkeypatch.setenv("AIMOS_SECRETS_DIR", str(tmp_path / "secrets"))
     saas_db._engine = None
     saas_db._SessionLocal = None
+    SettingsStore._key = None
 
     store = SettingsStore("default")
     store.set_exchange("binance", {
@@ -32,8 +34,10 @@ def test_settings_store_encrypts_and_redacts_keys(monkeypatch, tmp_path):
 
 def test_settings_store_update_config_deep_merges(monkeypatch, tmp_path):
     monkeypatch.setenv("AIMOS__SAAS__DATABASE_URL", f"sqlite:///{tmp_path / 'auth.db'}")
+    monkeypatch.setenv("AIMOS_SECRETS_DIR", str(tmp_path / "secrets"))
     saas_db._engine = None
     saas_db._SessionLocal = None
+    SettingsStore._key = None
 
     store = SettingsStore("default")
     store.update_config({"features": {"scalp_enabled": True}, "paper": {"max_symbols": 3}})
@@ -47,8 +51,10 @@ def test_settings_store_update_config_deep_merges(monkeypatch, tmp_path):
 
 def test_settings_store_delete_exchange(monkeypatch, tmp_path):
     monkeypatch.setenv("AIMOS__SAAS__DATABASE_URL", f"sqlite:///{tmp_path / 'auth.db'}")
+    monkeypatch.setenv("AIMOS_SECRETS_DIR", str(tmp_path / "secrets"))
     saas_db._engine = None
     saas_db._SessionLocal = None
+    SettingsStore._key = None
 
     store = SettingsStore("default")
     store.set_exchange("binance", {"apiKey": "x", "secret": "y"})

@@ -221,8 +221,10 @@ pip install -e '.[serve,saas]'
 
 Auth/tenant data lives in the database configured by `config/saas.yaml`
 `database_url` or `AIMOS__SAAS__DATABASE_URL` (defaults to `sqlite:///state/auth.sqlite`).
-A 32-byte JWT secret is auto-generated and persisted in `state/.jwt_secret` on first
-startup (or set `AIMOS__SAAS__JWT_SECRET` explicitly).
+A 32-byte JWT secret is auto-generated and persisted in
+`~/.aimos/secrets/.jwt_secret` on first startup (or set `AIMOS__SAAS__JWT_SECRET`
+explicitly, or `AIMOS_SECRETS_DIR` to change the directory). In Docker, mount a
+separate `secrets` volume at `/app/secrets` and set `AIMOS_SECRETS_DIR=/app/secrets`.
 
 The single admin user is seeded from `config/saas.yaml` `admin.*` or env vars:
 `AIMOS__SAAS__ADMIN__USER_ID`, `AIMOS__SAAS__ADMIN__EMAIL`,
@@ -316,8 +318,9 @@ sends these automatically after the admin logs in.
 Keys are used **only** for account access (balances, live orders), never for
 market-data analysis. Add them through the **Settings** UI
 (`/api/v2/settings/exchange`); they are encrypted at rest with the Fernet key in
-`state/.settings_key` and are never logged, journaled, or shown in the UI. For
-local/headless runs they can still be provided via env:
+`~/.aimos/secrets/.settings_key` (or `AIMOS_SECRETS_DIR/.settings_key`) and are
+never logged, journaled, or shown in the UI. For local/headless runs they can
+still be provided via env:
 ```bash
 export AIMOS_KEY_BINANCE=... AIMOS_SECRET_BINANCE=...
 ```
@@ -407,6 +410,6 @@ per-tenant journal path.
 
 Back up **separately and securely**: the auth/settings DB
 (`state/auth.sqlite` or Postgres via `AIMOS__SAAS__DATABASE_URL`) and
-`state/.settings_key` — without the key, encrypted exchange credentials are
-unrecoverable. Never drop `state/.settings_key` into `backups/` alongside the
-journal; treat it as a secret.
+`~/.aimos/secrets/.settings_key` (or `AIMOS_SECRETS_DIR/.settings_key`) — without
+the key, encrypted exchange credentials are unrecoverable. Never drop the settings
+key into `backups/` alongside the journal; treat it as a secret.

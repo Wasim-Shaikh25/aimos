@@ -32,10 +32,11 @@ clean; import-linter 6/6.
 > **All Critical/High/Medium audit blockers are fixed** — the 2 Criticals (C1
 > traversal, C2 auth-lockout) verified live, and H1–H5 + M8 + L5 fixed with tests
 > (466 → 516). The H3 `email_login_codes.attempts` schema change is now an Alembic
-> migration (REQ-9), the backup scheduler runs hourly by default (REQ-12), and the
-> network-exposure model is documented as loopback-only/proxy-or-SaaS (REQ-10).
-> Remaining conditions before live: an **independent verification pass** and
-> product decision **PD1** is recorded.
+> migration (REQ-9), the backup scheduler runs hourly by default (REQ-12), the
+> network-exposure model is documented as loopback-only/proxy-or-SaaS (REQ-10),
+> and key material defaults to `~/.aimos/secrets` with a dedicated Docker secrets
+> volume (REQ-14). Remaining condition before live: an **independent verification
+> pass**.
 
 ---
 

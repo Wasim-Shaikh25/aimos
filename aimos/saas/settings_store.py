@@ -14,9 +14,25 @@ from typing import Any
 
 from cryptography.fernet import Fernet
 from sqlalchemy import JSON, String
-from sqlalchemy.orm import Mapped, mapped_column, Session
+from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from aimos.saas.db import Base, get_session_maker
+
+
+def _secrets_dir() -> Path:
+    """Secrets live outside ``dashboard/dist``'s ancestry by default.
+
+    Override with ``AIMOS_SECRETS_DIR``; otherwise ``~/.aimos/secrets``.
+    """
+    env = os.environ.get("AIMOS_SECRETS_DIR", "")
+    if env:
+        return Path(env)
+    return Path.home() / ".aimos" / "secrets"
+
+
+def _settings_key_file() -> Path:
+    """Resolved at call time so tests can point ``AIMOS_SECRETS_DIR`` at a temp dir."""
+    return _secrets_dir() / ".settings_key"
 
 
 class UserSettings(Base):
@@ -41,7 +57,7 @@ class SettingsStore:
     def _master_key(cls) -> bytes:
         if cls._key is not None:
             return cls._key
-        path = Path("state/.settings_key")
+        path = _settings_key_file()
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
             key = Fernet.generate_key()

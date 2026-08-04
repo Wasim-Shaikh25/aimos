@@ -25,8 +25,10 @@ def test_load_params_for_org_returns_base_when_saas_disabled(monkeypatch):
 def test_load_params_for_org_applies_overrides(monkeypatch, tmp_path):
     monkeypatch.setenv("AIMOS__SAAS__ENABLED", "true")
     monkeypatch.setenv("AIMOS__SAAS__DATABASE_URL", f"sqlite:///{tmp_path / 'auth.db'}")
+    monkeypatch.setenv("AIMOS_SECRETS_DIR", str(tmp_path / "secrets"))
     saas_db._engine = None
     saas_db._SessionLocal = None
+    SettingsStore._key = None
 
     SettingsStore("default").update_config({
         "features": {"scalp_enabled": False},

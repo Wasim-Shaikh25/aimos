@@ -144,6 +144,11 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   with default `interval_seconds: 3600` (RPO = 1 hour) and `keep: 14`.
   `aimos/runtime/serve.py` registers an APScheduler `journal_backup` job using
   the per-tenant journal path. `specs/OPERATIONS.md` records the default RPO/RTO.
+- **REQ-14 — move key material outside the working directory.** JWT and settings
+  Fernet keys now default to `~/.aimos/secrets` (overridable via `AIMOS_SECRETS_DIR`).
+  `docker-compose.yml` mounts a separate `secrets` volume at `/app/secrets` so
+  key material is outside `dashboard/dist`'s ancestry even when the runtime is
+  deployed in a container.
 - **`PRODUCTION_READINESS_AUDIT.md`** — end-to-end product and production-readiness
   audit at commit `5fd1b88`. Audit-only; **no application source was modified**.
   18 findings (2 Critical, 5 High, 7 Medium, 4 Low); recommendation **CONTINUE — NO-GO**.
