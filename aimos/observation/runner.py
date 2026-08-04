@@ -33,6 +33,25 @@ from aimos.observation.whale import WhaleEngine
 
 log = structlog.get_logger(__name__)
 
+
+def _build_onchain_provider(onchain_cfg: dict[str, Any]) -> Any | None:
+    """Instantiate an on-chain data provider from observation config (REQ-16)."""
+    if not onchain_cfg.get("enabled"):
+        return None
+    provider = onchain_cfg.get("provider", "").lower()
+    if provider == "coinmetrics":
+        from aimos.data.onchain import CoinMetricsCommunityProvider
+
+        return CoinMetricsCommunityProvider(
+            api_key=str(onchain_cfg.get("api_key", "")),
+            stablecoin_asset=str(onchain_cfg.get("stablecoin_asset", "usdt")),
+        )
+    if provider == "freeapi":
+        from aimos.data.onchain import FreeApiOnchainProvider
+
+        return FreeApiOnchainProvider(endpoints=onchain_cfg.get("freeapi_endpoints", {}))
+    return None
+
 # engine class → reliability key in weights.yaml (§5.0)
 _ENGINE_SPECS: list[tuple[type[ObservationEngine], str]] = [
     (PriceActionEngine, "price_action"),
@@ -56,8 +75,12 @@ def build_engines(params: Any, clock: Clock) -> list[ObservationEngine]:
     obs_cfg = params.observation.model_dump()
     reliabilities = params.weights.model_dump().get("reliability", {})
     engines: list[ObservationEngine] = []
+    onchain_provider = _build_onchain_provider(obs_cfg.get("onchain", {}))
     for cls, key in _ENGINE_SPECS:
-        engines.append(cls(cfg=obs_cfg, clock=clock, reliability=float(reliabilities.get(key, HALF))))
+        kwargs: dict[str, Any] = {"cfg": obs_cfg, "clock": clock, "reliability": float(reliabilities.get(key, HALF))}
+        if cls is OnchainEngine:
+            kwargs["provider"] = onchain_provider
+        engines.append(cls(**kwargs))
     # Scalp proxy micro-engine — only when scalping is feature-flagged on (§17)
     feats = params.features.model_dump() if hasattr(params.features, "model_dump") else {}
     if feats.get("scalp_enabled"):
