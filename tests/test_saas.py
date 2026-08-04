@@ -22,11 +22,15 @@ def _saas_env(monkeypatch, tmp_path):
     monkeypatch.setenv("AIMOS__SAAS__ADMIN__EMAIL", "admin@example.com")
     monkeypatch.setenv("AIMOS__SAAS__ADMIN__PASSWORD", "AdminPass123!")
     monkeypatch.setenv("AIMOS__SAAS__ADMIN__USER_ID", "admin-test")
+    monkeypatch.setenv("AIMOS_SECRETS_DIR", str(tmp_path / "secrets"))
     # Dev maildrop is opt-in since finding H2; tests read login codes from it.
     monkeypatch.setenv("AIMOS_DEV_MAILDROP", "1")
-    # Reset the singleton engine so every test gets a fresh database.
+    # Reset the singleton engine and settings key cache so every test is isolated.
     saas_db._engine = None
     saas_db._SessionLocal = None
+    from aimos.saas.settings_store import SettingsStore
+
+    SettingsStore._key = None
     yield
     saas_db._engine = None
     saas_db._SessionLocal = None

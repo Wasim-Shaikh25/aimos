@@ -17,7 +17,22 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from aimos.core.config import load_params
 
 _STATE_DIR = Path("state")
-_SECRET_FILE = _STATE_DIR / ".jwt_secret"
+
+
+def _secrets_dir() -> Path:
+    """Secrets are kept outside ``dashboard/dist``'s ancestry by default.
+
+    Override with ``AIMOS_SECRETS_DIR``; otherwise ``~/.aimos/secrets``.
+    """
+    env = os.environ.get("AIMOS_SECRETS_DIR", "")
+    if env:
+        return Path(env)
+    return Path.home() / ".aimos" / "secrets"
+
+
+def _jwt_secret_file() -> Path:
+    """Resolved at call time so tests can point ``AIMOS_SECRETS_DIR`` at a temp dir."""
+    return _secrets_dir() / ".jwt_secret"
 
 
 class SMTPConfig(BaseModel):
@@ -95,22 +110,24 @@ def _load_or_create_jwt_secret() -> str:
     """Persist a single JWT secret across restarts.
 
     If the operator supplies ``AIMOS__SAAS__JWT_SECRET`` that value is used
-    instead. The generated secret is stored in ``state/.jwt_secret`` and
-    must be backed up for production multi-node deployments.
+    instead. The generated secret is stored in ``AIMOS_SECRETS_DIR/.jwt_secret``
+    (default ``~/.aimos/secrets/.jwt_secret``) and must be backed up for
+    production multi-node deployments.
     """
     env = os.environ.get("AIMOS__SAAS__JWT_SECRET", "").strip()
     if env:
         return env
-    _STATE_DIR.mkdir(parents=True, exist_ok=True)
-    if _SECRET_FILE.exists():
-        return _SECRET_FILE.read_text(encoding="utf-8").strip()
+    secret_file = _jwt_secret_file()
+    secret_file.parent.mkdir(parents=True, exist_ok=True)
+    if secret_file.exists():
+        return secret_file.read_text(encoding="utf-8").strip()
     secret = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ascii")
-    _SECRET_FILE.write_text(secret, encoding="utf-8")
+    secret_file.write_text(secret, encoding="utf-8")
     # Restrict read to owner in POSIX environments.
     try:
         import stat
 
-        _SECRET_FILE.chmod(stat.S_IRUSR | stat.S_IWUSR)
+        secret_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     except Exception:  # noqa: BLE001
         pass
     return secret

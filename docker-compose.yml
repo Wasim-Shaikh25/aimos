@@ -15,10 +15,11 @@ services:
       AIMOS__PAPER__JOURNAL_PATH: state/aimos.sqlite   # hash-chained journal (SQLite)
       AIMOS_TIMESCALE_DSN: postgresql://aimos:${POSTGRES_PASSWORD:-aimos}@postgres:5432/aimos
       AIMOS__SAAS__DATABASE_URL: postgresql+psycopg://aimos:${POSTGRES_PASSWORD:-aimos}@postgres:5432/aimos
+      AIMOS_SECRETS_DIR: /app/secrets                  # outside dashboard/dist ancestry (REQ-14)
       AIMOS_HOST: 0.0.0.0
       AIMOS_PORT: "8000"
     ports: ["127.0.0.1:8000:8000"]   # never public — behind VPN/SSH tunnel (§23.4)
-    volumes: ["./data:/app/data", "./state:/app/state", "./config:/app/config:ro"]
+    volumes: ["./data:/app/data", "./state:/app/state", "./config:/app/config:ro", "secrets:/app/secrets"]
     depends_on: [postgres]
     restart: unless-stopped
     healthcheck:
@@ -61,3 +62,4 @@ services:
 
 volumes:
   pgdata:
+  secrets:

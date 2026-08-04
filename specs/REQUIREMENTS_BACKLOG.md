@@ -224,13 +224,17 @@ removed once folded into STATUS.md).
 - **Priority:** Low (structural; the H3 throttle already bounds the immediate
   risk). **Effort:** Large.
 
-### REQ-14: Move key material outside the working-directory subtree
+### [x] REQ-14: Move key material outside the working-directory subtree
 
 - **Source:** `PRODUCTION_READINESS_AUDIT.md` Remediation Plan, Group 4 — the
   structural fix for the bug class C1 was in (not just the one instance).
-- **Acceptance criteria:** `state/.jwt_secret`, `state/.settings_key` resolvable
-  from a path outside `dashboard/dist`'s ancestry by default, or documented as
-  required to live on a separate volume in the Docker deployment.
+- **Decision:** `.jwt_secret` and `.settings_key` live in a dedicated secrets
+  directory outside the source/state tree. The default is `~/.aimos/secrets` and
+  is overridable via `AIMOS_SECRETS_DIR`. `docker-compose.yml` mounts a separate
+  `secrets` volume at `/app/secrets` with `AIMOS_SECRETS_DIR=/app/secrets`.
+- **Implementation:** `aimos/saas/settings.py` and `aimos/saas/settings_store.py`
+  now derive their key paths from `_secrets_dir()` (env `AIMOS_SECRETS_DIR`).
+  Tests set `AIMOS_SECRETS_DIR` to `tmp_path/secrets` to stay isolated.
 - **Priority:** Low (C1 itself is fixed; this is defense in depth). **Effort:**
   Medium.
 
