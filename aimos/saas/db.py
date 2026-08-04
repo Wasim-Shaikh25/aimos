@@ -18,6 +18,24 @@ from aimos.saas.settings import get_saas_config
 log = structlog.get_logger(__name__)
 
 
+def run_migrations(database_url: str | None = None) -> None:
+    """Run Alembic migrations for the SaaS/auth DB.
+
+    When ``database_url`` is omitted it is read from the SaaS config.
+    """
+    if database_url is None:
+        database_url = get_saas_config().database_url
+
+    from alembic import command
+    from alembic.config import Config
+
+    repo_root = Path(__file__).resolve().parents[2]
+    alembic_ini = repo_root / "alembic.ini"
+    cfg = Config(str(alembic_ini))
+    cfg.set_main_option("sqlalchemy.url", database_url)
+    command.upgrade(cfg, "head")
+
+
 class Base(DeclarativeBase):
     """Declarative base for all SaaS ORM models."""
 
@@ -41,7 +59,7 @@ def get_engine():
             Path(url.replace("sqlite:///", "")).parent.mkdir(parents=True, exist_ok=True)
         _engine = create_engine(url, **kwargs)
         _SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False)
-        Base.metadata.create_all(_engine)
+        run_migrations(url)
         # Seed the single admin user when SaaS is configured.
         try:
             from aimos.saas import auth_service

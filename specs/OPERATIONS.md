@@ -352,8 +352,12 @@ Telegram locks, the fail-closed `mandate.yaml`, and the boot guard.
 
 - **Start:** `docker compose up -d`. **Stop:** `docker compose down` (the journal
   persists; restart reconciliation resolves state).
-- **Upgrade:** pull → `docker compose build` → `docker compose up -d`. Vendored
-  code is frozen; re-vendoring is a deliberate human-approved event (§22.3).
+- **Upgrade:** pull → run Alembic migrations → `docker compose build` → `docker compose up -d`.
+  Vendored code is frozen; re-vendoring is a deliberate human-approved event (§22.3).
+- **Database migrations:** the SaaS/auth schema is managed by Alembic.
+  Run `alembic upgrade head` (or `python -m alembic upgrade head`) before starting
+  a new version; `aimos.saas.db.get_engine()` and `scripts/migrate_to_saas.py` run
+  migrations automatically on first use.
 - **Emergency stop:** dashboard **Positions & Risk → killswitch** (CONFIRM-gated);
   Telegram `/killswitch` (nonce-confirmed); or `touch RUNTIME_HALT` in the working
   dir (loop halts, forces NO_TRADE).

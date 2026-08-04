@@ -140,15 +140,23 @@ removed once folded into STATUS.md).
 - **Priority:** Low. **Effort:** Trivial.
 - **Dependencies:** none.
 
-### REQ-9: Adopt a migration framework for the auth/settings DB
+### [x] REQ-9: Adopt a migration framework for the auth/settings DB
 
 - **Source:** `PRODUCTION_READINESS_AUDIT.md` Remediation Plan, Group 4.
-- **Rationale:** `aimos/saas/db.py` uses `Base.metadata.create_all`, which cannot
+- **Rationale:** `aimos/saas/db.py` used `Base.metadata.create_all`, which cannot
   alter existing tables. H3 already needed a manual `EmailLoginCode.attempts`
   column; every future schema change hits this. On an existing deployment that
-  table currently needs to be dropped by hand for the column to appear.
-- **Acceptance criteria:** Alembic (or equivalent) wired to `aimos/saas/models.py`;
+  table needed to be dropped by hand for the column to appear.
+- **Acceptance criteria:** Alembic wired to `aimos/saas/models.py`;
   a baseline migration; the H3 column becomes a proper migration.
+- **Implementation:** Alembic initialized at repo root; `alembic/env.py` loads
+  `aimos.saas.models` and `aimos.saas.settings_store` so the baseline captures the
+  full `users`, `organizations`, `organization_configs`, `organization_states`,
+  `organization_members`, `refresh_tokens`, `auth_audit_log`, `user_settings`,
+  and `email_login_codes` (without `attempts`) tables. Migration
+  `002_add_email_login_attempts.py` adds the `EmailLoginCode.attempts` column.
+  `aimos.saas.db.run_migrations()` and `scripts/migrate_to_saas.py` use Alembic
+  `upgrade head` instead of `Base.metadata.create_all`.
 - **Priority:** Medium (compounds if deferred). **Effort:** Medium.
 - **Dependencies:** none, but do this before the next auth-DB schema change.
 

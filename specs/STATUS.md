@@ -31,10 +31,10 @@ clean; import-linter 6/6.
 > ✅ **Production readiness: STOP — CONDITIONAL GO.** See **`PRODUCTION_READINESS_AUDIT.md`**.
 > **All Critical/High/Medium audit blockers are fixed** — the 2 Criticals (C1
 > traversal, C2 auth-lockout) verified live, and H1–H5 + M8 + L5 fixed with tests
-> (466 → 488). Remaining conditions before live: an **independent verification pass**,
-> product decision **PD1** (network-exposure model), scheduling the new
-> `scripts/backup_journal.py` at the target RPO, and the H3 `email_login_codes`
-> schema change on existing deployments.
+> (466 → 514). Remaining conditions before live: an **independent verification pass**,
+> product decision **PD1** (network-exposure model), and scheduling the new
+> `scripts/backup_journal.py` at the target RPO. The H3 `email_login_codes.attempts`
+> schema change is now an Alembic migration (REQ-9).
 
 ---
 
