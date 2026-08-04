@@ -133,7 +133,7 @@ class AuthAuditLog(Base):
 
 
 class OrganizationState(Base):
-    """Per-tenant runtime state (equity, balances, positions, ladder, features)."""
+    """Per-tenant runtime state (equity, balances, positions, ladder, features, view, controls)."""
 
     __tablename__ = "organization_states"
 
@@ -147,6 +147,8 @@ class OrganizationState(Base):
     sim_state: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     ladder: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     features: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    view: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True, default=dict)
+    controls: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True, default=dict)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
 
     organization: Mapped["Organization"] = relationship("Organization", back_populates="state")

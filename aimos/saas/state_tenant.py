@@ -32,6 +32,8 @@ def load_state(org_id: str) -> dict[str, Any]:
             "positions": row.positions,
             "ladder": row.ladder,
             "features": row.features,
+            "view": row.view,
+            "controls": row.controls,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
 
@@ -46,6 +48,8 @@ def save_state(
     positions: list[dict[str, Any]] | None = None,
     ladder: dict[str, Any] | None = None,
     features: dict[str, Any] | None = None,
+    view: dict[str, Any] | None = None,
+    controls: dict[str, Any] | None = None,
 ) -> None:
     """Persist runtime state for an organization."""
     with _session() as session:
@@ -67,6 +71,10 @@ def save_state(
             row.ladder = ladder
         if features is not None:
             row.features = features
+        if view is not None:
+            row.view = view
+        if controls is not None:
+            row.controls = controls
         session.commit()
 
 
