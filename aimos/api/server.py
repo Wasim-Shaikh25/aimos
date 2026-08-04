@@ -76,6 +76,8 @@ class AppState:
     golive_provider: Any = None  # callable -> go-live ladder status
     golive_setter: Any = None  # callable(gate, passed) -> {"ok", ...}
     monitor_provider: Any = None  # callable -> feature-monitor coverage report
+    risk_provider: Any = None  # callable -> risk analytics report dict
+    risk_analyzer: Any = None  # callable that recomputes and caches the risk report
     assistant: Any = None  # read-only AI analyst (Assistant) or None when disabled
 
 
@@ -353,6 +355,14 @@ def create_app(state: AppState) -> FastAPI:
         # feature-monitor coverage report: per-feature ok/degraded/failing + coverage %
         return state.monitor_provider() if state.monitor_provider else {
             "features": [], "summary": {}, "coverage_pct": 0.0}
+
+    @app.get("/api/risk")
+    def get_risk():
+        # VaR/ES, alpha/beta vs BTC & T1 basket, BTC-beta factor split (§24.3-24.4)
+        report = state.risk_provider() if state.risk_provider else {}
+        if not report and state.risk_analyzer:
+            report = state.risk_analyzer()
+        return report
 
     @app.get("/api/assistant")
     def assistant_status():

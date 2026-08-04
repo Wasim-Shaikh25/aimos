@@ -25,9 +25,9 @@ def historical_var_es(portfolio_returns: Sequence[float], confidence: float = 0.
     if r.size == 0:
         return VaRResult(0.0, 0.0)
     q = np.quantile(r, 1.0 - confidence)  # lower-tail return (negative)
-    var_pct = -float(q) * 100.0
+    var_pct = -float(q) * 100.0 + 0.0
     tail = r[r <= q]
-    es_pct = -float(tail.mean()) * 100.0 if tail.size else var_pct
+    es_pct = -float(tail.mean()) * 100.0 + 0.0 if tail.size else var_pct
     return VaRResult(var_pct, es_pct)
 
 

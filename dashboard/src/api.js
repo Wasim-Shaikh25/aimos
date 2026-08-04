@@ -90,6 +90,7 @@ export const api = {
   }),
   golive: () => j('/api/golive'),
   monitor: () => j('/api/monitor'),
+  risk: () => j('/api/risk'),
   assistantStatus: () => j('/api/assistant'),
   ask: (question) => j('/api/assistant', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

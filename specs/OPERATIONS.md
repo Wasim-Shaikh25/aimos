@@ -124,6 +124,21 @@ It never touches live/funded features. Use it to shake out the whole system quic
 `AIMOS__MONITOR__ENABLED=true python -m aimos.runtime.serve`, then watch the Monitor
 screen climb toward 100% coverage.
 
+### Risk analytics (`config/default.yaml risk:`)
+
+A daily APScheduler job computes a cached risk report from the equity curve,
+BTC returns, and an equal-weight T1 basket.  Served at `/api/risk` and rendered on
+the **Positions & Risk** stress panel and **Performance** alpha/beta tiles (REQ-1).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `risk.enabled` | `true` | run the daily risk-analytics job |
+| `risk.interval_seconds` | `86400` | recompute cadence (env `AIMOS__RISK__INTERVAL_SECONDS`) |
+| `risk.timeframe` | `""` | benchmark candle timeframe; falls back to `paper.timeframe` |
+| `risk.min_samples` | `30` | minimum equity-return samples before computing metrics |
+
+Disable with `AIMOS__RISK__ENABLED=false` if you do not want the scheduler job.
+
 ### Train the ML on older data (`scripts/train_from_history.py`)
 
 Replays historical candles as paper trades, labels them (triple-barrier), and

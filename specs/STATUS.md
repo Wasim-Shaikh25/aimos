@@ -71,6 +71,7 @@ Markets · Prices (multi-venue matrix) · Decision Anatomy · Mind-map · Engine
 (per-venue) · Strategies · Models · Universe · Positions & Risk · Trade History ·
 Balances · Connections · Controls · Go-Live · Monitor · AI Analyst · Decisions ·
 Performance · Config · Agents · Settings.
+- Risk analytics (`/api/risk`) live on the **Positions & Risk** stress panel and **Performance** alpha/beta tiles (REQ-1).
 
 ---
 
