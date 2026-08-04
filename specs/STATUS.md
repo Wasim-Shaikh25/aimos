@@ -36,8 +36,9 @@ clean; import-linter 6/6.
 > network-exposure model is documented as loopback-only/proxy-or-SaaS (REQ-10),
 > and key material defaults to `~/.aimos/secrets` with a dedicated Docker secrets
 > volume (REQ-14). The dormant on-chain engine now has a Coin Metrics Community
-> API provider (REQ-16). Remaining condition before live: an **independent
-> verification pass**.
+> API provider (REQ-16), and the dashboard accessibility pass is complete
+> (REQ-15). Remaining condition before live: an **independent verification
+> pass**.
 
 ---
 

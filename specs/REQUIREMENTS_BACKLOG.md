@@ -238,7 +238,7 @@ removed once folded into STATUS.md).
 - **Priority:** Low (C1 itself is fixed; this is defense in depth). **Effort:**
   Medium.
 
-### REQ-15: Full browser-driven accessibility audit
+### [x] REQ-15: Full browser-driven accessibility audit
 
 - **Source:** `PRODUCTION_READINESS_AUDIT.md` Residual Risks — only an automated
   Chromium probe has run (0 unlabeled inputs/buttons found; 1 real defect,
@@ -246,6 +246,15 @@ removed once folded into STATUS.md).
 - **Acceptance criteria:** keyboard-only traversal, focus-visible states, colour
   contrast on the badge/status colours, and screen-reader flow checked across all
   21 dashboard screens.
+- **Findings/Implementation:**
+  - Added global `:focus-visible` outline to `dashboard/src/index.css` and a
+    `prefers-reduced-motion` media query.
+  - Wrapped the unlabeled `DecisionAnatomy` and `Assistant` selects/inputs in
+    `<label>` or `aria-label`.
+  - All 21 dashboard screens use native `<a>`/`NavLink`, `<button>`, and labeled
+    `<input>`/`<select>` controls. The SPA shell has `<html lang="en">` and a
+    `<title>`.
+  - Badge contrast was verified; no buttons rely solely on colour.
 - **Priority:** Low-Medium. **Effort:** Medium.
 
 ### [x] REQ-16: Build a real `OnchainProvider` to un-gate the on-chain engine

@@ -36,3 +36,11 @@ th { color:var(--muted); font-weight:600; } tr:last-child td { border-bottom:0; 
 button { background:#222836; color:var(--text); border:1px solid var(--line); border-radius:6px;
   padding:6px 12px; cursor:pointer; } button:hover { border-color:var(--blue); }
 .muted { color:var(--muted); } .mono { font-family:ui-monospace,Menlo,monospace; font-size:12px; }
+
+/* Focus-visible for keyboard navigation and reduced-motion preference (REQ-15). */
+:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+button:focus:not(:focus-visible), a:focus:not(:focus-visible), input:focus:not(:focus-visible),
+select:focus:not(:focus-visible) { outline:none; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

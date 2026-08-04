@@ -58,7 +58,7 @@ export default function Assistant() {
     <div className="row" style={{ gap: 8, flexWrap: 'wrap', margin: '8px 0' }}>
       {SUGGESTIONS.map(s => <button key={s} className="chip" onClick={() => send(s)} disabled={busy}>{s}</button>)}
       <span style={{ flex: 1 }} />
-      <select value={tf} onChange={e => setTf(e.target.value)}>
+      <select value={tf} onChange={e => setTf(e.target.value)} aria-label="Report time window">
         {['1h', '6h', '24h', '7d', '30d'].map(o => <option key={o} value={o}>{o}</option>)}
       </select>
       <button className="chip" onClick={genReport} disabled={busy}>Generate report</button>
@@ -82,8 +82,8 @@ export default function Assistant() {
     </div>
 
     <form className="row" style={{ gap: 8, marginTop: 10 }} onSubmit={e => { e.preventDefault(); send() }}>
-      <input style={{ flex: 1 }} placeholder="Ask the analyst…" value={input}
-        onChange={e => setInput(e.target.value)} disabled={busy} />
+      <input style={{ flex: 1 }} placeholder="Ask the analyst…" aria-label="Ask the analyst"
+        value={input} onChange={e => setInput(e.target.value)} disabled={busy} />
       <button className="chip" type="submit" disabled={busy || !input.trim()}>Ask</button>
     </form>
   </div>
