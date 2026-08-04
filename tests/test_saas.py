@@ -65,7 +65,11 @@ class TestStatus:
     def test_status_reports_saas_enabled(self, client):
         resp = client.get("/api/v2/status")
         assert resp.status_code == 200
-        assert resp.json()["saas_enabled"] is True
+        body = resp.json()
+        assert body["saas_enabled"] is True
+        assert "features" in body
+        assert "halted" in body
+        assert body["halted"] is False
 
 
 class TestAdminLogin:

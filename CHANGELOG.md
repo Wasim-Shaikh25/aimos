@@ -6,6 +6,10 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Fixed (go-live verification blockers)
+- **Killswitch reset gap closed**: added `POST /api/control/unhalt`, `PipelineOrchestrator.halt()` / `unhalt()` (persists/removes the `RUNTIME_HALT` file), and surfaced `halted` state in both `/api/features` and `/api/v2/status`. The dashboard **Controls** screen now shows a halt/reset panel and disables feature toggles while halted. Telegram killswitch falls back to the `halt()` method when available.
+- **`/api/v2/status` now returns runtime feature flags and `halted`**: previously only returned `{"saas_enabled": true}`; now includes `features` and `halted` so public health/status clients see the same runtime state as `/api/features`.
+
 ### Removed / Changed (auth surface — operator decision on PD2)
 - **Deleted the retired auth surface entirely** (resolves audit finding M1;
   operator's answer to PD2 for the auth-code half): `aimos/saas/oauth.py` and

@@ -243,8 +243,13 @@ def create_app(state: AppState) -> FastAPI:
 
     @app.get("/api/v2/status")
     def status():
-        """Public status endpoint so the dashboard can detect SaaS mode."""
-        return {"saas_enabled": get_saas_config().enabled}
+        """Public status endpoint: SaaS mode, runtime flags, and halt state."""
+        features = state.features_provider() if state.features_provider else {"features": {}}
+        return {
+            "saas_enabled": get_saas_config().enabled,
+            "features": features.get("features", {}),
+            "halted": features.get("halted", False),
+        }
 
     @app.get("/healthz")
     def healthz():
@@ -325,8 +330,15 @@ def create_app(state: AppState) -> FastAPI:
     def killswitch(body: ConfirmBody):
         _require_confirm(body)
         if state.orchestrator:
-            state.orchestrator.state.halted = True
+            state.orchestrator.halt()
         return {"ok": True, "halted": True}
+
+    @app.post("/api/control/unhalt")
+    def unhalt(body: ConfirmBody):
+        _require_confirm(body)
+        if state.orchestrator:
+            state.orchestrator.unhalt()
+        return {"ok": True, "halted": False}
 
     @app.get("/api/markets")
     def get_markets():

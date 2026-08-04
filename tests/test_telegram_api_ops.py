@@ -104,6 +104,14 @@ def test_api_control_requires_confirm():
     assert r.status_code == 200 and r.json()["ok"]
 
 
+def test_api_control_unhalt():
+    client = TestClient(create_app(_app_state()))
+    # no orchestrator means stateless ok, but we can still call unhalt
+    r = client.post("/api/control/unhalt", json={"confirm": "CONFIRM"})
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "halted": False}
+
+
 def test_api_metrics_endpoint():
     client = TestClient(create_app(_app_state()))
     r = client.get("/metrics")

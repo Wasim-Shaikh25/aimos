@@ -111,7 +111,10 @@ class CommandRouter:
         cmd = parts[0].lower()
         if cmd == "/killswitch":
             if self.orch:
-                self.orch.state.halted = True
+                if hasattr(self.orch, "halt"):
+                    self.orch.halt()
+                else:
+                    self.orch.state.halted = True
             return "killswitch engaged - trading halted"
         if cmd == "/flatten" and len(parts) > 1:
             sym = parts[1]
