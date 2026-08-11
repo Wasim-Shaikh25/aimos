@@ -41,6 +41,13 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   the UI: URL query strings and `apiKey`/`secret`/`signature`/`sign` parameters are
   redacted so credential derivatives cannot leak through `error` payloads.
 
+### Fixed (live-prereqs snapshot rehydration)
+- `serve.py` now stores the per-venue `connections` map in the runtime snapshot
+  view instead of the aggregated `{"venues": [...], "any_live": bool}` shape, and
+  `_rehydrate_from_snapshot` converts the old aggregate back to a venue-keyed map.
+  This prevents `GET /api/connections` and `GET /api/balances` from 500ing in the
+  split API/loop process mode after the first state refresh.
+
 ### Changed (live-trading prerequisites)
 - Runtime preflight (`_run_preflight`) and `scripts/validate_integration.py` now
   read exchange API keys from the encrypted `SettingsStore` first (the UI path),

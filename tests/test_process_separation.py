@@ -63,10 +63,15 @@ def test_build_view_and_rehydrate(tmp_path, monkeypatch):
     holder["chosen"]["Momentum"] = 3
 
     params = components["params"]
+    conn = {"binance": {"venue": "binance", "configured": True, "connected": False,
+                        "can_trade": False, "usdt_free": 0.0, "error": ""}}
+    components["connections"] = conn
+    holder["connections"] = conn
     view = _build_view(holder, components["connections"], params, components["paper"])
     assert view["prices"]["BTC"]["venues"]["binance"] == 100.0
     assert view["matrix"]["matrix"] is not None
     assert view["chosen"]["Momentum"] == 3
+    assert view["connections"]["binance"]["venue"] == "binance"
 
     snapshot = build_snapshot(
         holder, components["broker"], components["sim"], components["ladder"],
@@ -78,6 +83,7 @@ def test_build_view_and_rehydrate(tmp_path, monkeypatch):
     assert components["holder"]["prices"]["BTC"]["venues"]["binance"] == 100.0
     assert components["holder"]["latest"]["BTC"]["p_up"] == 0.5
     assert components["holder"]["matrix_view"]["matrix"] is not None
+    assert components["holder"]["connections"]["binance"]["venue"] == "binance"
 
 
 def test_api_app_does_not_start_loop(tmp_path, monkeypatch):

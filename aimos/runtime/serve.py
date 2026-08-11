@@ -121,13 +121,22 @@ def _rehydrate_from_snapshot(components: dict[str, Any],
     view = snapshot.get("view", {})
     if view:
         for key in ("latest", "evidence", "venue_state", "prices", "candles_view",
-                    "monitor", "risk_report", "connections", "chosen"):
+                    "monitor", "risk_report", "chosen"):
             if key in view:
                 holder.setdefault(key, {}).clear()
                 holder[key].update(view[key])
         if "matrix" in view:
             holder.setdefault("matrix_view", {}).clear()
             holder["matrix_view"].update(view["matrix"])
+        if "connections" in view:
+            # The view may be the old aggregate {"venues": [...], "any_live": bool}
+            # or the newer venue-keyed map. API providers expect a venue-keyed map.
+            conn_view = view["connections"]
+            if isinstance(conn_view, dict) and "venues" in conn_view:
+                holder["connections"] = {v["venue"]: v for v in conn_view["venues"]
+                                         if isinstance(v, dict) and "venue" in v}
+            else:
+                holder["connections"] = dict(conn_view)
         holder["updated"] = view.get("updated")
         holder["tick"] = view.get("tick", holder["tick"])
     _apply_controls(components, controls)
@@ -147,10 +156,7 @@ def _build_view(holder: dict[str, Any], connections: dict[str, Any],
         "prices": dict(holder.get("prices", {})),
         "candles_view": dict(candles_view),
         "matrix": _universe_payload(holder["universe"], paper, holder),
-        "connections": {
-            "venues": list(connections.values()),
-            "any_live": any(c.get("connected") for c in connections.values()),
-        },
+        "connections": dict(connections),
         "risk_report": dict(holder.get("risk_report", {})),
         "monitor": dict(holder.get("monitor", {})),
         "updated": holder.get("updated"),
