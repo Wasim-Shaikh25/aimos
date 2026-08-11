@@ -1,7 +1,26 @@
 import React, { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useAuth } from '../auth.jsx'
-import { Tile, Empty } from '../components/ui'
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Empty,
+  Input,
+  Label,
+  Select,
+  Switch,
+  Table,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  Tile,
+} from '../components/ui'
 
 const FEATURES = [
   ['live_data', 'Live market data (disable for offline paper)'],
@@ -13,23 +32,13 @@ const FEATURES = [
   ['llm_news_sensor', 'LLM news sensor'],
 ]
 
-function Field({ label, type = 'text', value = '', onChange, required = false, placeholder = '' }) {
+function FormItem({ label, children, hint }) {
   return (
-    <label style={{ display: 'block', marginBottom: 12 }}>
-      <span style={{ display: 'block', color: 'var(--muted)', fontSize: 12, marginBottom: 4 }}>{label}</span>
-      <input type={type} value={value || ''} onChange={e => onChange(e.target.value)}
-        required={required} placeholder={placeholder}
-        style={{ width: '100%', padding: '8px 10px', background: '#222836', color: 'var(--text)', border: '1px solid var(--line)', borderRadius: 6 }} />
-    </label>
-  )
-}
-
-function Toggle({ label, checked, onChange }) {
-  return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: 'pointer' }}>
-      <input type="checkbox" checked={!!checked} onChange={e => onChange(e.target.checked)} />
-      <span style={{ fontSize: 13 }}>{label}</span>
-    </label>
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      {children}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
   )
 }
 
@@ -40,7 +49,6 @@ export default function Settings() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
 
-  // Exchange key form
   const [venue, setVenue] = useState('binance')
   const [apiKey, setApiKey] = useState('')
   const [secret, setSecret] = useState('')
@@ -62,14 +70,21 @@ export default function Settings() {
 
   useEffect(() => { load() }, [])
 
-  const notify = (msg) => { setMessage(msg); setTimeout(() => setMessage(''), 3000) }
+  const notify = (msg, error = false) => {
+    setMessage({ text: msg, error })
+    setTimeout(() => setMessage(''), 4000)
+  }
 
   const save = async (section, payload) => {
     setLoading(true)
     const res = await api.patchSettingsConfig({ [section]: payload })
     setLoading(false)
-    if (res) { notify(`${section} saved`); await load() }
-    else notify(`Failed to save ${section}`)
+    if (res) {
+      notify(`${section} saved`)
+      await load()
+    } else {
+      notify(`Failed to save ${section}`, true)
+    }
   }
 
   const addExchange = async (e) => {
@@ -79,9 +94,11 @@ export default function Settings() {
     setLoading(false)
     if (res) {
       notify(`Added ${venue} key`)
-      setApiKey(''); setSecret(''); await load()
+      setApiKey('')
+      setSecret('')
+      await load()
     } else {
-      notify('Failed to add exchange key')
+      notify('Failed to add exchange key', true)
     }
   }
 
@@ -89,111 +106,348 @@ export default function Settings() {
     setLoading(true)
     const res = await api.deleteExchange(v)
     setLoading(false)
-    if (res) { notify(`Removed ${v}`); await load() }
-    else notify('Failed to remove exchange key')
+    if (res) {
+      notify(`Removed ${v}`)
+      await load()
+    } else {
+      notify('Failed to remove exchange key', true)
+    }
   }
 
-  if (!settings || !draft.mode) return <div className="page"><h1>Settings</h1><p className="muted">Loading…</p></div>
+  if (!settings || !draft.mode) {
+    return (
+      <div className="page">
+        <h1>Settings</h1>
+        <p className="text-muted-foreground">Loading…</p>
+      </div>
+    )
+  }
 
   const exchanges = settings.exchanges || {}
+  const updateSection = (section, patch) => setDraft(d => {
+    const current = d[section]
+    if (current && typeof current === 'object' && !Array.isArray(current)) {
+      return { ...d, [section]: { ...current, ...patch } }
+    }
+    const firstValue = Object.values(patch)[0]
+    return { ...d, [section]: firstValue }
+  })
 
-  return <div className="page">
-    <h1>Settings</h1>
-    {message && <p style={{ color: 'var(--green)', fontSize: 13 }}>{message}</p>}
-    <div className="tiles">
-      <Tile k="User" v={user?.username || user?.id || '—'} />
-      <Tile k="Mode" v={draft.mode || 'paper'} />
-      <Tile k="Configured exchanges" v={Object.keys(exchanges).length} />
+  const formatValue = (v) => {
+    if (v === null || v === undefined) return '—'
+    if (Array.isArray(v)) return v.join(', ') || '—'
+    if (typeof v === 'boolean') return v ? 'true' : 'false'
+    if (typeof v === 'object') {
+      return (
+        <dl className="space-y-0.5 pl-2 border-l border-border">
+          {Object.entries(v).map(([kk, vv]) => (
+            <div key={kk} className="flex justify-between gap-2">
+              <dt className="text-muted-foreground">{kk}</dt>
+              <dd className="truncate font-mono">{formatValue(vv)}</dd>
+            </div>
+          ))}
+        </dl>
+      )
+    }
+    return String(v)
+  }
+
+  return (
+    <div className="page animate-fade-in">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1>Settings</h1>
+          <p className="text-sm text-muted-foreground">
+            Single-user trading configuration. Changes are persisted and reloaded at runtime boot.
+          </p>
+        </div>
+        {message && (
+          <Badge dir={message.error ? 'down' : 'up'}>{message.text}</Badge>
+        )}
+      </div>
+
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Tile k="User" v={user?.username || user?.id || '—'} />
+        <Tile k="Mode" v={draft.mode || 'paper'} />
+        <Tile k="Configured exchanges" v={Object.keys(exchanges).length} />
+      </div>
+
+      <Tabs defaultValue="mode" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="mode">Mode & Features</TabsTrigger>
+          <TabsTrigger value="mandate">Mandate</TabsTrigger>
+          <TabsTrigger value="paper">Paper</TabsTrigger>
+          <TabsTrigger value="exchanges">Exchanges</TabsTrigger>
+          <TabsTrigger value="training">Training</TabsTrigger>
+          <TabsTrigger value="preview">Effective config</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="mode" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Trading mode</CardTitle>
+              <CardDescription>Paper simulates trades; live requires the go-live ladder.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormItem label="Mode" hint="Live mode stays fail-closed until mandate and ladder are satisfied.">
+                <Select
+                  value={draft.mode}
+                  onValueChange={(v) => updateSection('mode', { mode: v })}
+                  options={[
+                    { value: 'paper', label: 'Paper trading' },
+                    { value: 'live', label: 'Live trading' },
+                  ]}
+                />
+              </FormItem>
+              <Button onClick={() => save('mode', draft.mode)} disabled={loading}>
+                Save mode
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Features</CardTitle>
+              <CardDescription>Safe keyless toggles can also be flipped at runtime in Controls.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {FEATURES.map(([key, label]) => (
+                  <div key={key} className="flex items-center justify-between rounded-md border p-3">
+                    <Label htmlFor={key} className="cursor-pointer">{label}</Label>
+                    <Switch
+                      id={key}
+                      checked={!!draft.features?.[key]}
+                      onCheckedChange={(v) => updateSection('features', { [key]: v })}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4">
+                <Button onClick={() => save('features', draft.features)} disabled={loading}>
+                  Save features
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="mandate" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Mandate (go-live guard)</CardTitle>
+              <CardDescription>Hard limits enforced by the execution layer before any live order.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <Label htmlFor="mandate-enabled" className="cursor-pointer">Enable mandate (required before live/testnet)</Label>
+                <Switch
+                  id="mandate-enabled"
+                  checked={!!draft.mandate?.enabled}
+                  onCheckedChange={(v) => updateSection('mandate', { enabled: v })}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <FormItem label="Max total notional (USDT)">
+                  <Input
+                    type="number"
+                    value={draft.mandate?.max_total_notional_usdt || ''}
+                    onChange={(e) => updateSection('mandate', { max_total_notional_usdt: Number(e.target.value) })}
+                  />
+                </FormItem>
+                <FormItem label="Max positions">
+                  <Input
+                    type="number"
+                    value={draft.mandate?.max_positions || ''}
+                    onChange={(e) => updateSection('mandate', { max_positions: Number(e.target.value) })}
+                  />
+                </FormItem>
+                <FormItem label="Max risk % per trade">
+                  <Input
+                    type="number"
+                    value={draft.mandate?.max_risk_pct_per_trade || ''}
+                    onChange={(e) => updateSection('mandate', { max_risk_pct_per_trade: Number(e.target.value) })}
+                  />
+                </FormItem>
+              </div>
+              <Button onClick={() => save('mandate', draft.mandate)} disabled={loading}>
+                Save mandate
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="paper" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Paper config</CardTitle>
+              <CardDescription>Simulation parameters used by the paper broker.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <FormItem label="Starting equity (USDT)">
+                  <Input
+                    type="number"
+                    value={draft.paper?.starting_equity_usdt || ''}
+                    onChange={(e) => updateSection('paper', { starting_equity_usdt: Number(e.target.value) })}
+                  />
+                </FormItem>
+                <FormItem label="Max symbols">
+                  <Input
+                    type="number"
+                    value={draft.paper?.max_symbols || ''}
+                    onChange={(e) => updateSection('paper', { max_symbols: Number(e.target.value) })}
+                  />
+                </FormItem>
+                <FormItem label="Data venue">
+                  <Input
+                    value={draft.paper?.data_exchange || ''}
+                    onChange={(e) => updateSection('paper', { data_exchange: e.target.value })}
+                  />
+                </FormItem>
+              </div>
+              <FormItem label="Cross venues (comma separated)" hint="Venues to watch for cross-exchange arbitrage.">
+                <Input
+                  value={Array.isArray(draft.paper?.cross_venues) ? draft.paper.cross_venues.join(', ') : (draft.paper?.cross_venues || '')}
+                  onChange={(e) => updateSection('paper', { cross_venues: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                />
+              </FormItem>
+              <Button onClick={() => save('paper', draft.paper)} disabled={loading}>
+                Save paper config
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="exchanges" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Exchange API keys</CardTitle>
+              <CardDescription>Keys are encrypted at rest and never returned to the UI.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {Object.keys(exchanges).length ? (
+                <Table
+                  cols={['Venue', 'Has key', 'Testnet', { label: 'Action', align: 'right' }]}
+                  rows={Object.entries(exchanges).map(([v, meta]) => [
+                    <span className="font-medium" key="v">{v}</span>,
+                    <Badge key="has" dir={meta.has_key ? 'up' : 'down'}>{meta.has_key ? 'yes' : 'no'}</Badge>,
+                    <Badge key="test" dir={meta.testnet ? 'up' : 'down'}>{meta.testnet ? 'yes' : 'no'}</Badge>,
+                    <div key="act" className="text-right">
+                      <Button variant="outline" size="sm" onClick={() => removeExchange(v)} disabled={loading}>
+                        Remove
+                      </Button>
+                    </div>,
+                  ])}
+                />
+              ) : (
+                <Empty what="exchange keys" />
+              )}
+
+              <div className="rounded-lg border p-4">
+                <h3 className="mb-3 text-sm font-semibold">Add exchange key</h3>
+                <form onSubmit={addExchange} className="space-y-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <FormItem label="Venue">
+                      <Input value={venue} onChange={(e) => setVenue(e.target.value)} required />
+                    </FormItem>
+                    <FormItem label="API key">
+                      <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} required />
+                    </FormItem>
+                    <FormItem label="API secret">
+                      <Input value={secret} onChange={(e) => setSecret(e.target.value)} required />
+                    </FormItem>
+                  </div>
+                  <div className="flex flex-wrap gap-6">
+                    <div className="flex items-center space-x-2">
+                      <Switch id="testnet" checked={testnet} onCheckedChange={setTestnet} />
+                      <Label htmlFor="testnet" className="cursor-pointer">Testnet</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch id="withdraw" checked={withdraw} onCheckedChange={setWithdraw} />
+                      <Label htmlFor="withdraw" className="cursor-pointer">Withdraw permission</Label>
+                    </div>
+                  </div>
+                  <Button type="submit" disabled={loading || !apiKey || !secret}>
+                    Add encrypted key
+                  </Button>
+                </form>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="training" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Training data</CardTitle>
+              <CardDescription>Set symbols and window, then run the CLI commands below.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <FormItem label="Symbols (comma separated)">
+                  <Input value={draft.training?.symbols || ''} onChange={(e) => updateSection('training', { symbols: e.target.value })} />
+                </FormItem>
+                <FormItem label="Timeframe">
+                  <Select
+                    value={draft.training?.timeframe}
+                    onValueChange={(v) => updateSection('training', { timeframe: v })}
+                    options={[
+                      { value: '1m', label: '1m' },
+                      { value: '5m', label: '5m' },
+                      { value: '15m', label: '15m' },
+                      { value: '1h', label: '1h' },
+                      { value: '4h', label: '4h' },
+                      { value: '1d', label: '1d' },
+                    ]}
+                  />
+                </FormItem>
+                <FormItem label="Months of history">
+                  <Input
+                    type="number"
+                    value={draft.training?.months || ''}
+                    onChange={(e) => updateSection('training', { months: Number(e.target.value) })}
+                  />
+                </FormItem>
+              </div>
+              <div className="rounded-md bg-muted/30 p-3 text-xs font-mono text-muted-foreground">
+                python -m scripts.download_history --symbol {draft.training?.symbols?.split(',')[0] || 'BTC/USDT'} --timeframe {draft.training?.timeframe || '1h'} --months {draft.training?.months || 12}
+                <br />
+                python -m scripts.train_from_history --parquet --exchange binance --symbol {draft.training?.symbols?.split(',')[0] || 'BTC/USDT'} --timeframe {draft.training?.timeframe || '1h'}
+              </div>
+              <Button onClick={() => save('training', draft.training)} disabled={loading}>
+                Save training settings
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="preview" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Effective config preview</CardTitle>
+              <CardDescription>Merged config that the runtime will use on next boot.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {Object.entries(settings).filter(([, v]) => v && typeof v === 'object').map(([section, values]) => (
+                  <div key={section} className="rounded-md border p-3">
+                    <h4 className="mb-2 text-sm font-semibold capitalize">{section}</h4>
+                    <dl className="space-y-1 text-xs">
+                      {Object.entries(values).map(([k, v]) => (
+                        <div key={k} className="flex justify-between gap-2">
+                          <dt className="text-muted-foreground">{k}</dt>
+                          <dd className="font-mono">{formatValue(v)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
-
-    <h2>Mode & features</h2>
-    <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, padding: 16, marginBottom: 18 }}>
-      <label style={{ display: 'block', marginBottom: 12 }}>
-        <span style={{ display: 'block', color: 'var(--muted)', fontSize: 12, marginBottom: 4 }}>Trading mode</span>
-        <select value={draft.mode} onChange={e => setDraft({ ...draft, mode: e.target.value })}
-          style={{ width: '100%', padding: '8px 10px', background: '#222836', color: 'var(--text)', border: '1px solid var(--line)', borderRadius: 6 }}>
-          <option value="paper">Paper</option>
-          <option value="live">Live</option>
-        </select>
-      </label>
-      {FEATURES.map(([key, label]) => (
-        <Toggle key={key} label={label} checked={draft.features?.[key]} onChange={v => {
-          setDraft({ ...draft, features: { ...draft.features, [key]: v } })
-        }} />
-      ))}
-      <button onClick={() => save('mode', draft.mode)} disabled={loading} style={{ marginTop: 8, marginRight: 8 }}>Save mode</button>
-      <button onClick={() => save('features', draft.features)} disabled={loading}>Save features</button>
-    </div>
-
-    <h2>Mandate (go-live guard)</h2>
-    <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, padding: 16, marginBottom: 18 }}>
-      <Toggle label="Enable mandate (required before live/testnet)" checked={draft.mandate?.enabled}
-        onChange={v => setDraft({ ...draft, mandate: { ...draft.mandate, enabled: v } })} />
-      <Field label="Max total notional (USDT)" type="number" value={draft.mandate?.max_total_notional_usdt}
-        onChange={v => setDraft({ ...draft, mandate: { ...draft.mandate, max_total_notional_usdt: Number(v) } })} />
-      <Field label="Max positions" type="number" value={draft.mandate?.max_positions}
-        onChange={v => setDraft({ ...draft, mandate: { ...draft.mandate, max_positions: Number(v) } })} />
-      <Field label="Max risk % per trade" type="number" value={draft.mandate?.max_risk_pct_per_trade}
-        onChange={v => setDraft({ ...draft, mandate: { ...draft.mandate, max_risk_pct_per_trade: Number(v) } })} />
-      <button onClick={() => save('mandate', draft.mandate)} disabled={loading}>Save mandate</button>
-    </div>
-
-    <h2>Paper config</h2>
-    <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, padding: 16, marginBottom: 18 }}>
-      <Field label="Starting equity (USDT)" type="number" value={draft.paper?.starting_equity_usdt}
-        onChange={v => setDraft({ ...draft, paper: { ...draft.paper, starting_equity_usdt: Number(v) } })} />
-      <Field label="Max symbols" type="number" value={draft.paper?.max_symbols}
-        onChange={v => setDraft({ ...draft, paper: { ...draft.paper, max_symbols: Number(v) } })} />
-      <Field label="Cross venues (comma list)" value={Array.isArray(draft.paper?.cross_venues) ? draft.paper.cross_venues.join(',') : (draft.paper?.cross_venues || '')}
-        onChange={v => setDraft({ ...draft, paper: { ...draft.paper, cross_venues: v.split(',').map(s => s.trim()).filter(Boolean) } })} />
-      <button onClick={() => save('paper', draft.paper)} disabled={loading}>Save paper config</button>
-    </div>
-
-    <h2>Exchange API keys</h2>
-    <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, padding: 16, marginBottom: 18 }}>
-      {Object.keys(exchanges).length ? (
-        <table style={{ width: '100%', marginBottom: 12, fontSize: 13 }}>
-          <thead><tr><th>Venue</th><th>Has key</th><th>Testnet</th><th></th></tr></thead>
-          <tbody>
-            {Object.entries(exchanges).map(([v, meta]) => (
-              <tr key={v}>
-                <td>{v}</td>
-                <td>{meta.has_key ? 'yes' : 'no'}</td>
-                <td>{meta.testnet ? 'yes' : 'no'}</td>
-                <td><button onClick={() => removeExchange(v)}>Remove</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : <Empty what="exchange keys" />}
-      <h3 style={{ fontSize: 14, margin: '12px 0 8px' }}>Add exchange key</h3>
-      <form onSubmit={addExchange}>
-        <Field label="Venue" value={venue} onChange={setVenue} required />
-        <Field label="API key" value={apiKey} onChange={setApiKey} required />
-        <Field label="API secret" value={secret} onChange={setSecret} required />
-        <Toggle label="Testnet" checked={testnet} onChange={setTestnet} />
-        <Toggle label="Withdraw permission (blocked by default)" checked={withdraw} onChange={setWithdraw} />
-        <button type="submit" disabled={loading || !apiKey || !secret}>Add encrypted key</button>
-      </form>
-    </div>
-
-    <h2>Training data</h2>
-    <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, padding: 16, marginBottom: 18 }}>
-      <Field label="Symbols (comma separated)" value={draft.training?.symbols}
-        onChange={v => setDraft({ ...draft, training: { ...draft.training, symbols: v } })} />
-      <Field label="Timeframe" value={draft.training?.timeframe}
-        onChange={v => setDraft({ ...draft, training: { ...draft.training, timeframe: v } })} />
-      <Field label="Months of history" type="number" value={draft.training?.months}
-        onChange={v => setDraft({ ...draft, training: { ...draft.training, months: Number(v) } })} />
-      <p className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
-        Set parameters here, then run from the shell:
-        <br /><code>python -m scripts.download_history --symbol {draft.training?.symbols?.split(',')[0] || 'BTC/USDT'} --timeframe {draft.training?.timeframe || '1h'} --months {draft.training?.months || 12}</code>
-        <br /><code>python -m scripts.train_from_history --parquet --exchange binance --symbol {draft.training?.symbols?.split(',')[0] || 'BTC/USDT'} --timeframe {draft.training?.timeframe || '1h'}</code>
-      </p>
-      <button onClick={() => save('training', draft.training)} disabled={loading}>Save training settings</button>
-    </div>
-
-    <h2>Effective config preview</h2>
-    <pre className="muted" style={{ fontSize: 12, maxHeight: 300, overflow: 'auto' }}>{JSON.stringify(settings, null, 2)}</pre>
-  </div>
+  )
 }

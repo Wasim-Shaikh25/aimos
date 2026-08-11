@@ -76,12 +76,16 @@ training on historical data via paper replay (`scripts/train_from_history`).
 
 ---
 
-## Dashboard screens — ✅ all live-polling
+## Dashboard screens — ✅ all live-polling, shadcn/ui
 
 Markets · Prices (multi-venue matrix) · Decision Anatomy · Mind-map · Engines
 (per-venue) · Strategies · Models · Universe · Positions & Risk · Trade History ·
 Balances · Connections · Controls · Go-Live · Monitor · AI Analyst · Decisions ·
 Performance · Config · Agents · Settings.
+- Settings, Config, Models, and Controls now use shadcn/ui cards, forms, switches,
+  selects, badges, and tables instead of raw `<pre>`/JSON dumps.
+- Tailwind v3 theme with CSS variables maps to the `background`, `foreground`,
+  `card`, `primary`, `destructive`, `success`, and `muted` tokens.
 - Risk analytics (`/api/risk`) live on the **Positions & Risk** stress panel and **Performance** alpha/beta tiles (REQ-1).
 - Go-Live ladder enforces sequential gate sign-off (REQ-8).
 - Public `/healthz` and `/readyz` probes are live, with `docker-compose.yml` healthcheck wired (REQ-6).
