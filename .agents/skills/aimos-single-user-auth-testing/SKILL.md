@@ -1,9 +1,9 @@
 ---
 name: aimos-single-user-auth-testing
-description: How to end-to-end test the AIMOS single-user / no-SaaS auth flow, dashboard Settings UI, encrypted exchange key store, and unified persistence on the PR #17 branch and later.
+description: How to end-to-end test the AIMOS single-user auth flow, dashboard Settings UI, encrypted exchange key store, and unified persistence.
 ---
 
-# AIMOS single-user / no-SaaS end-to-end testing
+# AIMOS single-user end-to-end testing
 
 ## Goal
 

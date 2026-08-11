@@ -1,12 +1,10 @@
-// Journal-backed API client (§15.1) + SaaS auth helpers.
+// Journal-backed API client (§15.1) + single-user auth helpers.
 // Access token is kept in memory; refresh token is an httpOnly cookie.
 let accessToken = ''
-let activeOrg = localStorage.getItem('aimos_org') || ''
 
 const authHeaders = () => {
   const h = { 'Content-Type': 'application/json' }
   if (accessToken) h.Authorization = `Bearer ${accessToken}`
-  if (activeOrg) h['X-Organization-Id'] = activeOrg
   return h
 }
 
@@ -34,13 +32,10 @@ export const setAuth = ({ access_token }) => {
 
 export const clearAuth = () => {
   accessToken = ''
-  activeOrg = ''
-  localStorage.removeItem('aimos_org')
 }
 
 export const getAuth = () => ({
   accessToken,
-  activeOrg,
 })
 
 export const api = {

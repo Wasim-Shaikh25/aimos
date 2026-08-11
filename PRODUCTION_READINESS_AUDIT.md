@@ -1,5 +1,12 @@
 # AIMOS — End-to-End Production Readiness Audit
 
+> **Single-user refactor note (2026-08-11):** this audit was written against the
+> pre-single-user codebase. The multi-tenant/SaaS control plane, `aimos/saas`,
+> `config/saas.yaml`, Alembic auth migrations, and the OTP/email auth flow have
+> since been removed. AIMOS is now a single-user application using environment
+> credentials (`AIMOS_ADMIN_USERNAME`/`AIMOS_ADMIN_PASSWORD`) and JWT. Audit
+> findings that refer to the retired SaaS surface are historical.
+
 **Audit date:** 2026-07-30
 **Commit audited:** `5fd1b88` (branch `claude/new-session-f5fp2i`)
 **Auditor scope:** cross-functional review — engineering, application security, QA,
@@ -33,9 +40,9 @@ dashboard, and the authentication layer added most recently. Two independent
 Critical defects were confirmed by execution, and together they mean:
 
 > **There is currently no configuration in which the AIMOS dashboard is both
-> reachable and authenticated.** With `saas_enabled: false` (the default) the
-> trading control API has no authentication at all. With `saas_enabled: true` the
-> dashboard — including its own login page — returns 401 and cannot be loaded.
+> reachable and authenticated.** This was true under the old SaaS-toggled auth
+> model. After the single-user refactor, authentication is always on and the
+> dashboard is reachable when `AIMOS_ADMIN_PASSWORD` is set.
 
 Layered on top of that, an unauthenticated path-traversal bug in the SPA route
 serves arbitrary files, including the JWT signing key, the settings encryption key,
@@ -79,12 +86,11 @@ Medium/Low items.)*
 
 ### Major discovery and product gaps
 
-- The **retired multi-tenant SaaS model is only half-removed**. Endpoints are gone,
-  but `Organization`/`OrganizationMember` tables, org-scoping middleware, the
-  `X-Organization-Id` header contract, and unreachable registration / OAuth /
-  phone-OTP / password-reset service functions all remain. One of those dead
-  functions (`_render_password_reset_email`) raises `NameError` on every call —
-  proof the retired surface is entirely untested.
+- The **retired multi-tenant control plane has been fully removed**. The
+  `aimos/saas` package, `Organization`/`OrganizationMember` tables, org-scoping
+  middleware, the `X-Organization-Id` header contract, and the registration / OAuth /
+  phone-OTP / password-reset service functions were all deleted in the single-user
+  refactor. This finding is historical.
 - **No operator password-change path exists.** The admin password must live in
   plaintext in config or env forever, and is re-hashed from it on every boot.
 - **No backup capability** — not a missing dashboard, a missing operational

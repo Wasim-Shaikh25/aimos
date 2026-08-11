@@ -36,10 +36,9 @@ automatically when `testnet=True` (the CLI default), so you don't set it by hand
 Keys are used **only** for the account/order path, never for market-data analysis
 (§2), and are never journaled or returned to the UI.
 
-**A. Settings UI (recommended when SaaS is enabled).** Log in as the admin,
-open **Settings → Exchange API keys**, add the Binance testnet key, and set
-`testnet: true`. The key is encrypted at rest with the Fernet key in
-`state/.settings_key`.
+**A. Settings UI (recommended).** Log in as the admin, open **Settings →
+Exchange API keys**, add the Binance testnet key, and set `testnet: true`. The
+key is encrypted at rest with the Fernet key in `~/.aimos/secrets/.settings_key`.
 
 **B. Secrets file.** Copy the template and fill it in:
 
