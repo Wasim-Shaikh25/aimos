@@ -6,6 +6,26 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Changed (dashboard UI / shadcn)
+- Replaced raw JSON dumps on Settings, Config, Models, and Controls with structured
+  shadcn/ui forms, cards, switches, selects, and tables.
+- Added a Tailwind v3 + shadcn/ui design system: `Button`, `Card`, `Input`,
+  `Label`, `Switch`, `Select`, `Badge`, `Tabs`, `Table`, `Separator`, and a `cn()`
+  utility. Preserved the old `Table(cols, rows)` and `Badge(dir)` APIs so existing
+  screens keep working.
+- Modernized the single-user login screen (`auth.jsx`) with the same card/input
+  primitives and the dark theme.
+
+### Fixed (dashboard UI / shadcn)
+- Removed the invalid `--muted` CSS override so legacy `var(--muted)` consumers
+  (`.b-flat`, `App.jsx`, `Prices.jsx`, `MindMap.jsx`, `Trades.jsx`) render grey
+  text correctly.
+- Defaulted `training` settings in `Settings.jsx` so the timeframe/months controls
+  are always controlled and consistent with the CLI hint.
+- Switched off/disabled feature badges to neutral `flat` in `Controls.jsx` and
+  exchange metadata badges in `Settings.jsx` so expected-off states are no longer
+  shown in destructive red.
+
 ### Changed (single-user mode)
 - **Removed all SaaS/multi-tenant code**: the `aimos/saas` package, `config/saas.yaml`,
   the `saas` extra, and SaaS-specific tests/migrations are gone. AIMOS is now a

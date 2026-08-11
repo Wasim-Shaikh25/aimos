@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { api, setAuth, clearAuth, getAuth } from './api.js'
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from './components/ui'
 
 const AuthContext = createContext(null)
 
@@ -52,16 +53,6 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-function Field({ label, type = 'text', value, onChange, required = true }) {
-  return (
-    <label style={{ display: 'block', marginBottom: 12 }}>
-      <span style={{ display: 'block', color: 'var(--muted)', fontSize: 12, marginBottom: 4 }}>{label}</span>
-      <input type={type} value={value} onChange={e => onChange(e.target.value)} required={required}
-        style={{ width: '100%', padding: '8px 10px', background: '#222836', color: 'var(--text)', border: '1px solid var(--line)', borderRadius: 6 }} />
-    </label>
-  )
-}
-
 export function LoginScreen() {
   const { login } = useAuth()
   const [username, setUsername] = useState('')
@@ -79,17 +70,27 @@ export function LoginScreen() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
-      <div style={{ width: 360, padding: 24, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }}>
-        <h1 style={{ margin: '0 0 18px', fontSize: 20 }}>AIMOS</h1>
-        <p style={{ color: 'var(--muted)', margin: '0 0 18px' }}>Sign in to your account</p>
-        <form onSubmit={submit}>
-          <Field label="Username" value={username} onChange={setUsername} />
-          <Field label="Password" type="password" value={password} onChange={setPassword} />
-          {error && <p style={{ color: 'var(--red)', fontSize: 13 }}>{error}</p>}
-          <button type="submit" style={{ width: '100%', marginTop: 8, padding: '10px' }}>Sign in</button>
-        </form>
-      </div>
+    <div className="min-h-screen flex items-center justify-center bg-background animate-fade-in">
+      <Card className="w-full max-w-sm shadow-xl border-border">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl">AIMOS</CardTitle>
+          <CardDescription>Sign in with your admin credentials</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={submit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input id="username" value={username} onChange={e => setUsername(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button type="submit" className="w-full">Sign in</Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   )
 }
