@@ -5,7 +5,7 @@ One process serves everything on one port:
 * the built React dashboard (``dashboard/dist`` as static files, if present),
 * a background paper-trading loop feeding the same journal the API reads.
 
-    python -m aimos.runtime.serve            # http://0.0.0.0:8000
+    python -m aimos.runtime.serve            # http://127.0.0.1:8000
 
 Offline synthetic data by default (no keys/network). Set
 ``AIMOS__FEATURES__LIVE_DATA=true`` (and ``pip install '.[data]'``) for live
@@ -121,13 +121,22 @@ def _rehydrate_from_snapshot(components: dict[str, Any],
     view = snapshot.get("view", {})
     if view:
         for key in ("latest", "evidence", "venue_state", "prices", "candles_view",
-                    "monitor", "risk_report", "connections", "chosen"):
+                    "monitor", "risk_report", "chosen"):
             if key in view:
                 holder.setdefault(key, {}).clear()
                 holder[key].update(view[key])
         if "matrix" in view:
             holder.setdefault("matrix_view", {}).clear()
             holder["matrix_view"].update(view["matrix"])
+        if "connections" in view:
+            # The view may be the old aggregate {"venues": [...], "any_live": bool}
+            # or the newer venue-keyed map. API providers expect a venue-keyed map.
+            conn_view = view["connections"]
+            if isinstance(conn_view, dict) and "venues" in conn_view:
+                holder["connections"] = {v["venue"]: v for v in conn_view["venues"]
+                                         if isinstance(v, dict) and "venue" in v}
+            else:
+                holder["connections"] = dict(conn_view)
         holder["updated"] = view.get("updated")
         holder["tick"] = view.get("tick", holder["tick"])
     _apply_controls(components, controls)
@@ -147,10 +156,7 @@ def _build_view(holder: dict[str, Any], connections: dict[str, Any],
         "prices": dict(holder.get("prices", {})),
         "candles_view": dict(candles_view),
         "matrix": _universe_payload(holder["universe"], paper, holder),
-        "connections": {
-            "venues": list(connections.values()),
-            "any_live": any(c.get("connected") for c in connections.values()),
-        },
+        "connections": dict(connections),
         "risk_report": dict(holder.get("risk_report", {})),
         "monitor": dict(holder.get("monitor", {})),
         "updated": holder.get("updated"),
@@ -1309,8 +1315,10 @@ def main() -> int:  # pragma: no cover - launches the server
     # Default to loopback so a bare `python -m aimos.runtime.serve` is never
     # publicly reachable by accident (audit finding H1). Set AIMOS_HOST=0.0.0.0
     # explicitly (behind a VPN/tunnel/proxy) to bind all interfaces.
-    host = os.environ.get("AIMOS_HOST", "127.0.0.1")
-    port = int(os.environ.get("AIMOS_PORT", "8000"))
+    # PaaS platforms like Coolify usually expose the chosen port as `PORT`, so we
+    # also honor that as a fallback.
+    host = os.environ.get("AIMOS_HOST") or os.environ.get("HOST", "127.0.0.1")
+    port = int(os.environ.get("AIMOS_PORT") or os.environ.get("PORT") or "8000")
     log.info("aimos_serve", url=f"http://{host}:{port}")
     uvicorn.run(app, host=host, port=port, log_level="info")
     return 0

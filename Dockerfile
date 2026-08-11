@@ -36,7 +36,10 @@ RUN mkdir -p /app/state /app/data
 EXPOSE 8000
 
 ENV AIMOS_HOST=0.0.0.0
-ENV AIMOS_PORT=8000
+ENV PORT=8000
 ENV PYTHONUNBUFFERED=1
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD python -c "import urllib.request, os; urllib.request.urlopen('http://127.0.0.1:' + (os.environ.get('AIMOS_PORT') or os.environ.get('PORT', '8000')) + '/healthz').read();"
 
 CMD ["python", "-m", "aimos.runtime.serve"]

@@ -38,6 +38,7 @@ follow **[specs/DEPLOYMENT.md](specs/DEPLOYMENT.md)** (and
 
 | To enable | Add |
 |---|---|
+| Deploy on Coolify / PaaS | see **Deploy on Coolify** below |
 | Telegram alerts/commands | a bot token (`TELEGRAM_BOT_TOKEN`) |
 | LLM news sensor | `ANTHROPIC_API_KEY` |
 | TimescaleDB time-series | `pip install -e '.[timescale]'` + `AIMOS_TIMESCALE_DSN` |
@@ -47,6 +48,67 @@ follow **[specs/DEPLOYMENT.md](specs/DEPLOYMENT.md)** (and
 
 Paper trading and price monitoring need **none** of these. Details in
 [specs/OPERATIONS.md](specs/OPERATIONS.md).
+
+---
+
+## Deploy on Coolify (or any Docker PaaS)
+
+Build context: `.` · Dockerfile: `Dockerfile` · command: `python -m aimos.runtime.serve`.
+
+### 1. Required environment variables (set in the PaaS UI)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AIMOS_ADMIN_USERNAME` | `admin` | dashboard login username |
+| `AIMOS_ADMIN_PASSWORD` | *(none)* | dashboard login password (**required**) |
+| `AIMOS__MODE` | `paper` | `paper` or `live` (live requires the go-live ladder) |
+| `AIMOS_HOST` | `127.0.0.1` | bind address; set `0.0.0.0` in containers |
+| `AIMOS_PORT` | `8000` | server port (`PORT` is used as a fallback for Coolify) |
+| `AIMOS__STORAGE__DATABASE_URL` | *(SQLite)* | optional PostgreSQL/SQLite URL for journal + state + settings |
+| `AIMOS__FEATURES__LIVE_DATA` | `true` | fetch live public candles (no keys) |
+| `TELEGRAM_BOT_TOKEN` | *(none)* | optional Telegram alerts/commands |
+| `ANTHROPIC_API_KEY` | *(none)* | optional LLM news sensor / AI analyst |
+
+Set **only** non-secret values in the Coolify env UI. Exchange API keys are entered
+later through the Settings UI and encrypted at rest; do not paste them into env
+vars unless you are using the legacy `AIMOS_KEY_*` / `AIMOS_SECRET_*` vars.
+
+### 2. Persistent storage
+
+Mount persistent volumes so data survives container restarts:
+
+| Container path | What lives there |
+|---|---|
+| `/app/state` | journal, runtime state, go-live progress, backups |
+| `/app/data` | recorded candles / parquet |
+| `/app/secrets` | generated `.jwt_secret` and `.settings_key` |
+
+If you provide `AIMOS__STORAGE__DATABASE_URL` pointing to a managed PostgreSQL
+database, the journal, runtime state, controls, model registry, and encrypted
+settings all live there — but `/app/state` is still useful for `go_live.json`,
+backups, and the generated key files.
+
+### 3. Port & healthcheck
+
+The container honors `AIMOS_PORT` first, then `PORT`. If Coolify auto-sets
+`PORT=3000` (or any other value), the server will listen on that port. The
+Dockerfile exposes `8000` and includes a `HEALTHCHECK` against `/healthz`.
+
+Point Coolify's healthcheck / domain to:
+```
+http://<domain-or-container>:<PORT>/healthz
+```
+The dashboard static files and API are served on the same port.
+
+### 4. First run
+
+After the container starts, open the domain and log in with the credentials from
+`AIMOS_ADMIN_USERNAME` / `AIMOS_ADMIN_PASSWORD`. You are in **paper mode** by
+default — no exchange keys are needed to see prices, decisions, and simulated
+trades. Add real API keys later in **Settings > Exchanges** only when you intend
+to move toward live trading through the go-live ladder.
+
+---
 
 ## Where data is saved
 

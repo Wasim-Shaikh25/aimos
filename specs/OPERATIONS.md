@@ -37,6 +37,31 @@ docker compose --profile commands up -d   # + inbound Telegram command bot (opti
 ```
 The loop **auto-starts** with the server (FastAPI lifespan) — nothing extra to enable.
 
+### Coolify / Docker PaaS
+
+Build context: `.` · Dockerfile: `Dockerfile` · command: `python -m aimos.runtime.serve`.
+
+Set these in the PaaS environment UI:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AIMOS_ADMIN_USERNAME` | `admin` | dashboard login username |
+| `AIMOS_ADMIN_PASSWORD` | *(none)* | dashboard login password (required) |
+| `AIMOS__MODE` | `paper` | `paper` or `live` (live requires the §23.8 ladder) |
+| `AIMOS_HOST` | `127.0.0.1` | bind address; set `0.0.0.0` in containers |
+| `AIMOS_PORT` | `8000` | server port (`PORT` is used as a fallback for Coolify) |
+| `AIMOS__STORAGE__DATABASE_URL` | *(SQLite)* | optional PostgreSQL/SQLite URL |
+| `TELEGRAM_BOT_TOKEN` | *(none)* | optional Telegram alerts/commands |
+| `ANTHROPIC_API_KEY` | *(none)* | optional LLM news sensor / AI analyst |
+
+Mount persistent storage for `/app/state`, `/app/data`, and `/app/secrets` so the
+journal, backups, and generated auth keys survive container restarts. If you use a
+managed PostgreSQL database via `AIMOS__STORAGE__DATABASE_URL`, the journal,
+state, controls, model registry, and encrypted user settings are stored there.
+
+The server reads `AIMOS_PORT` first, then `PORT` (many PaaS platforms expose the
+chosen port as `PORT`). The Dockerfile healthchecks `/healthz` on that port.
+
 ---
 
 ## 2. Configuration
@@ -244,12 +269,14 @@ used. The JWT secret and settings Fernet key are generated and persisted under
 **No SMTP, OTP, or registration** is exposed. Password changes are made by updating
 `AIMOS_ADMIN_PASSWORD` in the environment and restarting.
 
-**Bind host.** `python -m aimos.runtime.serve` binds **`127.0.0.1`** by default (never
-publicly reachable by accident). Set `AIMOS_HOST=0.0.0.0` explicitly — behind a
+**Bind host & port.** `python -m aimos.runtime.serve` binds **`127.0.0.1:8000`** by
+default (never publicly reachable by accident). Set `AIMOS_HOST=0.0.0.0` — behind a
 VPN/SSH tunnel or an authenticated reverse proxy — to bind all interfaces. The Docker
 image sets `0.0.0.0` because Compose already publishes only `127.0.0.1:8000` on the
-host. Control endpoints (`/api/control/*`, `/api/assistant`) accept loopback callers
-without a token; remote callers must supply a valid `Authorization: Bearer <token>`.
+host. The server honors `AIMOS_HOST` first, then `HOST`, and `AIMOS_PORT` first,
+then `PORT` (the standard variable for PaaS platforms such as Coolify). Control
+endpoints (`/api/control/*`, `/api/assistant`) accept loopback callers without a token;
+remote callers must supply a valid `Authorization: Bearer <token>`.
 
 ### Endpoints
 
