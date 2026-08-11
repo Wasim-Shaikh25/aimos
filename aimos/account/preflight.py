@@ -20,6 +20,8 @@ def _ccxt_client(venue: str, cred: dict):  # pragma: no cover - needs keys + net
     import ccxt
     ex = getattr(ccxt, venue)({"apiKey": cred["apiKey"], "secret": cred.get("secret", ""),
                                "enableRateLimit": True})
+    if cred.get("testnet", True) and hasattr(ex, "set_sandbox_mode"):
+        ex.set_sandbox_mode(True)
     return ex
 
 

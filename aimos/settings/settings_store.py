@@ -103,9 +103,14 @@ class SettingsStore:
             return dict(row.config)
 
     def set_exchange(self, venue: str, data: dict[str, Any]) -> None:
-        """Write exchange credentials. ``apiKey``/``secret`` are encrypted."""
+        """Write exchange credentials. ``apiKey``/``secret`` are encrypted.
+        Venue and exchange_id are normalized to lowercase so all read paths agree."""
+        venue = venue.lower()
+        normalized = dict(data)
+        normalized.pop("venue", None)
+        normalized["exchange_id"] = str(normalized.get("exchange_id") or venue).lower()
         encrypted: dict[str, Any] = {}
-        for k, v in data.items():
+        for k, v in normalized.items():
             if k in ("apiKey", "secret") and isinstance(v, str):
                 encrypted[k] = self._encrypt(v)
             else:
@@ -118,6 +123,7 @@ class SettingsStore:
             session.commit()
 
     def delete_exchange(self, venue: str) -> bool:
+        venue = venue.lower()
         with Session(self.engine) as session:
             row = session.get(UserSettingsRecord, self.user_id)
             if row is None:
@@ -144,6 +150,7 @@ class SettingsStore:
 
     def get_exchange_credentials(self, venue: str) -> dict[str, Any] | None:
         """Return plaintext credentials for one exchange (runtime use only)."""
+        venue = venue.lower()
         with Session(self.engine) as session:
             row = session.get(UserSettingsRecord, self.user_id)
             if row is None:

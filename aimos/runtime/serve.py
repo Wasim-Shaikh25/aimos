@@ -957,7 +957,7 @@ def _build_live_router(params, ladder, venues: list[str]) -> Optional[MultiVenue
         creds = store.get_exchange_credentials(venue)
         if not creds or not creds.get("apiKey"):
             continue
-        exchange_id = creds.get("exchange_id", venue)
+        exchange_id = creds.get("exchange_id", venue).lower()
         perms = {"withdraw": bool(creds.get("withdraw", False))}
         try:
             brokers[venue] = LiveBroker(
@@ -1068,6 +1068,21 @@ def _trades_payload(broker, sim) -> dict:
     return {"trades": trades[:200], "n_arb": len(sim.trades)}
 
 
+def _configured_venue_names(params) -> set[str]:
+    """Lower-cased venue identifiers declared in config (exchanges + paper)."""
+    pd = params.model_dump()
+    ex = pd.get("exchanges") or {}
+    paper = pd.get("paper") or {}
+    names: set[str] = set()
+    for bucket in (ex.get("primary"), ex.get("secondary"),
+                   paper.get("data_exchange"), paper.get("cross_venues")):
+        if isinstance(bucket, str) and bucket:
+            names.add(bucket)
+        elif isinstance(bucket, (list, tuple)):
+            names.update(str(v) for v in bucket if v)
+    return {n.lower() for n in names}
+
+
 def _run_preflight(params, venues) -> dict:
     """Phase D read-only self-check: load secrets, verify each venue connects.
     Empty (skipped) when no keys are configured — the safe, keyless default.
@@ -1104,14 +1119,20 @@ def _run_preflight(params, venues) -> dict:
 
 
 def _test_connection(venue: str, params) -> dict:
-    """Run a fresh read-only preflight for a single venue using stored credentials."""
+    """Run a fresh read-only preflight for a single venue using stored credentials.
+    Only configured venues are tested, preventing arbitrary ccxt module access."""
     from aimos.account.preflight import preflight_check
     from aimos.account.secrets import load_secrets
+
+    vl = venue.lower()
+    if vl not in _configured_venue_names(params):
+        return {"venue": venue, "configured": False, "connected": False,
+                "can_trade": False, "withdrawal_disabled": False, "usdt_free": 0.0,
+                "error": f"venue {venue} is not in configured exchanges"}
 
     pd = params.model_dump()
     storage_cfg = pd.get("storage", {}) or {}
     store = SettingsStore("default", database_url=storage_cfg.get("database_url", ""))
-    vl = venue.lower()
     creds = store.get_exchange_credentials(vl)
     if not creds:
         secrets_file = (pd.get("secrets", {}) or {}).get("file", "")

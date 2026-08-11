@@ -13,6 +13,20 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 - **Settings UI test button** on the Exchanges tab calls the new endpoint and shows
   a per-venue connection badge.
 
+### Fixed (live-trading prerequisites)
+- `preflight_check` now honors the stored `testnet` flag by calling
+  `set_sandbox_mode(True)` for testnet keys; testnet credentials no longer fail
+  against production endpoints.
+- `SettingsStore` normalizes exchange venue and `exchange_id` to lowercase on
+  write and lookup, so `Settings → Exchanges`, runtime preflight, the test
+  endpoint, and the live broker all agree on the key.
+- `POST /api/connections/test` validates the requested venue against the
+  configured exchange list before invoking the exchange client, preventing
+  arbitrary ccxt module access and outbound requests.
+- `scripts/validate_integration.py` no longer treats a stored `testnet=false`
+  key as an implicit `--mainnet` opt-in; the 5-second mainnet warning is now
+  always required, and the preflight sandbox flag is aligned with `--mainnet`.
+
 ### Changed (live-trading prerequisites)
 - Runtime preflight (`_run_preflight`) and `scripts/validate_integration.py` now
   read exchange API keys from the encrypted `SettingsStore` first (the UI path),

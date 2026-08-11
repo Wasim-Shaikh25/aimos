@@ -35,6 +35,8 @@ def main(argv=None) -> int:
     storage_cfg = params.model_dump().get("storage", {}) or {}
     store = SettingsStore("default", database_url=storage_cfg.get("database_url", ""))
 
+    # enforce the CLI/testnet contract: --mainnet is required for live keys
+    use_testnet = not args.mainnet
     vl = args.exchange.lower()
     creds = store.get_exchange_credentials(vl)
     if not creds:
@@ -45,6 +47,11 @@ def main(argv=None) -> int:
         print(f"no keys for {args.exchange}. Add them in Settings → Exchanges, or set "
               f"AIMOS_SECRETS_FILE / AIMOS_KEY_{args.exchange.upper()}.")
         return 2
+    if not creds.get("testnet", True) and not args.mainnet:
+        # a stored live key requires the operator to explicitly opt in with --mainnet
+        print(f"stored key for {args.exchange} is marked mainnet. Run with --mainnet "
+              "(and read the 5-second warning) to validate against the live API.")
+        return 4
     if not params.model_dump().get("mandate", {}).get("enabled"):
         print("mandate not enabled — set a small mandate in config/mandate.yaml first.")
         return 3
@@ -54,7 +61,9 @@ def main(argv=None) -> int:
         time.sleep(5)
 
     broker = build_testnet_broker(args.exchange, params, creds)
-    broker.testnet = False if args.mainnet else bool(creds.get("testnet", True))
+    broker.testnet = use_testnet
+    # align the preflight sandbox flag with the CLI mode
+    creds = dict(creds, testnet=use_testnet)
     rep = validate_integration(args.exchange, creds, broker, ladder=GoLiveLadder(),
                                symbol=args.symbol, notional_usdt=args.notional)
     print(rep.render())
