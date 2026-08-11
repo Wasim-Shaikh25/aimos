@@ -10,10 +10,11 @@ dist/
 .mypy_cache/
 .ruff_cache/
 
-# Virtualenvs
+# Virtualenvs / local Python version pins
 .venv/
 venv/
 env/
+.python-version
 
 # Data & state (never commit market data, journals, secrets)
 # NOTE: anchored to repo root so they don't swallow the aimos/data/ source package.
