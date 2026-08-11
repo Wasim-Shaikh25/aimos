@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 from dataclasses import dataclass, field
 from datetime import timezone
 from pathlib import Path
@@ -93,10 +94,13 @@ async def run_paper(
     from aimos.runtime.golive import guard_live_boot
     guard_live_boot(params)  # fail-closed: refuse to run live before the go-live ladder is complete
     clock = LiveClock()
-    journal_path = paper.get("journal_path") or ":memory:"
-    if journal_path != ":memory:":
+    storage_cfg = params.model_dump().get("storage", {}) or {}
+    database_url = storage_cfg.get("database_url", "") or ""
+    journal_path = database_url or paper.get("journal_path") or ":memory:"
+    if journal_path != ":memory:" and "://" not in journal_path:
         Path(journal_path).parent.mkdir(parents=True, exist_ok=True)
-    orch = PipelineOrchestrator(params, clock=clock, journal=Journal(journal_path))
+    org_id = os.environ.get("AIMOS_RUNTIME_ORG_ID", "local")
+    orch = PipelineOrchestrator(params, clock=clock, journal=Journal(journal_path, org_id=org_id))
     broker = PaperBroker(float(paper["starting_equity_usdt"]), cost_mod.from_config(costs_cfg))
     caps = _caps(params)
 

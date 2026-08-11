@@ -181,10 +181,13 @@ class PaperBroker:
         fee = self._fee_quote(plan.size_quote)
         self._cash -= fee
         side = Action.LONG if plan.action is Action.LONG else Action.SHORT
+        decision_id = plan.meta.get("decision_id") if plan.meta else None
         pos = Position(
             symbol=plan.symbol, venue="paper", side=side, qty=qty, entry=price,
             stop=plan.stop_loss or price, tp=plan.take_profit, opened_at=now,
-            plugin=plan.plugin, decision_id=self._order_id(plan), mode_tag="swing",
+            plugin=plan.plugin,
+            decision_id=decision_id or self._order_id(plan),
+            mode_tag="swing",
         )
         self._positions[plan.symbol] = pos
         self._excursions[pos.decision_id] = (0.0, 0.0)
@@ -220,10 +223,19 @@ class PaperBroker:
             return
         long = pos.side is Action.LONG
         low, high = float(bar["low"]), float(bar["high"])
+        # Price cannot move past the position's stop or take-profit while the
+        # position is open; those levels close the trade. Clamp the bar's
+        # extremes to the active stop/TP so MAE/MFE are never overstated.
         if long:
+            low = max(low, pos.stop)
+            if pos.tp is not None:
+                high = min(high, pos.tp)
             adverse = (low - pos.entry) / r
             favorable = (high - pos.entry) / r
         else:
+            high = min(high, pos.stop)
+            if pos.tp is not None:
+                low = max(low, pos.tp)
             adverse = (pos.entry - high) / r
             favorable = (pos.entry - low) / r
         mae, mfe = self._excursions.get(pos.decision_id, (0.0, 0.0))

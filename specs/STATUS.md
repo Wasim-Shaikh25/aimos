@@ -153,6 +153,10 @@ Performance · Config · Agents · Settings.
 > are concept-only or, for OpenAlgo (AGPL-3.0), off-limits. It adds **T-013 to the
 > critical path before T-003** (anti-lookahead warmup buffer) and 7 further tasks.
 >
+> **T-017** — `/metrics` still requires auth (`_PROTECTED_EXACT` in
+> `aimos/api/server.py`), which silently breaks Prometheus scraping (audit M6,
+> never closed). Verified live in current code; no decision documented.
+>
 > **18 modules have no or weak test coverage** (T-030..T-047), including
 > `intelligence/finalize.py`, `execution/base_plugin.py`, three *enabled* execution
 > plugins, `observation/scalp_micro.py` (live by default), `runtime/atomic_io.py`

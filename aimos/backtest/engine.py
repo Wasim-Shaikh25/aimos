@@ -103,6 +103,8 @@ class BacktestEngine:
                 mu, exec_ctx, self._sizing_inputs(window.iloc[-1]),
                 RiskState(open_positions=len(self.broker.positions())),
             )
+            decision_id = plan.meta.get("decision_id") or f"{self.symbol}-{bar_time.isoformat()}"
+            plan.meta["decision_id"] = decision_id
             n_decisions += 1
             if plan.action is Action.NO_TRADE:
                 n_no_trade += 1
@@ -115,7 +117,7 @@ class BacktestEngine:
             self.journal.write_decision(DecisionRecord(
                 timestamp=bar_time, symbol=self.symbol, understanding=mu,
                 candidates=[], chosen=plan, mode="backtest",
-                decision_id=f"{self.symbol}-{bar_time.isoformat()}",
+                decision_id=decision_id,
             ))
             self._drain_outcomes()
             equity_curve.append(self.broker.equity())

@@ -144,6 +144,7 @@ class PipelineOrchestrator:
                                               "action": plan.action.value})
             if plan.action is not Action.NO_TRADE:
                 self.bus.publish(Topic.TRADE_OPENED, {"symbol": symbol, "plan": plan.plugin})
+            plan.meta["decision_id"] = decision_id
 
         return TickResult(mu, plan, decision_id, forced, list(bundle.evidences))
 

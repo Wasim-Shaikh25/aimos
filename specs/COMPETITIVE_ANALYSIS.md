@@ -5,12 +5,20 @@ Automated Trading Frameworks* (operator-supplied, 2026-08).
 
 **Purpose:** for each platform — is its code legally usable here, what exactly is
 worth taking, where does it live upstream, and which AIMOS flow does it improve.
+Covers all **9** platforms named in the source (7 in its comparison table, 2 —
+Jesse and Gainium — named only in its prose; see the correction note below).
 
 **Status:** analysis only. Nothing has been copied, vendored, or added.
 
 > **On line numbers.** File paths are the durable reference; line numbers are
 > approximate and drift with upstream commits. Every citation below gives the
 > path first. Verify the line before relying on it.
+
+> **Correction (post-review).** The source document's *comparison table* lists 7
+> platforms, but its *narrative text* separately names two more — **Jesse** and
+> **Gainium** — that the first pass of this analysis missed by scoping to the
+> table. Both are covered in §7a below. Caught by re-reading the source against
+> this document rather than assuming table rows = full coverage.
 
 ---
 
@@ -29,9 +37,11 @@ freqtrade-derived files, tracked as T-005). So licence gates everything.
 | **Freqtrade / FreqAI** | **GPL-3.0** | GPLv3 ✓ | ❌ **Concept only** — already our tripwire debt |
 | **Abu (bbfamily)** | **GPL-3.0** | *"Open Source"* ✗ | ❌ **Concept only** |
 | **OpenAlgo** | **AGPL-3.0** | *"Open Source"* ✗ | ❌❌ **Avoid entirely** — see §1.2 |
+| **Jesse** | **MIT** | *(not in table)* | ✅ **Code borrowable** — see §7a |
+| **Gainium** (self-hosted) | **MIT** | *(not in table)* | ✅ borrowable, low relevance — see §7a |
 
-> **The PDF's licence column is unreliable.** Three of seven entries are wrong,
-> and all three errors understate the restriction — Passivbot is freer than
+> **The PDF's licence column is unreliable.** Three of seven table entries are
+> wrong, and all three errors understate the restriction — Passivbot is freer than
 > claimed, but Abu and OpenAlgo are *copyleft* where the PDF says only "Open
 > Source". For a codebase with a hard no-copyleft rule, taking that column at face
 > value would have introduced exactly the debt T-005 exists to retire. **Verify
@@ -368,6 +378,73 @@ question — filed as **T-016** to evaluate, owing nothing to their implementati
 
 ---
 
+## 7a. Jesse and Gainium — the two the table-only pass missed
+
+Both mentioned only in the source document's prose, not its comparison table.
+Verified independently since neither appeared in the table this analysis first
+scoped to.
+
+### Jesse ✅ MIT — `jesse-ai/jesse`
+
+**Licence verified: MIT.** Fully borrowable, no attribution-in-source condition
+beyond the standard notice.
+
+**Architecture:** strategies subclass a `Strategy` base (`should_long()`,
+`go_long()`, `before()`); a 300+ function indicator module (`jesse.indicators`,
+Rust-accelerated) accessed as `ta.ema()`, `ta.rsi()`; and — the part worth
+noting — metrics are **factored out of the backtest loop entirely**:
+
+```python
+# jesse/modes/backtest_mode.py (~line 4, ~line 1216)
+import jesse.services.metrics as stats
+...
+result["metrics"] = report.portfolio_metrics()
+result["trades"] = report.trades()
+```
+
+`portfolio_metrics()` and `trades()` live in a separate `jesse.services.report`
+module, called once at the end of a run, decoupled from simulation.
+
+**Compare to AIMOS:** `aimos/backtest/metrics.py` already does this — a pure
+function, `compute_metrics()`, that takes an equity curve and returns a `Metrics`
+object. **This confirms the existing design rather than changing it.** No action
+needed; recorded so the pattern is known to be validated elsewhere, not just
+locally invented.
+
+**One idea worth taking:** Jesse's docs describe backtests as **"without
+look-ahead bias"** as a named, explicit product guarantee, with multi-timeframe,
+multi-symbol, and partial-fill support built into the same claim. AIMOS has the
+same property (§9.1, KR-19, and now T-013) but scattered across specs rather than
+stated as one guarantee with one test suite behind it. **Action: fold into T-013's
+acceptance criteria** — a single documented "no-lookahead" contract statement,
+not new code.
+
+### Gainium ✅ MIT — `github.com/Gainium` org (self-hosted Community Edition)
+
+**Licence verified: MIT** across the self-hostable repos (`docker-sh`,
+`indicators`, `paper-trading-sh`, `websocket-connector-sh`, `admin-sh`) — the
+`Gainium` org runs the entire self-hosted stack as separate MIT services rather
+than one monolith.
+
+**What it actually is:** a no-code visual bot builder for combo grid+DCA
+strategies, aimed at non-programmers. Its differentiators — visual strategy
+composition, a hosted SaaS tier — don't map onto AIMOS's audience (this is a
+config-and-code system for one operator, not a multi-user product).
+
+**One structural idea worth noting, not adopting:** the org splits paper-trading
+(`paper-trading-sh`) and exchange-connectivity (`exchange-connector-sh`,
+`websocket-connector-sh`) into **separate deployable services** rather than
+in-process modules. That's a heavier architecture than AIMOS needs today (single
+operator, single process, `AIMOS_PROCESS=combined/api/loop` already covers the
+one split that matters — REQ-13). Filed as context for **T-016**
+(paper/live isolation) — if that task's answer is ever "yes, separate," this is a
+precedent for *how far* to take it, not a reason to go there.
+
+**Verdict: read, no action beyond what's already filed.** Neither the licence nor
+the features change any existing task.
+
+---
+
 ## 8. Summary — what we take, and what we already do better
 
 ### Adopt (7 concrete items)
@@ -381,18 +458,23 @@ question — filed as **T-016** to evaluate, owing nothing to their implementati
 | 5 | **`buffer_timerange()`** anti-lookahead warmup | FreqAI | GPL — *concept* | T-003, Kronos KR-19 (T-013) |
 | 6 | **Dissimilarity Index** OOD confidence | FreqAI | GPL — *concept* | MLEngine, Kronos KR-27 (T-014) |
 | 7 | **Order-rejection retry state** | Hummingbot `dca_executor.py` | Apache ✅ | live path (T-009) |
+| 8 | **"No-lookahead" as one named guarantee**, not scattered spec text | Jesse (docs claim) | MIT ✅ | fold into T-013 acceptance criteria |
 
 ### Consider
 
 `realized_return` + `duration` on outcomes (Nautilus, LGPL — concept) · staged
 de-risking and peak-relative exposure (Passivbot, Unlicense) · `reduce_only` and
-OCO order types when live (Nautilus) · separate paper/live databases (generic).
+OCO order types when live (Nautilus) · separate paper/live databases (generic,
+also seen at Gainium) · Gainium's connector/paper-trading service split as a
+precedent *if* T-016 ever concludes "separate," not a reason to conclude it.
 
 ### Reject
 
 Martingale grid (Passivbot) — contrary to our risk model · Freqtrade strategy logic
 (GPL + documented bear-market weakness) · OpenAlgo entirely (AGPL) · Abu (GPL, no
-differentiation) · rewriting around an event bus for parity (disproportionate).
+differentiation) · rewriting around an event bus for parity (disproportionate) ·
+Gainium's no-code visual builder (wrong audience — AIMOS is config-and-code, single
+operator) · Jesse's `report`/metrics split as new work (§7a — we already do this).
 
 ### Where AIMOS is already ahead
 
@@ -431,3 +513,11 @@ Added to `specs/TASKS.md`:
 **T-013 is P0**: an indicator-warmup leak would silently inflate every number T-003
 produces, and T-003 is the task everything else depends on. It must be correct
 *before* the backtest runs, not diagnosed after.
+
+**Jesse and Gainium (§7a) generated no new task IDs** — both were MIT-licensed and
+fully checkable, but their differentiated features either confirm a pattern AIMOS
+already has (Jesse's metrics-decoupled-from-simulation loop) or don't fit AIMOS's
+single-operator, config-and-code model (Gainium's no-code builder, multi-service
+split). Their one contribution was sharpening existing tasks: Jesse's explicit
+"no-lookahead" framing folds into **T-013**'s acceptance criteria, and Gainium's
+service split is now recorded as precedent inside **T-016**.

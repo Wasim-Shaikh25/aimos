@@ -129,8 +129,10 @@ def test_same_bar_sl_and_tp_sl_wins():
     assert len(outcomes) == 1
     oc = outcomes[0]
     assert oc.exit_reason == "sl"
-    assert oc.max_adverse_r == pytest.approx(-1.2)
-    assert oc.max_favorable_r == pytest.approx(2.2)
+    # The bar's low beyond the stop and high beyond the TP are clamped to the
+    # exit levels because the position cannot move past them while open.
+    assert oc.max_adverse_r == pytest.approx(-1.0)
+    assert oc.max_favorable_r == pytest.approx(2.0)
 
 
 def test_hash_chain_survives_ten_outcome_writes():
