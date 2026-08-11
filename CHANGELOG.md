@@ -6,6 +6,26 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Changed (single-user mode)
+- **Removed all SaaS/multi-tenant code**: the `aimos/saas` package, `config/saas.yaml`,
+  the `saas` extra, and SaaS-specific tests/migrations are gone. AIMOS is now a
+  single-user application.
+- **Single-user auth from environment**: set `AIMOS_ADMIN_USERNAME` (default `admin`)
+  and `AIMOS_ADMIN_PASSWORD` to log in. JWT secret is read from `AIMOS_JWT_SECRET`
+  or generated and saved under `~/.aimos/secrets/.jwt_secret`.
+- **New `aimos/auth` package**: `auth/security.py` handles JWT issue/validation;
+  `auth/router.py` exposes `/auth/login`, `/auth/refresh`, `/auth/logout` and
+  `/api/v2/me`.
+- **New `aimos/settings` package**: `settings/settings_store.py` holds the
+  encrypted config + exchange API-key store in the unified database
+  (`user_settings` table) and `settings/config.py` merges user overrides into
+  `Params` at boot.
+- **`RuntimeStateStore`/`ControlStore` no longer have a SaaS backend**: only file
+  and unified-database backends remain.
+- **Dashboard auth simplified**: `auth.jsx` uses a single username/password step;
+  the `Settings` screen no longer gates on SaaS and lets the single user manage
+  mode, features, mandate, paper config, and encrypted exchange API keys.
+
 ### Added (unified operational database)
 - **Single-PostgreSQL persistence option**: set `storage.database_url` (or
   `AIMOS__STORAGE__DATABASE_URL`) to one Postgres/SQLite URL and the journal,

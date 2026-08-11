@@ -17,8 +17,6 @@ from typing import Any
 import structlog
 
 from aimos.runtime.atomic_io import atomic_write_json
-from aimos.saas.settings import get_saas_config
-from aimos.saas.state_tenant import load_state as _db_load, save_state as _db_save
 
 log = structlog.get_logger(__name__)
 
@@ -56,28 +54,6 @@ class _FileBackend:
 
     def save(self, snapshot: dict[str, Any]) -> None:
         atomic_write_json(self.file_path, snapshot)
-
-
-class _SaaSBackend:
-    def __init__(self, org_id: str) -> None:
-        self.org_id = org_id
-
-    def load(self) -> dict[str, Any]:
-        return _db_load(self.org_id)
-
-    def save(self, snapshot: dict[str, Any]) -> None:
-        _db_save(
-            self.org_id,
-            broker_state=snapshot.get("broker"),
-            sim_state=snapshot.get("sim"),
-            equity=snapshot.get("equity"),
-            balances=snapshot.get("balances"),
-            positions=snapshot.get("positions"),
-            ladder=snapshot.get("ladder"),
-            features=snapshot.get("features"),
-            view=snapshot.get("view"),
-            controls=snapshot.get("controls"),
-        )
 
 
 class _SqlBackend:
@@ -128,17 +104,6 @@ class _FileControlBackend:
         atomic_write_json(self._path, controls)
 
 
-class _SaaSControlBackend:
-    def __init__(self, org_id: str) -> None:
-        self.org_id = org_id
-
-    def load(self) -> dict[str, Any]:
-        return _db_load(self.org_id).get("controls", {})
-
-    def save(self, controls: dict[str, Any]) -> None:
-        _db_save(self.org_id, controls=controls)
-
-
 class _SqlControlBackend:
     def __init__(self, org_id: str, database_url: str) -> None:
         self.org_id = org_id
@@ -184,8 +149,6 @@ class ControlStore:
         self.org_id = org_id
         if database_url:
             self._backend: Any = _SqlControlBackend(org_id, database_url)
-        elif get_saas_config().enabled:
-            self._backend = _SaaSControlBackend(org_id)
         elif state_dir is not None:
             self._backend = _FileControlBackend(
                 (state_dir or (Path("state") / "tenants" / org_id)) / "control.json"
@@ -215,8 +178,6 @@ class RuntimeStateStore:
         self.file_path: Path | None = None
         if database_url:
             self._backend: Any = _SqlBackend(org_id, database_url)
-        elif get_saas_config().enabled:
-            self._backend = _SaaSBackend(org_id)
         elif state_dir is not None:
             file_path = (state_dir or (Path("state") / "tenants" / org_id)) / "state.json"
             self._backend = _FileBackend(file_path)

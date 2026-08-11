@@ -28,12 +28,8 @@ const j = async (url, opts = {}) => {
   }
 }
 
-export const setAuth = ({ access_token, organization_id }) => {
+export const setAuth = ({ access_token }) => {
   if (access_token) accessToken = access_token
-  if (organization_id) {
-    activeOrg = organization_id
-    localStorage.setItem('aimos_org', organization_id)
-  }
 }
 
 export const clearAuth = () => {
@@ -48,9 +44,8 @@ export const getAuth = () => ({
 })
 
 export const api = {
-  // SaaS auth (single admin, email OTP 2FA)
-  login: (email, password) => j('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
-  verifyLogin: (email, code) => j('/auth/login/verify', { method: 'POST', body: JSON.stringify({ email, code }) }),
+  // Single-user auth
+  login: (username, password) => j('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
   logout: () => j('/auth/logout', { method: 'POST' }),
   refresh: () => j('/auth/refresh', { method: 'POST' }),
   me: () => j('/api/v2/me'),
@@ -60,9 +55,6 @@ export const api = {
   patchSettingsConfig: (overrides) => j('/api/v2/settings/config', { method: 'PATCH', body: JSON.stringify({ overrides }) }),
   addExchange: (data) => j('/api/v2/settings/exchange', { method: 'POST', body: JSON.stringify(data) }),
   deleteExchange: (venue) => j(`/api/v2/settings/exchange/${venue}`, { method: 'DELETE' }),
-  changePassword: (current_password, new_password) => j('/api/v2/me/password', {
-    method: 'POST', body: JSON.stringify({ current_password, new_password }),
-  }),
 
   // Runtime
   decisions: (n = 50) => j(`/api/decisions?limit=${n}`),

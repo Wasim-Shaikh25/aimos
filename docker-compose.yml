@@ -12,9 +12,8 @@ services:
     command: python -m aimos.runtime.serve   # dashboard + paper loop + Telegram (one process)
     env_file: [.env]
     environment:
-      AIMOS__PAPER__JOURNAL_PATH: state/aimos.sqlite   # hash-chained journal (SQLite)
+      AIMOS__STORAGE__DATABASE_URL: postgresql+psycopg://aimos:${POSTGRES_PASSWORD:-aimos}@postgres:5432/aimos
       AIMOS_TIMESCALE_DSN: postgresql://aimos:${POSTGRES_PASSWORD:-aimos}@postgres:5432/aimos
-      AIMOS__SAAS__DATABASE_URL: postgresql+psycopg://aimos:${POSTGRES_PASSWORD:-aimos}@postgres:5432/aimos
       AIMOS_SECRETS_DIR: /app/secrets                  # outside dashboard/dist ancestry (REQ-14)
       AIMOS_HOST: 0.0.0.0
       AIMOS_PORT: "8000"

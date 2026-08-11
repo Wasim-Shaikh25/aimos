@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-from aimos.saas import db as saas_db
-from aimos.saas.settings_store import SettingsStore, UserSettings
+from aimos.settings.settings_store import SettingsStore
+
+
+def _store(tmp_path, monkeypatch):
+    monkeypatch.setenv("AIMOS_SECRETS_DIR", str(tmp_path / "secrets"))
+    SettingsStore._key = None
+    return SettingsStore("default", database_url=f"sqlite:///{tmp_path / 'settings.db'}")
 
 
 def test_settings_store_encrypts_and_redacts_keys(monkeypatch, tmp_path):
-    monkeypatch.setenv("AIMOS__SAAS__DATABASE_URL", f"sqlite:///{tmp_path / 'auth.db'}")
-    monkeypatch.setenv("AIMOS_SECRETS_DIR", str(tmp_path / "secrets"))
-    saas_db._engine = None
-    saas_db._SessionLocal = None
-    SettingsStore._key = None
-
-    store = SettingsStore("default")
+    store = _store(tmp_path, monkeypatch)
     store.set_exchange("binance", {
         "exchange_id": "binance",
         "apiKey": "super-secret-key",
@@ -33,13 +32,7 @@ def test_settings_store_encrypts_and_redacts_keys(monkeypatch, tmp_path):
 
 
 def test_settings_store_update_config_deep_merges(monkeypatch, tmp_path):
-    monkeypatch.setenv("AIMOS__SAAS__DATABASE_URL", f"sqlite:///{tmp_path / 'auth.db'}")
-    monkeypatch.setenv("AIMOS_SECRETS_DIR", str(tmp_path / "secrets"))
-    saas_db._engine = None
-    saas_db._SessionLocal = None
-    SettingsStore._key = None
-
-    store = SettingsStore("default")
+    store = _store(tmp_path, monkeypatch)
     store.update_config({"features": {"scalp_enabled": True}, "paper": {"max_symbols": 3}})
     store.update_config({"features": {"cross_exchange_enabled": False}})
 
@@ -50,13 +43,7 @@ def test_settings_store_update_config_deep_merges(monkeypatch, tmp_path):
 
 
 def test_settings_store_delete_exchange(monkeypatch, tmp_path):
-    monkeypatch.setenv("AIMOS__SAAS__DATABASE_URL", f"sqlite:///{tmp_path / 'auth.db'}")
-    monkeypatch.setenv("AIMOS_SECRETS_DIR", str(tmp_path / "secrets"))
-    saas_db._engine = None
-    saas_db._SessionLocal = None
-    SettingsStore._key = None
-
-    store = SettingsStore("default")
+    store = _store(tmp_path, monkeypatch)
     store.set_exchange("binance", {"apiKey": "x", "secret": "y"})
     assert store.delete_exchange("binance") is True
     assert store.get_exchange_credentials("binance") is None

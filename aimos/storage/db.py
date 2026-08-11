@@ -62,6 +62,16 @@ class ModelRegistryRecord(StorageBase):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class UserSettingsRecord(StorageBase):
+    """Single-row config + encrypted exchange secrets for the local user."""
+
+    __tablename__ = "user_settings"
+
+    user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    secrets: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
 def normalize_sqlalchemy_url(url: str) -> str:
     """Use the psycopg v3 dialect when the URL has no explicit driver.
 

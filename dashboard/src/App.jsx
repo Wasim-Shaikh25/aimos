@@ -38,7 +38,7 @@ const NAV = [
 ]
 
 function Chrome() {
-  const { user, logout, saasEnabled } = useAuth()
+  const { user, logout } = useAuth()
   const { data: stats, updatedAt } = usePoll(api.stats, 4000)
   const { data: eq } = usePoll(api.equity, 4000)
   const [, tick] = useState(0)
@@ -53,8 +53,8 @@ function Chrome() {
       <span className="stat">Mode <b className="b-flat badge">paper</b></span>
       <span className="stat live"><i className="dot" /> live · <b>{ago(updatedAt)}</b></span>
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
-        <span className="stat" style={{ marginRight: 12 }}>{user.email}</span>
-        {saasEnabled && <button onClick={logout}>Logout</button>}
+        <span className="stat" style={{ marginRight: 12 }}>{user?.username || user?.id}</span>
+        <button onClick={logout}>Logout</button>
       </div>
     </div>
   )
