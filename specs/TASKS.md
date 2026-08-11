@@ -17,14 +17,29 @@ A task is not done until its tests are written *and green*.
 
 ```
 T-001 (outcomes loop) ─┬─► T-003 (costed backtest) ─┬─► T-010 (fit config)
-                       │                            └─► T-020..T-025 (Kronos K1-K5)
+                       │        ▲                   └─► T-020..T-025 (Kronos K1-K5)
+                       │        │
+                       │   T-013 (warmup buffer) ── must land BEFORE T-003
+                       │   T-007 (PSR/expectancy) ─ feeds T-003's run card
+                       │   T-008 (impact slippage) ─ feeds T-003's cost model
+                       │        │
                        └─► T-004 (attribution/analyst grounding)
+                           T-014 (OOD confidence) ◄── T-001
 
 T-002 (arb bugs) ──────► T-003          T-030..T-047 (test coverage) run in parallel
+T-009, T-012, T-015 ───► live path      T-005, T-006, T-016 independent
 ```
 
 **The critical path is T-001 → T-003.** Nothing about profitability, strategy
 quality, or the forecaster can be answered until those two land.
+
+**T-013 is on that path and easy to miss.** An indicator-warmup leak silently
+inflates every number T-003 produces and is invisible unless tested for — the
+results just look good. It must be correct *before* the backtest runs.
+
+> Tasks T-007, T-008, T-009, T-012, T-013, T-014, T-015, T-016 come from
+> **`specs/COMPETITIVE_ANALYSIS.md`** — a review of seven major OSS trading
+> platforms, with upstream file references and licence verdicts.
 
 ---
 
@@ -287,6 +302,115 @@ have nothing to say. Once T-001 lands they light up with no new UI work.
 
 ---
 
+## T-013 ⬜ Anti-lookahead warmup buffer in train/test splits
+
+**Priority:** **P0** · **Blocks:** T-003 (must be correct *before* the backtest runs) · **Est:** S
+
+### Why
+
+Indicators need warmup bars — `ema_period: 50`, `atr_long_period: 100`,
+`macd_hist_std_window: 100`, `spread_hist_window: 1440`. If those warmup bars come
+from **inside** the training window you lose training data; if they come from the
+**test** window you leak the future into the past.
+
+FreqAI solves this with a dedicated buffer *prepended* to the training window
+(`freqtrade/freqai/freqai_interface.py`, `buffer_timerange()`) so indicators warm
+up on data that belongs to neither split. Concept only — Freqtrade is GPL-3.0.
+
+This must land **before** T-003, not after. A warmup leak silently inflates every
+number the backtest produces, and it is invisible unless specifically tested — the
+result just looks good. It is also the same class of bug as Kronos **KR-19**.
+
+### Acceptance criteria
+
+- [ ] Splits carry an explicit warmup buffer sized to the longest indicator window.
+- [ ] Buffer bars are used for indicator computation only, never for training
+      labels or test evaluation.
+- [ ] `assert_temporal_split` still holds across buffer + train + test.
+
+### Test cases
+
+| ID | Test | Assert |
+|---|---|---|
+| T-013.1 | Indicator value at first train bar | identical with and without future bars present |
+| T-013.2 | Buffer bars in label set | zero — buffer never produces labels |
+| T-013.3 | Buffer shorter than longest window | rejected with a clear error |
+| T-013.4 | Test-window indicators | computed from train+buffer tail, never from test lookahead |
+
+---
+
+## T-007 ⬜ Probabilistic Sharpe Ratio + Expectancy
+
+**Priority:** P1 · **Feeds:** T-003 · **Est:** S
+
+`aimos/backtest/metrics.py` computes Sharpe, Sortino, max drawdown, hit rate, avg R,
+and profit factor. It does **not** compute how *confident* we should be in those
+numbers.
+
+LEAN's `Common/Statistics/PortfolioStatistics.cs` (~line 115) defines
+**ProbabilisticSharpeRatio** as *"the probability that the estimated Sharpe ratio is
+greater than a benchmark"* — precisely T-003's question. A Sharpe of 1.4 over 30
+trades and over 3,000 trades are different claims; only PSR separates them. Also
+**Expectancy** (~line 65) = `WinRate × ProfitLossRatio − LossRate`.
+
+Apache 2.0 — borrowable with attribution.
+
+| ID | Test | Assert |
+|---|---|---|
+| T-007.1 | Same Sharpe, n=30 vs n=3000 | PSR much lower for the small sample |
+| T-007.2 | Expectancy vs manual calc | matches on a hand-worked example |
+| T-007.3 | Zero trades | returns None/0, no divide-by-zero |
+| T-007.4 | All wins | PSR ≤ 1.0, no overflow |
+
+---
+
+## T-008 ⬜ Power-law market-impact slippage
+
+**Priority:** P1 · **Feeds:** T-003 · **Est:** M
+
+`config/costs.yaml` models slippage **linearly** (`slip_base_bps: 2.0`,
+`slip_k: 25`). Real market impact follows a power law, so a linear model
+*understates* large-order cost and *overstates* small-order cost.
+
+LEAN's `Common/Orders/Slippage/MarketImpactSlippageModel.cs` implements Almgren et
+al. (2005): permanent `G(nu) = γ·nu^α`, temporary `H(nu) = η·nu^β` (~lines 137–149),
+with `alpha=0.891, beta=0.600, gamma=0.314, eta=0.142` (~lines 69–76), where
+`nu` = order volume / average daily volume. Realized = `temporary + 0.5·permanent`.
+
+**Constants are calibrated on US equities, and `delta` uses shares outstanding —
+no crypto analogue.** Take the functional form; refit or document the gap.
+
+| ID | Test | Assert |
+|---|---|---|
+| T-008.1 | Slippage vs participation rate | grows sub-linearly (power law, not linear) |
+| T-008.2 | Tiny order | cost ≈ `slip_base_bps`, no blow-up |
+| T-008.3 | Order = 100% of ADV | large but finite cost |
+| T-008.4 | Backtest with new vs old model | difference reported, not silently absorbed |
+| T-008.5 | Config-driven | exponents/coefficients in config, no magic numbers |
+
+---
+
+## T-009 ⬜ Order-rejection retry handling on the live path
+
+**Priority:** P1 · **Est:** M
+
+`config/trade_manager.yaml` has `stale_cancel_candles: 3` for *unfilled* orders, but
+there is no explicit handling for orders the exchange **rejects** — routine in live
+trading (insufficient margin, price bands, rate limits, post-only cross).
+
+Hummingbot's `hummingbot/strategy_v2/executors/dca_executor/dca_executor.py` keeps a
+`_failed_orders` list with `process_order_failed_event()` (~lines 380–420) and
+`evaluate_max_retries()` (~lines 362–366). Apache 2.0 — borrowable.
+
+| ID | Test | Assert |
+|---|---|---|
+| T-009.1 | Exchange rejects order | recorded as failed, not silently dropped |
+| T-009.2 | Retry limit reached | gives up, logs, emits a management event |
+| T-009.3 | Post-only would cross | rejection handled, no market fallback |
+| T-009.4 | Rejection during shutdown | no infinite retry loop |
+
+---
+
 # P1 — correctness and safety
 
 ## T-010 ⬜ Fit config parameters to real data
@@ -471,6 +595,87 @@ Full requirements: **`specs/KRONOS_INTEGRATION.md`** (KR-1..KR-43).
 > outcomes. **T-001 is therefore a hard blocker on the entire Kronos programme** —
 > not a nice-to-have. Building the forecaster before the loop closes produces a
 > model nobody can score.
+
+---
+
+## T-012 ⬜ `reduce_only` + OCO order types
+
+**Priority:** P2 · **Blocked by:** live path reachable · **Est:** M
+
+Two of NautilusTrader's order primitives are genuine safety properties, not
+conveniences:
+
+- **`reduce_only`** — an exit can never accidentally *open* a reverse position.
+- **OCO** (one-cancels-other) — SL and TP are atomically paired. Without it both
+  rest simultaneously and a double-fill leaves an unintended position.
+
+NautilusTrader is **LGPL-3.0**: read for design, write our own. Not urgent while
+paper-only, but both should exist before real orders flow.
+
+| ID | Test | Assert |
+|---|---|---|
+| T-012.1 | `reduce_only` exit larger than position | clamps to position size, never reverses |
+| T-012.2 | OCO: TP fills | SL cancelled atomically |
+| T-012.3 | OCO: both touched same bar | exactly one fills |
+
+---
+
+## T-014 ⬜ Out-of-distribution confidence reduction (Dissimilarity Index)
+
+**Priority:** P2 · **Blocked by:** T-001 · **Est:** M
+
+AIMOS has PSI drift detection (§23.7), but that is **batch** monitoring — it tells
+you the input distribution moved *after the fact*. FreqAI computes a
+**Dissimilarity Index per prediction** (`freqai_interface.py`,
+`data_cleaning_predict()` ~line 983), flagging when a live feature vector sits far
+from the training distribution, i.e. when the model is extrapolating.
+
+Maps onto `MLEngine.opine()` returning reduced confidence for OOD inputs, and
+directly serves Kronos **KR-27** (calibrated strength, not raw confidence).
+
+Freqtrade is GPL-3.0 — **concept only**.
+
+| ID | Test | Assert |
+|---|---|---|
+| T-014.1 | In-distribution input | confidence unchanged |
+| T-014.2 | Far out-of-distribution | confidence reduced toward 0 |
+| T-014.3 | No trained model | inert, no crash |
+
+---
+
+## T-015 ⬜ Staged de-risking + peak-relative exposure cap
+
+**Priority:** P2 · **Est:** M · **Design review required**
+
+Two ideas from Passivbot (**Unlicense** — public domain, freest in the set):
+
+1. **Staged de-risking.** When positions are underwater, realize losses
+   *incrementally*, prioritizing the position cheapest to exit (smallest
+   entry-to-market spread). AIMOS's `risk_manager.py` has heat caps and a
+   killswitch — closer to all-or-nothing than a graceful ladder.
+2. **Peak-relative exposure.** Constrain drawdown against *peak historical* balance
+   rather than current equity. We track drawdown as a metric but do not use it as a
+   live sizing constraint.
+
+> **Explicitly not adopted:** Passivbot's martingale grid — *"double down on losing
+> positions"* — is directly contrary to `daily_scalp_stop_r: -3.0` and
+> `consecutive_loss_pause: 3`. Take the risk ideas, not the entry logic.
+
+| ID | Test | Assert |
+|---|---|---|
+| T-015.1 | 3 underwater positions | cheapest-to-exit reduced first |
+| T-015.2 | Equity recovers | exposure cap still keyed to peak, not current |
+| T-015.3 | Staged reduction | never increases exposure to a losing position |
+
+---
+
+## T-016 ⬜ Evaluate paper/live state isolation
+
+**Priority:** P3 · **Est:** S
+
+Paper and live state share `state/aimos.sqlite`. Worth evaluating whether they
+should be separate stores so a paper run can never contaminate live records (or
+vice versa). Generic design question — owes nothing to any upstream implementation.
 
 ---
 

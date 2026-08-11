@@ -6,6 +6,45 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added (competitive analysis of 7 OSS trading platforms)
+- **`specs/COMPETITIVE_ANALYSIS.md`** — review of QuantConnect LEAN, Hummingbot,
+  NautilusTrader, Freqtrade/FreqAI, Abu, Passivbot, and OpenAlgo against AIMOS, with
+  upstream file references and a licence verdict per platform.
+  - **Licences verified at source, and the source document's licence column is wrong
+    in 3 of 7 cases** — Abu is GPL-3.0 and OpenAlgo is **AGPL-3.0** (both listed only
+    as "Open Source"), while Passivbot is Unlicense rather than MIT. Taking that
+    column at face value would have added exactly the copyleft debt T-005 exists to
+    retire. Borrowable: LEAN + Hummingbot (Apache 2.0), Passivbot (Unlicense).
+    Concept-only: NautilusTrader (LGPL-3.0), Freqtrade, Abu (GPL-3.0). Avoid
+    entirely: OpenAlgo (AGPL-3.0 network-use clause — AIMOS serves a dashboard).
+  - **LEAN `Common/Statistics/TradeBuilder.cs` is a direct match for T-001** — it
+    tracks `position.MinPrice`/`MaxPrice` via `SetMarketPrice()` and computes MAE/MFE
+    at close, which is exactly the algorithm T-001 needs, under Apache 2.0. Also
+    surfaces `EndTradeDrawdown` (profit given back before close) and `Duration`,
+    neither of which AIMOS records.
+  - Records where **AIMOS is already ahead** — trade-management barriers (our
+    trailing stop carries a "never widens" invariant Hummingbot's does not),
+    mechanically-enforced layering, hash-chained journal, fail-closed live path, and
+    `NoTrade` as the default decision.
+- **8 new tasks in `specs/TASKS.md`** from that review:
+  - **T-013 (P0)** — anti-lookahead indicator-warmup buffer in train/test splits,
+    from FreqAI's `buffer_timerange()`. Placed on the critical path **before T-003**:
+    a warmup leak silently inflates every backtest number and is invisible unless
+    specifically tested.
+  - **T-007** Probabilistic Sharpe Ratio + Expectancy (LEAN `PortfolioStatistics.cs`)
+    — PSR answers T-003's actual question, whether an edge is real or small-sample
+    noise, which raw Sharpe cannot.
+  - **T-008** power-law market-impact slippage (LEAN, Almgren et al. 2005) — our
+    linear `slip_k` understates large-order cost; constants are equity-calibrated and
+    need refitting for crypto.
+  - **T-009** order-rejection retry state (Hummingbot `dca_executor.py`) — we handle
+    unfilled orders but not exchange-rejected ones.
+  - **T-012** `reduce_only` + OCO, **T-014** Dissimilarity-Index OOD confidence,
+    **T-015** staged de-risking + peak-relative exposure cap, **T-016** paper/live
+    state isolation.
+  - Explicitly **rejected**: Passivbot's martingale grid (contrary to our risk
+    model), Freqtrade strategy logic, and any event-bus rewrite for backtest parity.
+
 ### Added (coverage audit of the backlog itself)
 - **`specs/TASKS.md`** gains the items a self-audit found missing:
   - **T-005 — GPL clean-room rewrite (audit PD3).** Verified this is the *only*

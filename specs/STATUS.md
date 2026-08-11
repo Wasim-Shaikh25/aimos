@@ -146,6 +146,13 @@ Performance · Config · Agents · Settings.
 >   12-month dataset is not downloaded, so it cannot honestly be ticked. This is the
 >   task that establishes whether any strategy carries edge.
 >
+> **`specs/COMPETITIVE_ANALYSIS.md`** reviews 7 major OSS trading platforms
+> (LEAN, Hummingbot, NautilusTrader, Freqtrade, Abu, Passivbot, OpenAlgo) with
+> upstream file references and per-platform licence verdicts. Only LEAN and
+> Hummingbot (Apache 2.0) and Passivbot (Unlicense) are code-borrowable; the rest
+> are concept-only or, for OpenAlgo (AGPL-3.0), off-limits. It adds **T-013 to the
+> critical path before T-003** (anti-lookahead warmup buffer) and 7 further tasks.
+>
 > **18 modules have no or weak test coverage** (T-030..T-047), including
 > `intelligence/finalize.py`, `execution/base_plugin.py`, three *enabled* execution
 > plugins, `observation/scalp_micro.py` (live by default), `runtime/atomic_io.py`
