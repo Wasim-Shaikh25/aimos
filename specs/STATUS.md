@@ -122,6 +122,12 @@ Performance · Config · Agents · Settings.
 - **TimescaleDB dashboards / retention** on the time-series it now writes.
 - The **12-month recorded dataset** download (P1-T6) and upstream **vendoring** at
   pinned SHAs (P15-T4).
+- **K-line forecasting sensor** (Kronos-inspired) — requirements are specified in
+  **`specs/KRONOS_INTEGRATION.md`** (KR-1..KR-42, phases K0–K5). Nothing is built.
+  Blocked on two operator decisions: approval of four new evidence-registry names
+  (KR-23, invalidates trained ML artifacts) and the 12-month recorded dataset above,
+  which the trainer needs. Would enter as a 14th observation engine emitting
+  `Evidence` only, at reliability 0.35 behind `features.forecast_enabled`.
 
 Runtime state (equity/balances/broker/sim/ladder) persists across restarts via
 `RuntimeStateStore` (`aimos/runtime/state_store.py`, atomic writes since the M8

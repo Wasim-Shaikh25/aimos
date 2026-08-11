@@ -6,6 +6,20 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added (research / requirements)
+- **`specs/KRONOS_INTEGRATION.md`** — requirements spec for a K-line forecasting
+  sensor, from a review of the Kronos foundation model (arXiv 2508.02739, MIT).
+  Documents the one capability AIMOS lacks (a forward-looking *distributional*
+  view of price), catalogues all twelve integration routes with binding verdicts,
+  and specifies 42 numbered requirements (KR-1..KR-42) plus a K0–K5 rollout ladder.
+  Decision: build an AIMOS-native clean-room implementation (BSQ-style hierarchical
+  quantizer + ~1.2M-param causal transformer, numpy-only inference, ≈5 MB artifact)
+  sized for a 4 GB CPU host — do **not** clone, vendor, or pip-install upstream, and
+  do **not** add torch to the trading runtime. Enters strictly as a Layer-1
+  `Evidence` sensor at reliability 0.35 behind `features.forecast_enabled`, on the
+  same §8.3 promotion ladder that keeps `MLEngine` inert. No code, config, flag,
+  dependency, or evidence name was added by this change.
+
 ### Added (Coolify / PaaS deployment)
 - `aimos/runtime/serve.py` now reads `AIMOS_PORT` first, then `PORT` (the standard
   PaaS variable), while the bind address remains `AIMOS_HOST` only (default
