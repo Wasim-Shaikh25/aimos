@@ -184,12 +184,12 @@ class ControlStore:
         self.org_id = org_id
         if database_url:
             self._backend: Any = _SqlControlBackend(org_id, database_url)
+        elif get_saas_config().enabled:
+            self._backend = _SaaSControlBackend(org_id)
         elif state_dir is not None:
             self._backend = _FileControlBackend(
                 (state_dir or (Path("state") / "tenants" / org_id)) / "control.json"
             )
-        elif get_saas_config().enabled:
-            self._backend = _SaaSControlBackend(org_id)
         else:
             self._backend = _NoopBackend()
 
@@ -215,12 +215,12 @@ class RuntimeStateStore:
         self.file_path: Path | None = None
         if database_url:
             self._backend: Any = _SqlBackend(org_id, database_url)
+        elif get_saas_config().enabled:
+            self._backend = _SaaSBackend(org_id)
         elif state_dir is not None:
             file_path = (state_dir or (Path("state") / "tenants" / org_id)) / "state.json"
             self._backend = _FileBackend(file_path)
             self.file_path = file_path
-        elif get_saas_config().enabled:
-            self._backend = _SaaSBackend(org_id)
         else:
             self._backend = _NoopBackend()
 

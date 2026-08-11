@@ -305,7 +305,10 @@ class _SqlJournal(Journal):
             return False
 
     def close(self) -> None:
-        self._engine.dispose()
+        # The engine is shared (cached per URL) with runtime state, controls, and the
+        # model registry; disposing it here would break those stores and discard an
+        # in-memory SQLite database. Per-instance connections are transient.
+        return None
 
 
 class _SQLConnection:

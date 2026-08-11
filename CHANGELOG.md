@@ -42,6 +42,11 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   as a Postgres schema name.
 - Allow keyword-style Postgres DSNs (`host=... dbname=...`) in `TimescaleStore`.
 - Commit DML executed through the SQL journal connection adapter.
+- Restore SaaS tenant-DB backend precedence in `ControlStore` and
+  `RuntimeStateStore` so hosted deployments continue to share state when
+  `storage.database_url` is not set.
+- Make `_SqlJournal.close()` a no-op so it does not dispose the shared engine
+  used by runtime state, controls, and the model registry.
 
 ### Added (REQ-13 — separate API process from trading loop)
 - **Process modes via `AIMOS_PROCESS`**: `combined` (default, legacy), `api` (API-only),
