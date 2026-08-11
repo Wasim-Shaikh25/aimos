@@ -4,7 +4,7 @@
 #   ./run.sh              # offline synthetic data (no keys/network), full stack
 #   ./run.sh --live       # live PUBLIC candles (needs internet; still no API keys)
 #
-# Then open http://localhost:8000  (API + dashboard on the same port).
+# Then open http://localhost:${PORT:-8000}  (API + dashboard on the same port).
 # Optional: cp .env.example .env  and set TELEGRAM_BOT_TOKEN for alerts.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -28,7 +28,8 @@ else
   echo "    npm not found — serving API only (install Node to build the UI)"
 fi
 
-echo "==> [3/3] Serve  (http://localhost:${AIMOS_PORT:-8000})"
+PORT=${AIMOS_PORT:-${PORT:-8000}}
+echo "==> [3/3] Serve  (http://localhost:${PORT})"
 export AIMOS__FEATURES__LIVE_DATA="$LIVE"
 # load .env if present (Telegram token etc.)
 [[ -f .env ]] && { set -a; source .env; set +a; }

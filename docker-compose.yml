@@ -16,13 +16,13 @@ services:
       AIMOS_TIMESCALE_DSN: postgresql://aimos:${POSTGRES_PASSWORD:-aimos}@postgres:5432/aimos
       AIMOS_SECRETS_DIR: /app/secrets                  # outside dashboard/dist ancestry (REQ-14)
       AIMOS_HOST: 0.0.0.0
-      AIMOS_PORT: "8000"
-    ports: ["127.0.0.1:8000:8000"]   # never public — behind VPN/SSH tunnel (§23.4)
+      AIMOS_PORT: "${AIMOS_PORT:-8000}"
+    ports: ["127.0.0.1:${AIMOS_PORT:-8000}:${AIMOS_PORT:-8000}"]   # never public — behind VPN/SSH tunnel (§23.4)
     volumes: ["./data:/app/data", "./state:/app/state", "./config:/app/config:ro", "secrets:/app/secrets"]
     depends_on: [postgres]
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request, sys; urllib.request.urlopen('http://127.0.0.1:8000/healthz').read(); sys.exit(0)"]
+      test: ["CMD", "python", "-c", "import urllib.request, os, sys; urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('AIMOS_PORT','8000') + '/healthz').read(); sys.exit(0)"]
       interval: 15s
       timeout: 5s
       retries: 3

@@ -6,6 +6,18 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added (Coolify / PaaS deployment)
+- `aimos/runtime/serve.py` now reads `AIMOS_PORT` first, then `PORT` (the standard
+  PaaS variable), and `AIMOS_HOST` first, then `HOST`, so Coolify can choose the
+  port and bind address without a `.env` file.
+- `Dockerfile` sets `PORT=8000` and `AIMOS_HOST=0.0.0.0` by default and adds a
+  `HEALTHCHECK` against `/healthz` on the active port.
+- `docker-compose.yml` and `run.sh` now use the `AIMOS_PORT` / `PORT` environment
+  variable consistently, including the healthcheck and published port mapping.
+- `README.md` and `specs/OPERATIONS.md` add a **Deploy on Coolify** section with the
+  required env vars, persistent-storage paths, port/healthcheck notes, and first-run
+  instructions.
+
 ### Added (live-trading prerequisites)
 - **Test-connection endpoint** `POST /api/connections/test` runs a fresh read-only
   preflight for one venue using stored credentials and returns connected/can-trade/

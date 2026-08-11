@@ -5,7 +5,7 @@ One process serves everything on one port:
 * the built React dashboard (``dashboard/dist`` as static files, if present),
 * a background paper-trading loop feeding the same journal the API reads.
 
-    python -m aimos.runtime.serve            # http://0.0.0.0:8000
+    python -m aimos.runtime.serve            # http://127.0.0.1:8000
 
 Offline synthetic data by default (no keys/network). Set
 ``AIMOS__FEATURES__LIVE_DATA=true`` (and ``pip install '.[data]'``) for live
@@ -1315,8 +1315,10 @@ def main() -> int:  # pragma: no cover - launches the server
     # Default to loopback so a bare `python -m aimos.runtime.serve` is never
     # publicly reachable by accident (audit finding H1). Set AIMOS_HOST=0.0.0.0
     # explicitly (behind a VPN/tunnel/proxy) to bind all interfaces.
-    host = os.environ.get("AIMOS_HOST", "127.0.0.1")
-    port = int(os.environ.get("AIMOS_PORT", "8000"))
+    # PaaS platforms like Coolify usually expose the chosen port as `PORT`, so we
+    # also honor that as a fallback.
+    host = os.environ.get("AIMOS_HOST") or os.environ.get("HOST", "127.0.0.1")
+    port = int(os.environ.get("AIMOS_PORT") or os.environ.get("PORT") or "8000")
     log.info("aimos_serve", url=f"http://{host}:{port}")
     uvicorn.run(app, host=host, port=port, log_level="info")
     return 0
