@@ -21,9 +21,14 @@ decision path, never touching the live-order path.
 | Cost to the runtime | ~1.2M params, ≈5 MB weights, target < 350 MB added RSS, ≤ 50 ms p95 per symbol·timeframe. Fits 4 GB with room. |
 | Biggest risk | Not RAM. It is **fusion weight creep** — a stochastic model quietly gaining influence over live decisions. Mitigated by KR-30..KR-34 (weight 0 until human promotion, same ladder as `MLEngine`). |
 
-**Recommended path:** build phases **K0 → K2** (spec, offline trainer, shadow
-sensor at fusion weight 0). Stop there. Re-evaluate K3+ only after a 2-week
-shadow window produces a positive information coefficient.
+**Recommended path:** **do not start K1 yet.** Close the measurement loop first
+(`specs/TASKS.md` T-001) and land the 12-month costed backtest (T-003) — the
+forecaster's own exit gate is unevaluable without them (§8). Then build **K1 → K2**
+(offline trainer, shadow sensor at fusion weight 0) and stop. Re-evaluate K3+ only
+after a 2-week shadow window produces a positive information coefficient.
+
+**K0 — the operator sign-off in §12 — is startable today and is the only part that
+is.** It is a decision, not code.
 
 ---
 
@@ -43,6 +48,50 @@ Facts established from the upstream repository and the AAAI-2026 paper record:
      s1+s2 into `d_model`; `TemporalEmbedding` adds calendar features (minute,
      hour, weekday, day, month); a `DependencyAwareLayer` conditions the s2
      prediction on the *already-sampled* s1 token; a `DualHead` emits both logits.
+
+### 2.0.1 Implementation detail (read from upstream `model/module.py`)
+
+Enough detail to reimplement without reference to their code:
+
+**BSQ quantizer.** Embeddings are quantized to binary codes `{−1, +1}` with a
+straight-through estimator — `z + (zhat − z).detach()` — so gradients flow through
+the round. `bits_to_indices()` converts binary vectors to integer indices via
+powers of two; with `half=True` it processes `s1_bits` and `s2_bits` as separate
+levels. Training loss has three parts: a **commitment** term
+`beta · mean((zq.detach() − z)²)`, and **entropy** terms weighted by `gamma0`
+(per-sample) and `gamma` (codebook), scaled by `zeta`. Soft entropy splits codes
+into subgroups (`group_size`, default 9) and softmaxes distances to a group
+codebook at `inv_temperature`. The entropy terms are what stop codebook collapse —
+without them most codes go unused and the tokenizer degenerates.
+
+**Hierarchical embedding.** Composite token IDs split bitwise:
+`s2_ids = t & ((1 << s2_bits) − 1)`, `s1_ids = t >> s2_bits`. Each embeds
+separately, scales by `√d_model`, then concatenates and projects back to `d_model`
+through a fusion layer.
+
+**Dependency-aware layer.** Cross-attention where the **sibling embedding is the
+query** and the hidden states are key/value, followed by residual + RMSNorm. This
+is how s2 sees the sampled s1.
+
+**Dual head.** `proj_s1` → `2^s1_bits` logits, `proj_s2` → `2^s2_bits` logits;
+separate cross-entropy losses, averaged, respecting a padding mask.
+
+**Transformer block.** Pre-norm **RMSNorm**; **RoPE** rotary position embeddings on
+q/k; `F.scaled_dot_product_attention` with a causal mask; **SwiGLU** feed-forward
+`w2(silu(w1(x)) ⊙ w3(x))` with no biases (`ff_dim` default 1024).
+
+**Temporal embedding.** Separate tables for minute (60), hour (24), weekday (7),
+day (32), month (13), summed and projected to `d_model`; sinusoidal `FixedEmbedding`
+by default, learnable when `learn_pe=True`.
+
+> All of RMSNorm, RoPE, and SwiGLU are standard modern-transformer parts with
+> closed-form definitions. They are ~40 lines of numpy each for **inference**,
+> which is what makes KR-10 (no torch in the runtime) realistic rather than
+> aspirational.
+
+**Reference usage.** Their `prediction_example.py` runs `lookback=400`,
+`pred_len=120`, `T=1.0`, `top_p=0.9`, `sample_count=1`, with OHLCV **+ amount**
+columns and timestamps passed as separate history/future series.
 - **Inference.** Per-channel z-score normalization `(x-mean)/(std+1e-5)` over 6
   channels (OHLCV + amount), clipped to ±5. Autoregressive loop over `pred_len`,
   temperature `T`, `top_p` nucleus filtering, `torch.multinomial` sampling,
@@ -345,9 +394,70 @@ validated against. Neither is worth it for a model at fusion weight 0.
   measurement, `specs/MODELS.md` register row, `specs/ARCHITECTURE.md` section
   reference for the new engine.
 
+### 7.7 Correlation control — KR-43 (added after review)
+
+- **KR-43 — Extend the correlation guard to cover the forecaster.**
+
+  `aimos/intelligence/bayes_engine.py:67` already halves the reliability of a
+  *same-engine* evidence tail, so one chatty engine cannot drown the rest:
+
+  ```python
+  """Return (evidence, reliability_factor) with same-engine tail halved."""
+  ```
+
+  **That guard keys on the engine name, and the forecaster would evade it.** A
+  forecaster reads OHLCV candles — and so do `momentum`, `price_action`,
+  `volatility`, and `volume`. `forecast_drift` would substantially *re-derive*
+  what those four engines already reported, then be counted again as an
+  independent voice under a new name.
+
+  The failure mode is not one engine dominating. It is **the same information
+  counted twice**, which raises `confidence` without raising accuracy. Since
+  confidence gates trade eligibility (`min_confidence` in `config/scalp.yaml`,
+  §6.7 meta-confidence), inflated confidence directly loosens risk control. That
+  is strictly more dangerous than a weak signal.
+
+  **Requirement:** the correlation guard must group by *information family*, not
+  engine name. `forecast_drift` joins the `{momentum, price_action}` family and is
+  discounted against it. `forecast_band` and `forecast_anomaly` do **not** — they
+  carry genuinely new information (forward range, reconstruction error) that no
+  existing engine produces.
+
+  **Corollary worth stating plainly:** the *uncertainty* half of the forecaster is
+  the valuable half. Nothing in AIMOS currently forecasts forward volatility — ATR
+  is realized volatility, and it sets every stop and target in every plugin
+  (`funding_rate.py:41`, `breakout.py:44`, `mean_reversion.py:37`). The direction
+  half is mostly a repackaging of signals we already have. Prioritize accordingly:
+  if only one evidence name survives review, keep `forecast_band`.
+
 ---
 
 ## 8. Rollout ladder
+
+> ### ⛔ Hard blocker — read before starting anything
+>
+> **K2's exit gate cannot be evaluated today.** It requires *"directional IC > 0
+> with costs applied"* over a 2-week shadow window (KR-31, KR-36). Computing an
+> information coefficient requires knowing what actually happened after each
+> forecast — i.e. the `outcomes` table.
+>
+> That table is **empty**, and `Journal.write_outcome()`
+> (`aimos/journal/journal.py:101`) is called by **zero production code**. The
+> measurement loop has never closed once:
+>
+> ```
+> decisions   2760
+> outcomes       0
+> ```
+>
+> **`specs/TASKS.md` T-001 is therefore a hard prerequisite for this entire
+> programme**, not an adjacent nicety. Building the forecaster first produces a
+> model that nobody — not a human, not the analyst, not the promotion ladder — can
+> score. It would sit at reliability 0.35 forever, because the evidence needed to
+> move it could not be gathered.
+>
+> Likewise **T-003** (12-month costed backtest) is a prerequisite for K1: the
+> trainer has no data without it, and there is no baseline to beat.
 
 Each phase has a gate. **Do not start a phase until the previous gate passes.**
 
@@ -368,20 +478,87 @@ latency, and — most expensively — attention.
 
 ## 9. Test plan
 
-| Area | Test |
+Every requirement that can fail silently gets a test. Grouped by phase, with the
+requirement each case defends.
+
+**New test files:** `tests/test_forecast_quantizer.py`,
+`tests/test_forecast_model.py`, `tests/test_forecast_engine.py`,
+`tests/test_forecast_budget.py`.
+
+### 9.1 Quantizer (K1) — `tests/test_forecast_quantizer.py`
+
+| ID | Test | Assert | Defends |
+|---|---|---|---|
+| KT-01 | Round-trip encode→decode on real candles | reconstruction error below a configured ceiling | KR-2 |
+| KT-02 | Codebook utilization over 10k bars | > 50% of codes used — catches codebook collapse | KR-2 |
+| KT-03 | Bitwise split/merge | `s1 = t >> s2_bits`, `s2 = t & ((1<<s2_bits)−1)` round-trips exactly | KR-2 |
+| KT-04 | Volume log1p transform | heavy-tailed volume does not saturate the ±clip bound | KR-4 |
+| KT-05 | Synthetic bars excluded | gap-filled candles never reach the encoder | KR-3 |
+| KT-06 | Constant-price window | zero variance → no NaN, no divide-by-zero | KR-4 |
+| KT-07 | Determinism | same bars → identical tokens, twice, across processes | KR-20 |
+
+### 9.2 Model + sampling (K1) — `tests/test_forecast_model.py`
+
+| ID | Test | Assert | Defends |
+|---|---|---|---|
+| KT-10 | **Anti-lookahead** — bars after *t* present vs absent | byte-identical output | **KR-17, KR-19** |
+| KT-11 | **Normalization window** — stats from lookback only | changing future bars does not change normalization | **KR-19** |
+| KT-12 | Seeded sampling | same `(symbol, tf, bar_ts, config_hash)` → identical paths | KR-20 |
+| KT-13 | Different bar timestamp | different paths (seed actually varies) | KR-20 |
+| KT-14 | **Bar coherence** | `low ≤ min(o,c) ≤ max(o,c) ≤ high` on every sampled bar | **KR-21** |
+| KT-15 | Quantile aggregation | P10 ≤ P50 ≤ P90; not a mean | KR-22 |
+| KT-16 | Beats naive baseline | reconstruction beats last-bar-carry | K1 gate |
+| KT-17 | Param-count ceiling | ≤ 8M params | KR-5 |
+| KT-18 | Calendar features | UTC hour + weekday only; no month/day leakage | KR-6 |
+| KT-19 | s2 conditioned on s1 | changing sampled s1 changes s2 logits | KR-7 |
+| KT-20 | Artifact round-trip | `.npz` + JSON sidecar saves and loads identically | KR-9 |
+| KT-21 | Numpy-only inference | `torch` is not imported anywhere under `aimos/` | **KR-10** |
+
+### 9.3 Engine integration (K2) — `tests/test_forecast_engine.py`
+
+| ID | Test | Assert | Defends |
+|---|---|---|---|
+| KT-30 | Flag off | `build_engines()` output unchanged; no artifact load, no import | **KR-34** |
+| KT-31 | Missing artifact | `[]`, exactly one WARN, no raise | KR-16 |
+| KT-32 | Corrupt artifact | same — degrades to silence | KR-16 |
+| KT-33 | Schema-version mismatch | refuses to load stale artifact | KR-16 |
+| KT-34 | Config-hash mismatch | refuses to load | KR-16 |
+| KT-35 | Engine raises internally | `run_all` swallows it; bundle still assembles | §10.1, KR-16 |
+| KT-36 | Below `min_agreement` | emits nothing | KR-28 |
+| KT-37 | Below `min_abs_drift_z` | emits nothing | KR-28 |
+| KT-38 | Unregistered evidence name | `Evidence` construction raises | KR-23, §25.6 |
+| KT-39 | Source naming | every source is `forecast_engine.<name>` | KR-25 |
+| KT-40 | Reliability wiring | engine uses 0.35 from `weights.yaml`, not a literal | KR-26 |
+| KT-41 | **Calibration** — model with IC ≈ 0 | `strength` ≈ 0 despite high raw confidence | **KR-27** |
+| KT-42 | `meta` payload | carries p10/p50/p90/horizon/agreement/version/hash | KR-29 |
+| KT-43 | **Correlation guard** | `forecast_drift` discounted against momentum/price_action family | **KR-43** |
+| KT-44 | `forecast_band` not discounted | independent information keeps full weight | KR-43 |
+| KT-45 | **Confidence does not inflate** | adding forecast evidence to a fixed bundle does not raise §6.7 meta-confidence beyond a bound | **KR-43** |
+| KT-46 | Backtest parity | live clock vs backtest clock → identical evidence | KR-18 |
+| KT-47 | Per-bar cache | N ticks within one bar → exactly 1 inference call | KR-13 |
+| KT-48 | Cache key varies | new closed bar → new inference | KR-13 |
+| KT-49 | **Golden example** | §25.9 reproduces exactly (fusion 0.766/0.428; NO_TRADE, EV −0.018) | no regression |
+| KT-50 | **Live isolation** | no `aimos/execution/` reference to the forecast module | **KR-35** |
+| KT-51 | Fusion weight | forecaster contributes no `EngineOpinion`; `p_up` still fused from rule/bayes/ml only | KR-30, C2 |
+
+### 9.4 Budget (K2) — `tests/test_forecast_budget.py`
+
+| ID | Test | Assert | Defends |
+|---|---|---|---|
+| KT-60 | Artifact size on disk | ≤ 8 MB | KR-9, KR-11 |
+| KT-61 | p95 latency, 12×16 | ≤ 50 ms single core | KR-12 |
+| KT-62 | Bounded concurrency | worker count never exceeds config | KR-14 |
+| KT-63 | RSS delta, full universe | ≤ 350 MB; hard fail above 500 MB | **KR-11** |
+
+### 9.5 Repo-wide gates (every phase)
+
+| Check | Command |
 |---|---|
-| Anti-lookahead | Evidence at bar *t* is byte-identical whether or not bars > *t* exist in the frame (KR-17, KR-19) |
-| Determinism | Same context → same evidence across processes and runs (KR-20) |
-| Backtest parity | Live clock vs backtest clock produce identical evidence (KR-18) |
-| Bar coherence | Sampled OHLC ordering invariants hold (KR-21) |
-| Graceful degradation | Missing / corrupt / wrong-schema artifact → `[]`, one WARN, no raise (KR-16) |
-| Isolation | An exception inside the engine is swallowed by `run_all`; the bundle still assembles (§10.1) |
-| Silence | Below-threshold forecasts emit nothing (KR-28) |
-| Budget | Param count, artifact bytes, p95 latency (KR-15) |
-| Flag off | With `forecast_enabled: false`, `build_engines()` output and all golden fixtures are unchanged |
-| Golden example | §25.9 worked example still reproduces exactly (fusion 0.766/0.428; NO_TRADE, EV −0.018) |
-| Live isolation | No `aimos/execution/` reference to the forecast module (KR-35) |
-| Lints | `check_magic_numbers`, `check_no_naive_datetime`, `lint-imports`, `check_gpl_tripwire` |
+| Full suite | `python -m pytest` |
+| Magic numbers | `python scripts/check_magic_numbers.py` |
+| Naive datetime | `python scripts/check_no_naive_datetime.py` |
+| Import layering | `lint-imports` |
+| Copyleft tripwire | `python scripts/check_gpl_tripwire.py` |
 
 ---
 
@@ -396,6 +573,8 @@ latency, and — most expensively — attention.
 | Latency blowup across a wide universe | KR-12/KR-13 | Per-bar cache; narrow `timeframes` |
 | Weight creep into decisions | Config review | KR-30/KR-31 ladder; reliability is a config value, never code |
 | Stale artifact after a config change | Config-hash check | KR-16 refuses to load |
+| **Double-counted information inflating confidence** | KT-45 confidence-bound test | **KR-43** information-family correlation guard |
+| **Unscoreable model** (no outcomes to compute IC) | `outcomes` row count | **T-001 is a hard prerequisite** (§8) |
 
 ---
 
@@ -416,14 +595,19 @@ latency, and — most expensively — attention.
 
 1. **Registry approval (KR-23).** Approve the four evidence names? Adding them
    invalidates existing trained `LogisticModel` artifacts and forces a retrain.
-2. **Training data.** The 12-month recorded dataset (P1-T6) is still listed as *not
-   built* in `specs/STATUS.md`. K1 needs it, or needs `scripts/download_history.py`
-   run first. **This is the real blocker** — everything else here is tractable.
-3. **Timeframe scope.** Start with `15m`+`1h` only? 1m multiplies cost by ~15× for
+   Note KR-43's corollary: if you want to approve fewer, **`forecast_band` is the
+   one to keep** — it is the only genuinely new information.
+2. **Measurement loop (T-001).** Confirm the sequencing: close the outcomes loop
+   before K1. Without it the K2 gate is unevaluable and the model is unscoreable.
+3. **Training data (T-003).** The 12-month dataset is still *not built* per
+   `specs/STATUS.md`. K1 needs `scripts/download_history.py` run first.
+4. **Timeframe scope.** Start with `15m`+`1h` only? 1m multiplies cost by ~15× for
    the noisiest, least forecastable horizon.
-4. **Universe scope.** Majors only at K2, or the full tiered universe?
-5. **Deployment target.** Is the 4 GB host the Coolify deploy? If so, confirm the
+5. **Universe scope.** Majors only at K2, or the full tiered universe?
+6. **Deployment target.** Is the 4 GB host the Coolify deploy? If so, confirm the
    headroom after TimescaleDB and the API process.
+7. **Model-size ceiling (KR-5).** Confirm 8M params as the hard cap that CI
+   enforces.
 
 ---
 
@@ -440,3 +624,12 @@ is the hard part: it must enter as the *least-trusted sensor in the system*, at
 fusion weight 0, behind a flag, on the same promotion ladder that has correctly
 kept `MLEngine` inert since Phase 3 — and it must be deleted without ceremony if
 the shadow window says it has no skill.
+
+**But the sequencing matters more than the build.** A forecaster is an instrument,
+and AIMOS currently has no way to read any instrument: 2,760 decisions, zero
+outcomes, nothing ever scored. Adding a new sensor to a system that cannot measure
+its existing thirteen would add a second unknown on top of the first.
+
+Close the loop (T-001), get the costed backtest (T-003), find out whether the
+strategies you already have carry edge. Then build this — and you will be able to
+tell, in numbers rather than argument, whether it earns its 0.35.

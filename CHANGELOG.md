@@ -6,6 +6,42 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added (backlog / requirements refinement)
+- **`specs/TASKS.md`** — master tracked backlog (T-001..T-047) with a dependency
+  graph, priorities, acceptance criteria, and explicit test cases per task.
+  Records three P0 findings from a file-by-file review:
+  - **T-001 — the measurement loop has never closed.** `Journal.write_outcome()`
+    (`journal.py:101`) is fully implemented and hash-chained but is called by
+    **zero production code**; the `outcomes` table is empty against 2,760 journaled
+    decisions. `PaperBroker._close()` already computes 6 of 8 `OutcomeRecord`
+    fields — only MAE/MFE tracking and one wiring call are missing. This starves
+    ML labels, per-strategy attribution, analyst grounding, and drift detection.
+  - **T-002 — cross-exchange arb computes phantom spreads.** `compute_dislocation()`
+    compares mid-to-mid and discards `VenueTop.best_bid`/`best_ask`, overstating
+    capture by ~one full spread; `live_venue_snapshot()` fetches venues
+    sequentially then stamps them all with the same `now`, so no staleness gate is
+    possible on that path.
+  - **T-030..T-047 — 18 modules have no or weak test coverage**, including
+    `intelligence/finalize.py`, `execution/base_plugin.py`, three enabled execution
+    plugins, `observation/scalp_micro.py`, `runtime/atomic_io.py`, and the auth
+    surface where the audit's two Criticals were found.
+- **`specs/KRONOS_INTEGRATION.md`** refined:
+  - §2.0.1 adds implementation-level architecture read from upstream `model/module.py`
+    (BSQ straight-through estimator, commitment/entropy losses, bitwise s1/s2 split,
+    cross-attention dependency layer, pre-norm RMSNorm + RoPE + SwiGLU) — enough to
+    reimplement without reference to their code, and confirming KR-10 (numpy-only
+    inference, no torch in the runtime) is realistic.
+  - **KR-43 (new)** — the existing `bayes_engine.py` correlation guard keys on
+    engine name, which a forecaster would evade while re-deriving what momentum and
+    price action already report. Requires grouping by *information family* so
+    double-counted information cannot inflate §6.7 meta-confidence, which gates
+    trade eligibility. Corollary: `forecast_band` (forward range) is the genuinely
+    new signal; `forecast_drift` is largely redundant.
+  - §8 records **T-001 as a hard blocker** on the whole programme — K2's exit gate
+    needs an information coefficient, which needs outcomes that do not exist.
+  - §9 expands to a 60-case test matrix (KT-01..KT-63) mapped to the requirement
+    each case defends.
+
 ### Added (research / requirements)
 - **`specs/KRONOS_INTEGRATION.md`** — requirements spec for a K-line forecasting
   sensor, from a review of the Kronos foundation model (arXiv 2508.02739, MIT).
