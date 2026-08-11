@@ -273,8 +273,9 @@ used. The JWT secret and settings Fernet key are generated and persisted under
 default (never publicly reachable by accident). Set `AIMOS_HOST=0.0.0.0` — behind a
 VPN/SSH tunnel or an authenticated reverse proxy — to bind all interfaces. The Docker
 image sets `0.0.0.0` because Compose already publishes only `127.0.0.1:8000` on the
-host. The server honors `AIMOS_HOST` first, then `HOST`, and `AIMOS_PORT` first,
-then `PORT` (the standard variable for PaaS platforms such as Coolify). Control
+host. The server uses `AIMOS_HOST` (default `127.0.0.1`) and honors `AIMOS_PORT`
+first, then `PORT` (the standard variable for PaaS platforms such as Coolify).
+Control
 endpoints (`/api/control/*`, `/api/assistant`) accept loopback callers without a token;
 remote callers must supply a valid `Authorization: Bearer <token>`.
 

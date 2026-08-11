@@ -8,8 +8,8 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ### Added (Coolify / PaaS deployment)
 - `aimos/runtime/serve.py` now reads `AIMOS_PORT` first, then `PORT` (the standard
-  PaaS variable), and `AIMOS_HOST` first, then `HOST`, so Coolify can choose the
-  port and bind address without a `.env` file.
+  PaaS variable), while the bind address remains `AIMOS_HOST` only (default
+  `127.0.0.1`) so a bare local run never accidentally binds a public interface.
 - `Dockerfile` sets `PORT=8000` and `AIMOS_HOST=0.0.0.0` by default and adds a
   `HEALTHCHECK` against `/healthz` on the active port.
 - `docker-compose.yml` and `run.sh` now use the `AIMOS_PORT` / `PORT` environment

@@ -1315,9 +1315,11 @@ def main() -> int:  # pragma: no cover - launches the server
     # Default to loopback so a bare `python -m aimos.runtime.serve` is never
     # publicly reachable by accident (audit finding H1). Set AIMOS_HOST=0.0.0.0
     # explicitly (behind a VPN/tunnel/proxy) to bind all interfaces.
-    # PaaS platforms like Coolify usually expose the chosen port as `PORT`, so we
-    # also honor that as a fallback.
-    host = os.environ.get("AIMOS_HOST") or os.environ.get("HOST", "127.0.0.1")
+    # PaaS platforms like Coolify expose the chosen port as `PORT`, so we also
+    # honor that as a fallback for the port only. The bind address stays under
+    # the AIMOS-specific variable to avoid accidentally opening the dashboard on
+    # a public interface when an unrelated `HOST` env var happens to be set.
+    host = os.environ.get("AIMOS_HOST", "127.0.0.1")
     port = int(os.environ.get("AIMOS_PORT") or os.environ.get("PORT") or "8000")
     log.info("aimos_serve", url=f"http://{host}:{port}")
     uvicorn.run(app, host=host, port=port, log_level="info")
