@@ -85,7 +85,7 @@ export default function Controls() {
           cols={['Feature', 'State']}
           rows={['telegram', 'llm_news_sensor', 'live_data'].map(n => [
             <span key={n} className="font-mono">{n}</span>,
-            <Badge key={n + 'b'} dir={feats[n] ? 'up' : 'down'}>{feats[n] ? 'on' : 'off'}</Badge>,
+            <Badge key={n + 'b'} dir={feats[n] ? 'up' : 'flat'}>{feats[n] ? 'on' : 'off'}</Badge>,
           ])}
         />
       </CardContent>

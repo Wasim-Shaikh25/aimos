@@ -64,7 +64,7 @@ export default function Settings() {
       features: s.features || {},
       paper: s.paper || {},
       mandate: s.mandate || {},
-      training: s.training || { symbols: 'BTC/USDT,ETH/USDT', timeframe: '1h', months: 12 },
+      training: { symbols: 'BTC/USDT,ETH/USDT', timeframe: '1h', months: 12, ...(s.training || {}) },
     })
   }
 
@@ -331,8 +331,8 @@ export default function Settings() {
                   cols={['Venue', 'Has key', 'Testnet', { label: 'Action', align: 'right' }]}
                   rows={Object.entries(exchanges).map(([v, meta]) => [
                     <span className="font-medium" key="v">{v}</span>,
-                    <Badge key="has" dir={meta.has_key ? 'up' : 'down'}>{meta.has_key ? 'yes' : 'no'}</Badge>,
-                    <Badge key="test" dir={meta.testnet ? 'up' : 'down'}>{meta.testnet ? 'yes' : 'no'}</Badge>,
+                    <Badge key="has" dir={meta.has_key ? 'up' : 'flat'}>{meta.has_key ? 'yes' : 'no'}</Badge>,
+                    <Badge key="test" dir={meta.testnet ? 'up' : 'flat'}>{meta.testnet ? 'yes' : 'no'}</Badge>,
                     <div key="act" className="text-right">
                       <Button variant="outline" size="sm" onClick={() => removeExchange(v)} disabled={loading}>
                         Remove
@@ -390,7 +390,7 @@ export default function Settings() {
                 </FormItem>
                 <FormItem label="Timeframe">
                   <Select
-                    value={draft.training?.timeframe}
+                    value={draft.training?.timeframe || '1h'}
                     onValueChange={(v) => updateSection('training', { timeframe: v })}
                     options={[
                       { value: '1m', label: '1m' },
@@ -405,7 +405,7 @@ export default function Settings() {
                 <FormItem label="Months of history">
                   <Input
                     type="number"
-                    value={draft.training?.months || ''}
+                    value={draft.training?.months || 12}
                     onChange={(e) => updateSection('training', { months: Number(e.target.value) })}
                   />
                 </FormItem>
