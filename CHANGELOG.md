@@ -26,6 +26,10 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   the `Settings` screen no longer gates on SaaS and lets the single user manage
   mode, features, mandate, paper config, and encrypted exchange API keys.
 
+### Fixed (single-user follow-up)
+- Add a FastAPI exception handler for `AuthError` so `/auth/login` failures and
+  missing/invalid tokens on `/api/v2/*` return **401** instead of 500.
+
 ### Added (unified operational database)
 - **Single-PostgreSQL persistence option**: set `storage.database_url` (or
   `AIMOS__STORAGE__DATABASE_URL`) to one Postgres/SQLite URL and the journal,
