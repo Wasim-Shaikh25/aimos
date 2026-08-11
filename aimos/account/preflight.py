@@ -9,6 +9,7 @@ mock exchange (no keys, no network). Not in the magic-number-linted layers.
 
 from __future__ import annotations
 
+import re
 from typing import Callable, Optional
 
 import structlog
@@ -23,6 +24,18 @@ def _ccxt_client(venue: str, cred: dict):  # pragma: no cover - needs keys + net
     if cred.get("testnet", True) and hasattr(ex, "set_sandbox_mode"):
         ex.set_sandbox_mode(True)
     return ex
+
+
+_URL_QUERY_RE = re.compile(r"\?[^\s\"']*")
+_SECRET_PARAM_RE = re.compile(r"\b(apiKey|secret|signature|sign)=\S+", re.IGNORECASE)
+
+
+def _sanitize_error(msg: str) -> str:
+    """Strip URL query strings and redact key/signature fragments before the
+    error is returned to the dashboard."""
+    msg = _URL_QUERY_RE.sub("?<_redacted>", msg)
+    msg = _SECRET_PARAM_RE.sub(r"\1=<_redacted>", msg)
+    return msg[:200]
 
 
 def _usdt_free(balance: dict) -> float:
@@ -64,7 +77,7 @@ def preflight_check(
             log.info("preflight_ok", venue=venue, withdrawal_disabled=withdrawal_disabled)
         except Exception as exc:  # noqa: BLE001 — a failed venue is reported, not fatal
             out[venue] = {"venue": venue, "configured": True, "connected": False,
-                          "can_trade": False, "error": str(exc)[:200]}
+                          "can_trade": False, "error": _sanitize_error(str(exc))}
             log.warning("preflight_failed", venue=venue)
     return out
 

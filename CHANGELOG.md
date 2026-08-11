@@ -37,6 +37,9 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 - `guard_live_boot` no longer refuses to start in paper mode when the mandate is
   enabled; it only gates boot when `mode=live` and the go-live ladder is not
   complete.
+- `preflight_check` now sanitizes exchange error strings before returning them to
+  the UI: URL query strings and `apiKey`/`secret`/`signature`/`sign` parameters are
+  redacted so credential derivatives cannot leak through `error` payloads.
 
 ### Changed (live-trading prerequisites)
 - Runtime preflight (`_run_preflight`) and `scripts/validate_integration.py` now
