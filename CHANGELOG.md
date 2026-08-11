@@ -29,6 +29,8 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 ### Fixed (single-user follow-up)
 - Add a FastAPI exception handler for `AuthError` so `/auth/login` failures and
   missing/invalid tokens on `/api/v2/*` return **401** instead of 500.
+- Remove the last active SaaS references in `dashboard/src/api.js` (comment +
+  leftover `activeOrg`/`X-Organization-Id` header) and `specs/TESTNET.md`.
 
 ### Added (unified operational database)
 - **Single-PostgreSQL persistence option**: set `storage.database_url` (or
