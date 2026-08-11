@@ -30,6 +30,19 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 - **Journal `is_writable()`**: abstracts the old SQLite `BEGIN IMMEDIATE`/`ROLLBACK`
   readiness check so `readyz` works identically for file and database journals.
 
+### Fixed (unified operational database follow-up)
+- Ensure `state/tenants/<org_id>` is created before the `RUNTIME_HALT` file is
+  written so the emergency stop works when a database URL is configured.
+- Removed implicit fallback to the SaaS auth DB; the SQL backend is only used
+  when `storage.database_url` is explicitly set.
+- Use `SET LOCAL search_path` for per-organization Postgres schemas so the
+  setting does not leak across the shared connection pool to runtime state and
+  model registry queries.
+- Sanitize `org_id` to `[a-zA-Z0-9_-]` and truncate to 63 bytes before using it
+  as a Postgres schema name.
+- Allow keyword-style Postgres DSNs (`host=... dbname=...`) in `TimescaleStore`.
+- Commit DML executed through the SQL journal connection adapter.
+
 ### Added (REQ-13 — separate API process from trading loop)
 - **Process modes via `AIMOS_PROCESS`**: `combined` (default, legacy), `api` (API-only),
   and `loop` (loop-only). `python -m aimos.runtime.serve` stays the default entrypoint;
