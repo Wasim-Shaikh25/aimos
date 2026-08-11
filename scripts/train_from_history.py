@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import os
 import sys
 from pathlib import Path
 
@@ -142,7 +143,10 @@ def main(argv=None) -> int:
     # Brier score on the full training set for the registry/drift baseline.
     probs = model.predict_proba(X)
     brier = float(np.mean((probs - ys) ** 2))
-    registry = ModelRegistry()
+    storage_cfg = params.model_dump().get("storage", {}) or {}
+    database_url = storage_cfg.get("database_url", "") or ""
+    org_id = os.environ.get("AIMOS_RUNTIME_ORG_ID", "local")
+    registry = ModelRegistry(database_url=database_url, org_id=org_id)
     prev = registry.latest("promoted") or registry.latest()
     registry.add(ModelEntry(
         path=str(out), val_auc=model.val_auc, brier=brier,

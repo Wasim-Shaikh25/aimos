@@ -222,11 +222,14 @@ paper:
   telegram_status_ticks: 0          # >0 → send a Telegram status summary every N ticks
                                     # (trade-open/close/risk alerts fire regardless when enabled)
 
-# Storage. The SQLite journal (paper.journal_path) is always the tamper-evident
-# record. TimescaleDB is an OPTIONAL time-series store for equity/decisions/prices/
-# trades — enabled only when a DSN is set (env AIMOS_TIMESCALE_DSN overrides) and
-# psycopg is installed; otherwise it is a safe no-op.
+# Storage. When ``database_url`` is set, the journal, runtime state, controls,
+# and model registry live in the same PostgreSQL (or SQLite) database so a server
+# restart or migration is just a connection-string change. The SQLite journal
+# (paper.journal_path) is used as the fallback when no URL is configured.
+# TimescaleDB is OPTIONAL for time-series analytics; if empty it defaults to the
+# same database URL.
 storage:
+  database_url: ""                  # e.g. postgresql://aimos:aimos@postgres:5432/aimos
   timescale_dsn: ""                 # e.g. postgresql://aimos:aimos@postgres:5432/aimos
 
 # Feature monitor agent — a background self-tester that probes every feature on an

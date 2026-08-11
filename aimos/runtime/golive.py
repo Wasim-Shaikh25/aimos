@@ -104,7 +104,7 @@ class GoLiveLadder:
         if self.journal is None:
             return 0.0
         row = self.journal.conn.execute(
-            "SELECT MIN(timestamp) a, MAX(timestamp) b FROM decisions").fetchone()
+            'SELECT MIN("timestamp") a, MAX("timestamp") b FROM decisions').fetchone()
         if not row or not row["a"]:
             return 0.0
         try:

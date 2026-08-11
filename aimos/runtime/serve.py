@@ -173,16 +173,19 @@ def _build_components(offline: Optional[bool] = None) -> dict[str, Any]:
     primary_venue = paper["data_exchange"]
     live_data = features["live_data"] if offline is None else (not offline)
     health_cfg = params.model_dump().get("health", {}) or {}
-    jpath = tenant_journal_path(org_id, params)
-    state_dir: Optional[Path] = None
-    if jpath != ":memory:":
+    storage_cfg = params.model_dump().get("storage", {}) or {}
+    database_url = storage_cfg.get("database_url", "") or ""
+    jpath = database_url or tenant_journal_path(org_id, params)
+    state_dir: Optional[Path] = Path("state") / "tenants" / org_id
+    if not database_url and jpath != ":memory:":
         state_dir = Path(jpath).parent / f"tenant_{org_id}_state"
-    state_store = RuntimeStateStore(org_id, state_dir=state_dir)
-    control_store = ControlStore(org_id, state_dir=state_dir)
+    state_dir.mkdir(parents=True, exist_ok=True)
+    state_store = RuntimeStateStore(org_id, state_dir=state_dir, database_url=database_url)
+    control_store = ControlStore(org_id, state_dir=state_dir, database_url=database_url)
     saved_state = state_store.load()
     controls = control_store.load()
-    halt_file = str(state_dir / "RUNTIME_HALT") if state_dir else "RUNTIME_HALT"
-    orch = PipelineOrchestrator(params, clock=clock, journal=Journal(jpath), halt_file=halt_file)
+    halt_file = str(state_dir / "RUNTIME_HALT")
+    orch = PipelineOrchestrator(params, clock=clock, journal=Journal(jpath, org_id=org_id), halt_file=halt_file)
     broker = PaperBroker(float(paper["starting_equity_usdt"]), cost_mod.from_config(costs_cfg),
                          venue=paper["data_exchange"])
     heartbeat = Heartbeat("state/heartbeat", clock=clock)
@@ -191,12 +194,7 @@ def _build_components(offline: Optional[bool] = None) -> dict[str, Any]:
         stale_after = float(health_cfg.get("heartbeat_stale_seconds", 30))
         last = heartbeat.last_beat()
         age = float("inf") if last is None else (clock.now() - last).total_seconds()
-        journal_writable = True
-        try:
-            orch.journal.conn.execute("BEGIN IMMEDIATE")
-            orch.journal.conn.execute("ROLLBACK")
-        except Exception:  # noqa: BLE001
-            journal_writable = False
+        journal_writable = orch.journal.is_writable()
         ready = journal_writable and age < stale_after
         return {
             "status": "ok" if ready else "not ready",
@@ -282,7 +280,8 @@ def _build_components(offline: Optional[bool] = None) -> dict[str, Any]:
     live_router = _build_live_router(params, ladder, analysis_venues)
 
     from aimos.storage.timescale import TimescaleStore
-    ts_store = TimescaleStore(params.model_dump().get("storage", {}).get("timescale_dsn", ""))
+    ts_dsn = storage_cfg.get("timescale_dsn") or database_url
+    ts_store = TimescaleStore(ts_dsn)
 
     from aimos.runtime.monitor_agent import FeatureMonitorAgent
     mon_cfg = params.model_dump().get("monitor", {}) or {}
@@ -479,6 +478,9 @@ def build_app(offline: Optional[bool] = None):
             backup_cfg = params.model_dump().get("backup", {}) or {}
             if not bool(backup_cfg.get("enabled", True)):
                 return
+            if "://" in str(jpath):
+                log.info("journal_backup_skipped_database", journal=str(jpath))
+                return
             out = backup_journal(
                 src=str(jpath),
                 dest_dir=str(backup_cfg.get("dest", "backups")),
@@ -672,7 +674,7 @@ def _assistant_decisions(journal, limit: int = 40) -> list:
     import json as _json
     limit = max(1, min(int(limit), 500))
     rows = journal.conn.execute(
-        "SELECT decision_id, symbol, timestamp, payload FROM decisions ORDER BY seq DESC LIMIT ?",
+        'SELECT decision_id, symbol, "timestamp", payload FROM decisions ORDER BY seq DESC LIMIT ?',
         (limit,),
     ).fetchall()
     out = []

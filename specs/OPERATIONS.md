@@ -74,8 +74,9 @@ restart. Live/funded flags are LOCKED there.
 
 | Data | Store | Location |
 |---|---|---|
-| Decisions, outcomes, evidence, trades (hash-chained) | **SQLite** (the Journal) | `paper.journal_path` → `state/aimos.sqlite` |
-| Equity / decisions / prices / trades time-series | **TimescaleDB** (optional) | `AIMOS_TIMESCALE_DSN` |
+| Operational DB (journal + state + controls + model registry) | **PostgreSQL/SQLite** (optional) | `storage.database_url` or `AIMOS__STORAGE__DATABASE_URL` |
+| Decisions, outcomes, evidence, trades (hash-chained) | **SQLite** fallback | `paper.journal_path` → `state/aimos.sqlite` when no DB URL |
+| Equity / decisions / prices / trades time-series | **TimescaleDB** (optional) | `storage.timescale_dsn`, or defaults to `storage.database_url` |
 | Go-live progress | JSON | `state/go_live.json` |
 | Auth / settings metadata | SQLite/Postgres | `config/saas.yaml` `database_url` or `AIMOS__SAAS__DATABASE_URL` |
 | Runtime config overrides | SQLite/Postgres | `user_settings` table, edited via the Settings UI |
@@ -83,11 +84,12 @@ restart. Live/funded flags are LOCKED there.
 | Recorded market candles | Parquet | data root |
 | API secrets | **encrypted** | `user_settings.secrets` JSON column, managed through `/api/v2/settings/exchange` |
 
-The **SQLite journal is the tamper-evident system of record** (SHA-256 chain;
-verify with the journal verifier). **TimescaleDB** is optional analytics — enable
-with `pip install -e '.[timescale]'` and set
-`AIMOS_TIMESCALE_DSN=postgresql://aimos:aimos@postgres:5432/aimos` (docker-compose
-wires this to the bundled TimescaleDB service). Empty DSN = off (no-op).
+**Single-DB mode:** set `storage.database_url` to a PostgreSQL (or SQLite) URL
+and the journal, runtime state, controls, and model registry are all stored in
+that database, making server swaps or restarts a connection-string change. The
+SQLite journal remains the tamper-evident fallback when no URL is configured.
+**TimescaleDB** is optional analytics — install with `pip install -e '.[timescale]'`;
+it defaults to the same URL as `storage.database_url` when `timescale_dsn` is empty.
 
 ---
 
