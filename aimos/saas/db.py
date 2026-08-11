@@ -51,7 +51,8 @@ def get_engine():
     global _engine, _SessionLocal
     if _engine is None:
         cfg = get_saas_config()
-        url = cfg.database_url
+        from aimos.storage.db import normalize_sqlalchemy_url
+        url = normalize_sqlalchemy_url(cfg.database_url)
         # SQLite needs check_same_thread=False when shared with FastAPI threadpool.
         kwargs: dict[str, Any] = {}
         if url.startswith("sqlite"):

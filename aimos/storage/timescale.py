@@ -38,10 +38,11 @@ class TimescaleStore:
     psycopg are available."""
 
     def __init__(self, dsn: str = "") -> None:
-        self.dsn = dsn or os.environ.get("AIMOS_TIMESCALE_DSN", "")
+        from aimos.storage.db import normalize_psycopg_url
+        self.dsn = normalize_psycopg_url(dsn or os.environ.get("AIMOS_TIMESCALE_DSN", ""))
         self._conn = None
         self.enabled = False
-        if self.dsn:
+        if self.dsn and self.dsn.startswith(("postgresql://", "postgres://")):
             self._connect()
 
     def _connect(self) -> None:

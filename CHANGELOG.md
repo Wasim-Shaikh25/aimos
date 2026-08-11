@@ -6,6 +6,30 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added (unified operational database)
+- **Single-PostgreSQL persistence option**: set `storage.database_url` (or
+  `AIMOS__STORAGE__DATABASE_URL`) to one Postgres/SQLite URL and the journal,
+  runtime state, controls, and model registry all live in that database. Existing
+  file/SQLite backends remain the fallback when no URL is configured, so dev
+  and tests are unchanged.
+- **`aimos/storage/db.py`**: shared SQLAlchemy engine helper plus
+  `runtime_states`, `runtime_controls`, and `model_registry` tables. URLs like
+  `postgresql://` are normalized to the psycopg v3 dialect; `postgresql+psycopg://`
+  is passed through.
+- **Journal SQLAlchemy backend**: `Journal` now detects SQLAlchemy URLs and uses a
+  per-organization schema on Postgres (`SET search_path`) while preserving the
+  same `conn.execute(...)` interface and SHA-256 hash chain. File/SQLite backend
+  is unchanged.
+- **Runtime state + controls DB backend**: `RuntimeStateStore` and `ControlStore`
+  accept an optional `database_url` and upsert JSON blobs per `organization_id`.
+- **Model registry DB backend**: `ModelRegistry` accepts `database_url`/`org_id`;
+  training runs append rows and promotion/demotion updates rows in the same DB.
+- **TimescaleDB defaults to `storage.database_url`**: `TimescaleStore` now uses
+  the unified DB URL when `storage.timescale_dsn` is empty (still no-op if it
+  cannot connect).
+- **Journal `is_writable()`**: abstracts the old SQLite `BEGIN IMMEDIATE`/`ROLLBACK`
+  readiness check so `readyz` works identically for file and database journals.
+
 ### Added (REQ-13 — separate API process from trading loop)
 - **Process modes via `AIMOS_PROCESS`**: `combined` (default, legacy), `api` (API-only),
   and `loop` (loop-only). `python -m aimos.runtime.serve` stays the default entrypoint;

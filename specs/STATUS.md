@@ -119,7 +119,10 @@ Performance · Config · Agents · Settings.
 
 Runtime state (equity/balances/broker/sim/ladder) persists across restarts via
 `RuntimeStateStore` (`aimos/runtime/state_store.py`, atomic writes since the M8
-fix) — this was previously listed here as not-built; corrected.
+fix). A unified operational database option is available: set
+`storage.database_url` (or `AIMOS__STORAGE__DATABASE_URL`) and the journal,
+runtime state, controls, and model registry all live in PostgreSQL/SQLite; the
+file/SQLite paths remain the default fallback for dev/tests.
 
 **Robustness/security/ops backlog:** see **`specs/REQUIREMENTS_BACKLOG.md`** —
 19 tracked requirements from the production-readiness audit's residual items and

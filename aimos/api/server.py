@@ -87,7 +87,7 @@ class AppState:
 
 def _decisions(journal: Journal, limit: int) -> list[dict]:
     rows = journal.conn.execute(
-        "SELECT decision_id, symbol, timestamp, payload FROM decisions ORDER BY seq DESC LIMIT ?",
+        'SELECT decision_id, symbol, "timestamp", payload FROM decisions ORDER BY seq DESC LIMIT ?',
         (limit,),
     ).fetchall()
     return [{"decision_id": r["decision_id"], "symbol": r["symbol"],

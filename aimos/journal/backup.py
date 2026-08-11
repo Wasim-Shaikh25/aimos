@@ -55,6 +55,8 @@ def _prune(dest: Path, keep: int) -> list[str]:
 
 def backup_journal(src: str = "state/aimos.sqlite", dest_dir: str = "backups", keep: int = 14) -> Path:
     """Create a verified backup; return its path. Raises on verify failure."""
+    if "://" in src:
+        raise ValueError(f"backup_journal does not support database URLs: {src}")
     src_path = Path(src)
     if not src_path.exists():
         raise FileNotFoundError(f"journal not found at {src_path}")
