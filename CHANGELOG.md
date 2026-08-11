@@ -27,6 +27,20 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   key as an implicit `--mainnet` opt-in; the 5-second mainnet warning is now
   always required, and the preflight sandbox flag is aligned with `--mainnet`.
 
+### Fixed (live-trading follow-up)
+- `serve.py` now stores the read-only preflight result in `holder["connections"]`
+  at boot so `GET /api/connections` and the `Connections` screen reflect the
+  configured venues immediately instead of always reporting “No venue keys
+  configured.”
+- `scripts/validate_integration.py` imports `load_params_for_user` from the
+  correct module (`aimos.settings.config`).
+- `guard_live_boot` no longer refuses to start in paper mode when the mandate is
+  enabled; it only gates boot when `mode=live` and the go-live ladder is not
+  complete.
+- `preflight_check` now sanitizes exchange error strings before returning them to
+  the UI: URL query strings and `apiKey`/`secret`/`signature`/`sign` parameters are
+  redacted so credential derivatives cannot leak through `error` payloads.
+
 ### Changed (live-trading prerequisites)
 - Runtime preflight (`_run_preflight`) and `scripts/validate_integration.py` now
   read exchange API keys from the encrypted `SettingsStore` first (the UI path),

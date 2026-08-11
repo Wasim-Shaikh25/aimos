@@ -164,14 +164,14 @@ class LiveNotAllowedError(RuntimeError):
 
 
 def guard_live_boot(params, ladder: Optional["GoLiveLadder"] = None) -> None:
-    """Hard fail-closed check: refuse to BOOT in live mode (or with the mandate
-    enabled) until every §23.8 go-live gate is signed off. Paper mode is never
-    affected. This is belt-and-suspenders on top of the mandate + Controls locks —
-    a misconfigured deploy physically cannot trade real money early."""
+    """Hard fail-closed check: refuse to BOOT in live mode until every §23.8
+    go-live gate is signed off. Paper mode is never affected. This is
+    belt-and-suspenders on top of the mandate + Controls locks — a
+    misconfigured deploy physically cannot trade real money early."""
     pd = params.model_dump()
     mode = str(pd.get("mode", "paper")).lower()
     mandate_on = bool((pd.get("mandate") or {}).get("enabled", False))
-    if mode != "live" and not mandate_on:
+    if mode != "live":
         return  # paper — nothing to guard
     lad = ladder or GoLiveLadder()
     if not lad.live_allowed():

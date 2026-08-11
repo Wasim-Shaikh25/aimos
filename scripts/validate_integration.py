@@ -25,8 +25,8 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     from aimos.account.secrets import load_secrets
-    from aimos.core.config import load_params_for_user
     from aimos.runtime.golive import GoLiveLadder
+    from aimos.settings.config import load_params_for_user
     from aimos.runtime.testnet_probe import build_testnet_broker
     from aimos.runtime.validate import validate_integration
     from aimos.settings import SettingsStore
