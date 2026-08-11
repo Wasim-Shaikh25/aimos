@@ -54,6 +54,7 @@ export default function Settings() {
   const [secret, setSecret] = useState('')
   const [testnet, setTestnet] = useState(true)
   const [withdraw, setWithdraw] = useState(false)
+  const [testResults, setTestResults] = useState({})
 
   const load = async () => {
     const s = await api.settings()
@@ -111,6 +112,19 @@ export default function Settings() {
       await load()
     } else {
       notify('Failed to remove exchange key', true)
+    }
+  }
+
+  const testExchange = async (v) => {
+    setTestResults(r => ({ ...r, [v]: { state: 'testing' } }))
+    const res = await api.testConnection(v)
+    if (res) {
+      const ok = res.connected && res.withdrawal_disabled
+      setTestResults(r => ({ ...r, [v]: { state: ok ? 'ok' : 'failed', detail: res } }))
+      notify(`${v}: ${ok ? 'connected, withdrawals disabled' : res.error || 'connection/check failed'}`, !ok)
+    } else {
+      setTestResults(r => ({ ...r, [v]: { state: 'failed' } }))
+      notify(`Failed to test ${v}`, true)
     }
   }
 
@@ -328,17 +342,28 @@ export default function Settings() {
             <CardContent className="space-y-4">
               {Object.keys(exchanges).length ? (
                 <Table
-                  cols={['Venue', 'Has key', 'Testnet', { label: 'Action', align: 'right' }]}
-                  rows={Object.entries(exchanges).map(([v, meta]) => [
-                    <span className="font-medium" key="v">{v}</span>,
-                    <Badge key="has" dir={meta.has_key ? 'up' : 'flat'}>{meta.has_key ? 'yes' : 'no'}</Badge>,
-                    <Badge key="test" dir={meta.testnet ? 'up' : 'flat'}>{meta.testnet ? 'yes' : 'no'}</Badge>,
-                    <div key="act" className="text-right">
-                      <Button variant="outline" size="sm" onClick={() => removeExchange(v)} disabled={loading}>
-                        Remove
-                      </Button>
-                    </div>,
-                  ])}
+                  cols={['Venue', 'Has key', 'Testnet', 'Connection', { label: 'Action', align: 'right' }]}
+                  rows={Object.entries(exchanges).map(([v, meta]) => {
+                    const tr = testResults[v]
+                    let connBadge = { dir: 'flat', text: 'not tested' }
+                    if (tr?.state === 'testing') connBadge = { dir: 'flat', text: 'testing…' }
+                    else if (tr?.state === 'ok') connBadge = { dir: 'up', text: 'connected' }
+                    else if (tr?.state === 'failed') connBadge = { dir: 'down', text: 'failed' }
+                    return [
+                      <span className="font-medium" key="v">{v}</span>,
+                      <Badge key="has" dir={meta.has_key ? 'up' : 'flat'}>{meta.has_key ? 'yes' : 'no'}</Badge>,
+                      <Badge key="test" dir={meta.testnet ? 'up' : 'flat'}>{meta.testnet ? 'yes' : 'no'}</Badge>,
+                      <Badge key="conn" dir={connBadge.dir}>{connBadge.text}</Badge>,
+                      <div key="act" className="text-right flex gap-2 justify-end">
+                        <Button variant="outline" size="sm" onClick={() => testExchange(v)} disabled={loading || tr?.state === 'testing'}>
+                          {tr?.state === 'testing' ? '…' : 'Test'}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => removeExchange(v)} disabled={loading}>
+                          Remove
+                        </Button>
+                      </div>,
+                    ]
+                  })}
                 />
               ) : (
                 <Empty what="exchange keys" />

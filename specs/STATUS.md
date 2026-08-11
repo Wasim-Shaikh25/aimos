@@ -110,9 +110,12 @@ Performance · Config · Agents · Settings.
 
 ## Not built yet — ⏭️ candidates
 
-- **Real-exchange validation** of the live path — the validator harness exists
-  (`scripts/validate_integration.py`, mock-tested); the actual testnet *run* needs
-  the operator's free testnet keys (`specs/TESTNET.md`).
+- **Real-exchange validation** of the live path — `scripts/validate_integration.py`
+  and the runtime preflight now read exchange keys from `SettingsStore` (the UI
+  path) with a legacy file/env fallback, and a `POST /api/connections/test`
+  endpoint lets the operator test a connection from the dashboard without exposing
+  keys. The actual testnet *run* still needs the operator's free testnet keys
+  (`specs/TESTNET.md`).
 - **Live multi-venue executor** wired into the serve loop (router exists; routing
   live arb through it end-to-end is the next execution step).
 - **Streaming layer** for real 1m scalp + real cross-venue top-of-book + lead-lag.

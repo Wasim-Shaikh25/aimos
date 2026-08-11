@@ -25,17 +25,25 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     from aimos.account.secrets import load_secrets
-    from aimos.core.config import load_params
+    from aimos.core.config import load_params_for_user
     from aimos.runtime.golive import GoLiveLadder
     from aimos.runtime.testnet_probe import build_testnet_broker
     from aimos.runtime.validate import validate_integration
+    from aimos.settings import SettingsStore
 
-    params = load_params()
-    creds = load_secrets(params.model_dump().get("secrets", {}).get("file", ""),
-                         venues=[args.exchange]).get(args.exchange.lower())
+    params = load_params_for_user()
+    storage_cfg = params.model_dump().get("storage", {}) or {}
+    store = SettingsStore("default", database_url=storage_cfg.get("database_url", ""))
+
+    vl = args.exchange.lower()
+    creds = store.get_exchange_credentials(vl)
     if not creds:
-        print(f"no keys for {args.exchange}. Set AIMOS_SECRETS_FILE or "
-              f"AIMOS_KEY_{args.exchange.upper()}/AIMOS_SECRET_{args.exchange.upper()}.")
+        legacy = load_secrets(params.model_dump().get("secrets", {}).get("file", ""),
+                              venues=[args.exchange])
+        creds = legacy.get(vl)
+    if not creds:
+        print(f"no keys for {args.exchange}. Add them in Settings → Exchanges, or set "
+              f"AIMOS_SECRETS_FILE / AIMOS_KEY_{args.exchange.upper()}.")
         return 2
     if not params.model_dump().get("mandate", {}).get("enabled"):
         print("mandate not enabled — set a small mandate in config/mandate.yaml first.")
@@ -46,7 +54,7 @@ def main(argv=None) -> int:
         time.sleep(5)
 
     broker = build_testnet_broker(args.exchange, params, creds)
-    broker.testnet = not args.mainnet
+    broker.testnet = False if args.mainnet else bool(creds.get("testnet", True))
     rep = validate_integration(args.exchange, creds, broker, ladder=GoLiveLadder(),
                                symbol=args.symbol, notional_usdt=args.notional)
     print(rep.render())

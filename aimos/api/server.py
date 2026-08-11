@@ -42,6 +42,10 @@ class GoLiveBody(BaseModel):
     passed: bool = True
 
 
+class ConnectionTestBody(BaseModel):
+    venue: str = ""
+
+
 class AskBody(BaseModel):
     question: str = ""
 
@@ -70,6 +74,7 @@ class AppState:
     performance_provider: Any = None  # callable -> perf metrics dict
     graph_provider: Any = None  # callable(decision_id) -> {"nodes": [...], "edges": [...]}
     connections_provider: Any = None  # callable -> {"venues": [...]} (Phase D preflight)
+    connections_test_provider: Any = None  # callable(venue: str) -> preflight dict
     features_provider: Any = None  # callable -> {"features": {...}, "toggleable", "locked"}
     feature_setter: Any = None  # callable(name, value) -> {"ok", ...} (runtime toggle)
     golive_provider: Any = None  # callable -> go-live ladder status
@@ -403,6 +408,16 @@ def create_app(state: AppState) -> FastAPI:
     def get_connections():
         # per-venue read-only preflight status (Phase D §2.4) — never exposes secrets
         return state.connections_provider() if state.connections_provider else {"venues": []}
+
+    @app.post("/api/connections/test")
+    def test_connection(body: ConnectionTestBody):
+        # run a fresh read-only preflight for one venue using stored credentials
+        if not state.connections_test_provider:
+            raise HTTPException(status_code=503, detail="connection testing unavailable")
+        result = state.connections_test_provider(body.venue)
+        if not result:
+            raise HTTPException(status_code=404, detail=f"no credentials for {body.venue}")
+        return result
 
     @app.get("/api/features")
     def get_features():
