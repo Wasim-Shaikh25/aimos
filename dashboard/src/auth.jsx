@@ -2,13 +2,11 @@ import React, { createContext, useContext, useEffect, useState } from 'react'
 import { api, setAuth, clearAuth, getAuth } from './api.js'
 
 const AuthContext = createContext(null)
-const LOCAL_USER = { id: 'local', email: 'single-user' }
 
 export const useAuth = () => useContext(AuthContext)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
-  const [saasEnabled, setSaasEnabled] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const clearSession = () => {
@@ -35,48 +33,22 @@ export function AuthProvider({ children }) {
     }
   }
 
-  const init = async () => {
-    try {
-      const status = await fetch('/api/v2/status').then(r => r.ok ? r.json() : null)
-      const enabled = status?.saas_enabled ?? false
-      setSaasEnabled(enabled)
-      if (!enabled) {
-        setUser(LOCAL_USER)
-        setLoading(false)
-        return
-      }
-    } catch {
-      // If the status endpoint is unavailable, fall through to auth flow.
-    }
-    await loadSession()
-  }
+  useEffect(() => { loadSession() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const login = async (email, password) => {
-    return await api.login(email, password)
-  }
-
-  const verifyLogin = async (email, code) => {
-    const data = await api.verifyLogin(email, code)
-    if (!data) return null
+  const login = async (username, password) => {
+    const data = await api.login(username, password)
+    if (!data || !data.access_token) return null
     setAuth(data)
     await loadSession()
     return data
   }
 
   const logout = async () => {
-    if (saasEnabled) await api.logout()
+    await api.logout()
     clearSession()
   }
 
-  useEffect(() => { init() }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const value = {
-    user, setUser,
-    saasEnabled,
-    loading,
-    login, verifyLogin, logout,
-    loadSession,
-  }
+  const value = { user, setUser, loading, login, logout, loadSession }
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
@@ -91,29 +63,16 @@ function Field({ label, type = 'text', value, onChange, required = true }) {
 }
 
 export function LoginScreen() {
-  const { login, verifyLogin } = useAuth()
-  const [mode, setMode] = useState('login') // login | verify
-  const [email, setEmail] = useState('')
+  const { login } = useAuth()
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [code, setCode] = useState('')
   const [error, setError] = useState('')
-  const [ok, setOk] = useState('')
 
   const submit = async (e) => {
-    e.preventDefault(); setError(''); setOk('')
+    e.preventDefault(); setError('')
     try {
-      if (mode === 'login') {
-        const res = await login(email, password)
-        if (res?.ok) {
-          setOk(res.message || 'Check your email for the login code')
-          setMode('verify')
-        } else {
-          setError('Invalid email or password')
-        }
-      } else {
-        const data = await verifyLogin(email, code)
-        if (!data) setError('Invalid or expired code')
-      }
+      const data = await login(username, password)
+      if (!data) setError('Invalid username or password')
     } catch (e) {
       setError(e.message || 'Request failed')
     }
@@ -123,24 +82,12 @@ export function LoginScreen() {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
       <div style={{ width: 360, padding: 24, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }}>
         <h1 style={{ margin: '0 0 18px', fontSize: 20 }}>AIMOS</h1>
-        <p style={{ color: 'var(--muted)', margin: '0 0 18px' }}>
-          {mode === 'login' ? 'Sign in to your account' : `Enter the login code sent to ${email}`}
-        </p>
+        <p style={{ color: 'var(--muted)', margin: '0 0 18px' }}>Sign in to your account</p>
         <form onSubmit={submit}>
-          {mode === 'login' && (
-            <>
-              <Field label="Email" type="email" value={email} onChange={setEmail} />
-              <Field label="Password" type="password" value={password} onChange={setPassword} />
-            </>
-          )}
-          {mode === 'verify' && (
-            <Field label="Login code" value={code} onChange={setCode} />
-          )}
+          <Field label="Username" value={username} onChange={setUsername} />
+          <Field label="Password" type="password" value={password} onChange={setPassword} />
           {error && <p style={{ color: 'var(--red)', fontSize: 13 }}>{error}</p>}
-          {ok && <p style={{ color: 'var(--green)', fontSize: 13 }}>{ok}</p>}
-          <button type="submit" style={{ width: '100%', marginTop: 8, padding: '10px' }}>
-            {mode === 'login' ? 'Send login code' : 'Verify and sign in'}
-          </button>
+          <button type="submit" style={{ width: '100%', marginTop: 8, padding: '10px' }}>Sign in</button>
         </form>
       </div>
     </div>

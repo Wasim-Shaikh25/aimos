@@ -20,11 +20,9 @@ from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from aimos.auth.router import auth_router, user_router
+from aimos.auth.security import AuthError, decode_token, FailedLoginTracker, get_current_user
 from aimos.journal.journal import Journal
-from aimos.saas.auth_service import FailedLoginTracker
-from aimos.saas.router import auth_router, tenant_router
-from aimos.saas.security import AuthError, decode_token
-from aimos.saas.settings import get_saas_config
 
 
 class ConfirmBody(BaseModel):
@@ -105,11 +103,9 @@ def _extract_bearer(request: Request) -> str | None:
     return request.cookies.get("access_token")
 
 
-# Public paths in SaaS mode: auth endpoints, the status probe, self-authenticating
-# /api/v2 tenant routes, and the static SPA shell + its client-side routes. The
-# protected surface is exactly the trading API (/api/* excluding /api/v2/*) and
-# /metrics — those require a token. Anything that is not one of those is treated
-# as the SPA shell so the login page and assets can load (audit finding C2).
+# Public paths: auth endpoints, the status probe, the static SPA shell + its
+# client-side routes. Anything that is not a protected API route is treated as the
+# SPA shell so the login page and assets can load (audit finding C2).
 _PROTECTED_PREFIXES = ("/api/",)
 _PROTECTED_EXACT = {"/metrics"}
 
@@ -183,41 +179,34 @@ def create_app(state: AppState) -> FastAPI:
         return await call_next(request)
 
     @app.middleware("http")
-    async def saas_tenant_scope(request: Request, call_next):
-        """In SaaS mode, trading API requests (``/api/*`` outside ``/api/v2/*``)
-        must carry a valid access token whose ``org`` claim matches the
-        ``X-Organization-Id`` header and this runtime's ``AIMOS_RUNTIME_ORG_ID``.
-        Auth endpoints, the public status probe, ``/api/v2/*`` tenant routes, and
-        the static SPA shell (``/``, ``/assets/*``, client-side routes) are exempt;
-        tenant routes validate their own auth context. The SPA is public static
-        content — it holds no secrets and authenticates itself against ``/auth/*``
-        before calling the protected ``/api/*`` surface with a token."""
-        if get_saas_config().enabled:
-            path = request.url.path
-            if not _is_public_path(path):
-                token = _extract_bearer(request)
-                if not token:
-                    return JSONResponse({"detail": "Authorization required"}, status_code=401)
-                try:
-                    payload = decode_token(token, token_type="access")
-                except AuthError as exc:
-                    return JSONResponse({"detail": str(exc)}, status_code=401)
-                org_id = request.headers.get("X-Organization-Id") or request.cookies.get("active_org")
-                if not org_id:
-                    return JSONResponse({"detail": "X-Organization-Id required"}, status_code=403)
-                if payload.get("org") != org_id or org_id != _runtime_org():
-                    return JSONResponse({"detail": "organization not served by this runtime"}, status_code=403)
-        elif _is_control_path(request.url.path):
-            # Local single-user mode (SaaS off): control actions and the billable
-            # LLM endpoint must not be reachable from a non-loopback client, so a
-            # misconfigured public bind cannot expose the kill switch, the go-live
-            # ladder, or the assistant (audit finding H1). Reads stay open here.
-            if not _client_is_local(request.client.host if request.client else None):
-                return JSONResponse(
-                    {"detail": "control requires authentication or a loopback client"},
-                    status_code=401,
-                )
-        return await call_next(request)
+    async def auth_scope(request: Request, call_next):
+        """Single-user mode: protected endpoints need a valid access token.
+
+        Auth endpoints, the public status/health probes, and the static SPA shell
+        are exempt. Control actions (``/api/control/*`` and ``/api/assistant``)
+        refuse non-loopback anonymous callers so a misconfigured public bind
+        cannot expose the kill switch or go-live ladder (audit H1); loopback
+        callers and any caller with a valid token are allowed.
+        """
+        path = request.url.path
+        if _is_public_path(path):
+            return await call_next(request)
+        is_local = _client_is_local(request.client.host if request.client else None)
+        token = _extract_bearer(request)
+        if token:
+            try:
+                decode_token(token, token_type="access")
+            except AuthError as exc:
+                return JSONResponse({"detail": str(exc)}, status_code=401)
+            return await call_next(request)
+        if _is_control_path(path) and not is_local:
+            return JSONResponse(
+                {"detail": "control requires authentication or a loopback client"},
+                status_code=401,
+            )
+        if is_local:
+            return await call_next(request)
+        return JSONResponse({"detail": "Authorization required"}, status_code=401)
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -244,10 +233,10 @@ def create_app(state: AppState) -> FastAPI:
 
     @app.get("/api/v2/status")
     def status():
-        """Public status endpoint: SaaS mode, runtime flags, and halt state."""
+        """Public status endpoint: runtime flags and halt state."""
         features = state.features_provider() if state.features_provider else {"features": {}}
         return {
-            "saas_enabled": get_saas_config().enabled,
+            "single_user": True,
             "features": features.get("features", {}),
             "halted": features.get("halted", False),
         }
@@ -517,9 +506,8 @@ def create_app(state: AppState) -> FastAPI:
         n = state.journal.decision_count()
         return _prometheus({"aimos_decisions_total": n})
 
-    if get_saas_config().enabled:
-        app.include_router(auth_router)
-        app.include_router(tenant_router)
+    app.include_router(auth_router)
+    app.include_router(user_router)
 
     # Expose the injected state and failed-login tracker to request-time code.
     app.state.aimos = state

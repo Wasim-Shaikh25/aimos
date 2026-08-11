@@ -1,22 +1,22 @@
 """Single-user settings and encrypted exchange-secret store.
 
 Replaces the per-tenant YAML workflow: the dashboard writes config overrides and
-API keys here; the runtime reads them at boot and each tick.  Secrets are
+API keys here; the runtime reads them at boot and each tick. Secrets are
 encrypted at rest with a server-side Fernet key and are never returned to the UI.
 """
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 from pathlib import Path
 from typing import Any
 
 from cryptography.fernet import Fernet
-from sqlalchemy import JSON, String
-from sqlalchemy.orm import Mapped, Session, mapped_column
+from sqlalchemy.orm import Session
 
-from aimos.saas.db import Base, get_session_maker
+from aimos.storage.db import UserSettingsRecord, get_storage_engine, normalize_sqlalchemy_url
 
 
 def _secrets_dir() -> Path:
@@ -35,23 +35,29 @@ def _settings_key_file() -> Path:
     return _secrets_dir() / ".settings_key"
 
 
-class UserSettings(Base):
-    """One row per user (single-user deployment uses user_id='default')."""
+def _settings_database_url() -> str:
+    """Use the unified operational database when configured, otherwise a local SQLite file."""
+    from aimos.core.config import load_params
 
-    __tablename__ = "user_settings"
-
-    user_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    secrets: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    params = load_params()
+    storage_cfg = params.model_dump().get("storage", {}) or {}
+    database_url = storage_cfg.get("database_url", "")
+    if database_url:
+        return normalize_sqlalchemy_url(database_url)
+    _STATE_DIR = Path("state")
+    _STATE_DIR.mkdir(parents=True, exist_ok=True)
+    return f"sqlite:///{_STATE_DIR / 'settings.sqlite'}"
 
 
 class SettingsStore:
-    """Encrypted settings store keyed by user_id."""
+    """Encrypted settings store for the single local user."""
 
     _key: bytes | None = None
 
-    def __init__(self, user_id: str = "default") -> None:
+    def __init__(self, user_id: str = "default", database_url: str = "") -> None:
         self.user_id = user_id
+        url = database_url or _settings_database_url()
+        self.engine = get_storage_engine(url)
 
     @classmethod
     def _master_key(cls) -> bytes:
@@ -75,21 +81,20 @@ class SettingsStore:
     def _decrypt(self, token: str) -> str:
         return self._fernet().decrypt(token.encode("ascii")).decode("utf-8")
 
-    def _get_or_create(self, session: Session) -> UserSettings:
-        row = session.get(UserSettings, self.user_id)
+    def _get_or_create(self, session: Session) -> UserSettingsRecord:
+        row = session.get(UserSettingsRecord, self.user_id)
         if row is None:
-            row = UserSettings(user_id=self.user_id, config={}, secrets={})
+            row = UserSettingsRecord(user_id=self.user_id, config={}, secrets={})
             session.add(row)
         return row
 
     def get_config(self) -> dict[str, Any]:
-        with get_session_maker()() as session:
-            row = session.get(UserSettings, self.user_id)
+        with Session(self.engine) as session:
+            row = session.get(UserSettingsRecord, self.user_id)
             return dict(row.config) if row else {}
 
     def update_config(self, updates: dict[str, Any]) -> dict[str, Any]:
-        import copy
-        with get_session_maker()() as session:
+        with Session(self.engine) as session:
             row = self._get_or_create(session)
             cfg = copy.deepcopy(row.config) if row.config else {}
             self._deep_update(cfg, updates)
@@ -105,7 +110,7 @@ class SettingsStore:
                 encrypted[k] = self._encrypt(v)
             else:
                 encrypted[k] = v
-        with get_session_maker()() as session:
+        with Session(self.engine) as session:
             row = self._get_or_create(session)
             secrets = dict(row.secrets)
             secrets[venue] = encrypted
@@ -113,8 +118,8 @@ class SettingsStore:
             session.commit()
 
     def delete_exchange(self, venue: str) -> bool:
-        with get_session_maker()() as session:
-            row = session.get(UserSettings, self.user_id)
+        with Session(self.engine) as session:
+            row = session.get(UserSettingsRecord, self.user_id)
             if row is None:
                 return False
             secrets = dict(row.secrets)
@@ -125,8 +130,8 @@ class SettingsStore:
 
     def get_exchanges(self) -> dict[str, dict[str, Any]]:
         """Return metadata for each configured exchange (no keys)."""
-        with get_session_maker()() as session:
-            row = session.get(UserSettings, self.user_id)
+        with Session(self.engine) as session:
+            row = session.get(UserSettingsRecord, self.user_id)
             if row is None:
                 return {}
             out: dict[str, dict[str, Any]] = {}
@@ -139,8 +144,8 @@ class SettingsStore:
 
     def get_exchange_credentials(self, venue: str) -> dict[str, Any] | None:
         """Return plaintext credentials for one exchange (runtime use only)."""
-        with get_session_maker()() as session:
-            row = session.get(UserSettings, self.user_id)
+        with Session(self.engine) as session:
+            row = session.get(UserSettingsRecord, self.user_id)
             if row is None:
                 return None
             data = row.secrets.get(venue)

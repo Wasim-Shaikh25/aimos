@@ -30,7 +30,7 @@ jobs:
         # older/patched setuptools (audit finding L2).
         run: |
           python -m pip install -U pip setuptools wheel
-          pip install -e '.[dev,data,serve,saas]'
+          pip install -e '.[dev,data,serve,runtime]'
 
       - name: Unit + integration tests
         run: python -m pytest -q

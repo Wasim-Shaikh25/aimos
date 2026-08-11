@@ -55,7 +55,6 @@ nesting). Key files: `default.yaml`, `observation.yaml`, `universe.yaml`,
 | `features.cross_exchange_enabled` | `false` | cross-venue price monitoring + arb (also enable the plugin) |
 | `features.scalp_enabled` | `true` | §17 minute-scale scalping |
 | `features.llm_news_sensor` | `false` | §19 LLM news sensor (needs `ANTHROPIC_API_KEY`) |
-| `features.saas_enabled` | `false` | single-admin login + encrypted settings UI (off keeps the original local dashboard) |
 | `paper.use_universe` | `true` | analyze the discovered/seeded universe (top-N by volume) |
 | `paper.max_symbols` | `40` | top-N assets analyzed per tick |
 | `paper.cross_venues` | `[binance, kraken]` | venues sampled for cross-exchange work |
@@ -78,16 +77,23 @@ restart. Live/funded flags are LOCKED there.
 | Decisions, outcomes, evidence, trades (hash-chained) | **SQLite** fallback | `paper.journal_path` → `state/aimos.sqlite` when no DB URL |
 | Equity / decisions / prices / trades time-series | **TimescaleDB** (optional) | `storage.timescale_dsn`, or defaults to `storage.database_url` |
 | Go-live progress | JSON | `state/go_live.json` |
-| Auth / settings metadata | SQLite/Postgres | `config/saas.yaml` `database_url` or `AIMOS__SAAS__DATABASE_URL` |
-| Runtime config overrides | SQLite/Postgres | `user_settings` table, edited via the Settings UI |
-| Per-user journals | SQLite | `state/journals/<org_id>.sqlite` (legacy path, single admin) |
+| User settings / auth metadata | SQLite/Postgres | unified `storage.database_url` (`user_settings` table) |
+| Runtime config overrides | SQLite/Postgres | `user_settings.config` JSON column, edited via the Settings UI |
 | Recorded market candles | Parquet | data root |
 | API secrets | **encrypted** | `user_settings.secrets` JSON column, managed through `/api/v2/settings/exchange` |
 
 **Single-DB mode:** set `storage.database_url` to a PostgreSQL (or SQLite) URL
-and the journal, runtime state, controls, and model registry are all stored in
-that database, making server swaps or restarts a connection-string change. The
-SQLite journal remains the tamper-evident fallback when no URL is configured.
+and the journal, runtime state, controls, model registry, and user settings are
+all stored in that database, making server swaps or restarts a connection-string
+change. The SQLite journal remains the tamper-evident fallback when no URL is
+configured.
+
+**Authentication** is single-user via environment:
+- `AIMOS_ADMIN_USERNAME` (default `admin`) and `AIMOS_ADMIN_PASSWORD` are checked
+  by `/auth/login`.
+- `AIMOS_JWT_SECRET` is optional; if unset a secret is generated and saved under
+  `~/.aimos/secrets/.jwt_secret`.
+
 **TimescaleDB** is optional analytics — install with `pip install -e '.[timescale]'`;
 it defaults to the same URL as `storage.database_url` when `timescale_dsn` is empty.
 
@@ -143,7 +149,7 @@ Disable with `AIMOS__RISK__ENABLED=false` if you do not want the scheduler job.
 
 ### Health probes (`/healthz`, `/readyz`)
 
-Public liveness/readiness endpoints (REQ-6), both exempt from SaaS auth:
+Public liveness/readiness endpoints (REQ-6), exempt from login:
 - `GET /healthz` — returns 200 `{"status":"ok"}` whenever the process responds.
 - `GET /readyz` — returns 200 only when the journal is writable **and** the paper
   loop heartbeat is fresher than `health.heartbeat_stale_seconds`; otherwise 503.
@@ -212,80 +218,42 @@ See `specs/ASSISTANT.md` for the grounding design and guardrails.
 
 ---
 
-## 5. Single-admin authentication and settings (optional)
+## 5. Single-user authentication and settings
 
-Enable with `features.saas_enabled: true` (or `AIMOS__FEATURES__SAAS_ENABLED=true`)
-and install the auth dependencies:
+Authentication is required for the dashboard. Credentials are supplied through the
+environment and checked by `/auth/login`.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AIMOS_ADMIN_USERNAME` | `admin` | login username |
+| `AIMOS_ADMIN_PASSWORD` | *(none)* | login password (required) |
+| `AIMOS_JWT_SECRET` | generated | 32-byte JWT HS256 key |
+| `AIMOS_SECRETS_DIR` | `~/.aimos/secrets` | directory for `.jwt_secret` and `.settings_key` |
+
+Install the auth/settings dependencies:
 
 ```bash
-pip install -e '.[serve,saas]'
+pip install -e '.[serve,runtime,data]'
 ```
 
-Auth/tenant data lives in the database configured by `config/saas.yaml`
-`database_url` or `AIMOS__SAAS__DATABASE_URL` (defaults to `sqlite:///state/auth.sqlite`).
-A 32-byte JWT secret is auto-generated and persisted in
-`~/.aimos/secrets/.jwt_secret` on first startup (or set `AIMOS__SAAS__JWT_SECRET`
-explicitly, or `AIMOS_SECRETS_DIR` to change the directory). In Docker, mount a
-separate `secrets` volume at `/app/secrets` and set `AIMOS_SECRETS_DIR=/app/secrets`.
+User settings and encrypted exchange API keys live in the unified database
+(`user_settings` table). If `storage.database_url` is empty, a local SQLite file is
+used. The JWT secret and settings Fernet key are generated and persisted under
+`AIMOS_SECRETS_DIR` on first start.
 
-The single admin user is seeded from `config/saas.yaml` `admin.*` or env vars:
-`AIMOS__SAAS__ADMIN__USER_ID`, `AIMOS__SAAS__ADMIN__EMAIL`,
-`AIMOS__SAAS__ADMIN__PHONE`, `AIMOS__SAAS__ADMIN__PASSWORD` (hashed on first run,
-never logged or returned). No public registration is exposed.
-
-**The only login flow is email + password, then an email OTP.** There is no phone/SMS
-login, no OAuth (Google/Apple), and no self-service password reset — that
-service-layer code was removed entirely, not just left unrouted, so there is
-nothing dormant to audit or accidentally re-expose. `admin.phone` /
-`AIMOS__SAAS__ADMIN__PHONE` is stored only as an informational profile field
-(returned by `/api/v2/me`); it does not enable a phone login path.
-
-### Operator-supplied credentials
-
-All external auth services are operator-supplied; AIMOS itself uses only
-free/open-source libraries. No paid third-party auth services are required.
-
-| Service | Config / env | What for |
-|---|---|---|
-| SMTP | `config/saas.yaml` `smtp.*` or `AIMOS__SAAS__SMTP__*` | send login OTP to the admin email |
-| Admin account | `config/saas.yaml` `admin.*` or `AIMOS__SAAS__ADMIN__*` | single user seeded at startup |
-
-**Recommended SMTP provider: [Brevo](https://www.brevo.com)** (formerly Sendinblue).
-Free tier includes an SMTP relay (300 emails/day, no card required) — more than
-enough for one operator's login codes, and `email.py` already speaks plain SMTP, so
-no provider-specific code is needed. Create an SMTP key at Brevo → Settings → SMTP &
-API, then set:
-
-```yaml
-smtp:
-  host: smtp-relay.brevo.com
-  port: 587
-  username: "<your Brevo account login email>"
-  password: "<the generated SMTP key>"   # or AIMOS__SAAS__SMTP__PASSWORD
-  use_tls: true
-  from_address: "<a sender verified in Brevo>"
-```
-
-Any standard SMTP provider (Gmail app password, self-hosted Postfix, SES SMTP, etc.)
-works the same way — Brevo is a recommendation, not a hard dependency.
-
-If SMTP is not configured, the login OTP is **not** delivered by default (it is not
-logged and not dropped to disk — a one-time code in a plaintext file defeats the
-second factor). For local development with no SMTP, set **`AIMOS_DEV_MAILDROP=1`** to
-write the code to `state/maildrop/login-<email>.txt` (mode `0600`). Never set this in
-production.
+**No SMTP, OTP, or registration** is exposed. Password changes are made by updating
+`AIMOS_ADMIN_PASSWORD` in the environment and restarting.
 
 **Bind host.** `python -m aimos.runtime.serve` binds **`127.0.0.1`** by default (never
 publicly reachable by accident). Set `AIMOS_HOST=0.0.0.0` explicitly — behind a
 VPN/SSH tunnel or an authenticated reverse proxy — to bind all interfaces. The Docker
 image sets `0.0.0.0` because Compose already publishes only `127.0.0.1:8000` on the
-host. When SaaS auth is **off**, control endpoints (`/api/control/*`, `/api/assistant`)
-accept only loopback callers.
+host. Control endpoints (`/api/control/*`, `/api/assistant`) accept loopback callers
+without a token; remote callers must supply a valid `Authorization: Bearer <token>`.
 
 ### Endpoints
 
-- `POST /auth/login` — verify admin password and trigger an email OTP.
-- `POST /auth/login/verify` — verify the email OTP and receive access/refresh tokens.
+- `POST /auth/login` — verify username/password and receive an access token.
 - `POST /auth/refresh`, `POST /auth/logout` — token rotation and logout.
 - `GET /api/v2/me` — current admin user.
 - `GET /api/v2/settings` — effective single-user config + exchange metadata.
@@ -293,25 +261,19 @@ accept only loopback callers.
 - `POST /api/v2/settings/exchange`, `DELETE /api/v2/settings/exchange/{venue}` —
   add/remove encrypted exchange API keys.
 
-The dashboard detects SaaS mode via `/api/v2/status`; when SaaS is off it falls
-back to the original single-user experience.
-
 ### Runtime state
 
-With SaaS enabled, the loop uses `AIMOS_RUNTIME_ORG_ID=<org-id>` for its journal
-(`state/journals/<org-id>.sqlite`) and persists broker state, multi-venue
-balances, positions, equity curve, go-live ladder, and feature flags to the
-auth/settings DB. For single-user deployments the journal stays at
-`paper.journal_path` and local state is stored in `tenant_local_state/state.json`
-beside the journal.
+The loop uses `AIMOS_RUNTIME_ORG_ID=local` and stores broker state, multi-venue
+balances, positions, equity curve, go-live ladder, and feature flags in the
+unified `storage.database_url` (or local JSON files as a fallback). The journal is
+at `paper.journal_path` when no database URL is configured.
 
 ### API requests
 
-When SaaS is enabled, `/api/v2/*` routes validate the JWT themselves. Trading
-endpoints (`/api/*` outside `/api/v2/*`) require an `Authorization: Bearer <token>`
-header plus `X-Organization-Id: <org-id>`. The token's `org` claim and the header
-must both equal the runtime's `AIMOS_RUNTIME_ORG_ID`. The dashboard's `api.js`
-sends these automatically after the admin logs in.
+Protected endpoints require an `Authorization: Bearer <token>` header. The
+dashboard's `api.js` sends this automatically after login. Control endpoints
+(`/api/control/*`, `/api/assistant`) also accept loopback callers without a
+token.
 
 ---
 
@@ -357,12 +319,10 @@ Telegram locks, the fail-closed `mandate.yaml`, and the boot guard.
 
 - **Start:** `docker compose up -d`. **Stop:** `docker compose down` (the journal
   persists; restart reconciliation resolves state).
-- **Upgrade:** pull → run Alembic migrations → `docker compose build` → `docker compose up -d`.
+- **Upgrade:** pull → `docker compose build` → `docker compose up -d`.
   Vendored code is frozen; re-vendoring is a deliberate human-approved event (§22.3).
-- **Database migrations:** the SaaS/auth schema is managed by Alembic.
-  Run `alembic upgrade head` (or `python -m alembic upgrade head`) before starting
-  a new version; `aimos.saas.db.get_engine()` and `scripts/migrate_to_saas.py` run
-  migrations automatically on first use.
+- **Database schema:** SQLAlchemy tables are created automatically on first use. No
+  Alembic migrations are currently required.
 - **Emergency stop:** dashboard **Positions & Risk → killswitch** (CONFIRM-gated);
   Telegram `/killswitch` (nonce-confirmed); or `touch RUNTIME_HALT` in the working
   dir (loop halts, forces NO_TRADE).
@@ -374,15 +334,11 @@ AIMOS defaults to **loopback-only** (`AIMOS_HOST=127.0.0.1`). This is the safe
 configuration for a single-operator machine or a deployment behind a trusted
 reverse proxy / VPN on the same host.
 
-- **No SaaS:** control endpoints (`/kill`, `/feature`, `/go-live`,
-  `/api/assistant/*`) refuse non-loopback callers. `/healthz` and `/readyz` are
-  public for load-balancer probes. Do **not** bind to `0.0.0.0` and expose the
-  port to the internet; the control surface is not authenticated in this mode.
+- **Control endpoints** (`/api/control/*`, `/api/assistant/*`) refuse non-loopback
+  callers that do not supply a valid `Authorization: Bearer <token>` header.
+  `/healthz` and `/readyz` are public for load-balancer probes.
 - **External reach:** use an authenticated reverse proxy (mTLS or a VPN) on the
-  same trust boundary, or enable SaaS (`features.saas_enabled: true`) so the
-  control surface requires a valid access token + `X-Organization-Id` header.
-  SaaS mode still expects to sit behind a TLS-terminating proxy; the runtime
-  does not terminate public TLS itself.
+  same trust boundary. AIMOS does not terminate public TLS itself.
 
 ### Backups & restore (§23.5)
 
@@ -410,8 +366,8 @@ Tuning: `config/default.yaml` `backup.*` or env `AIMOS__BACKUP__INTERVAL_SECONDS
 `aimos/runtime/serve.py` and uses `aimos.journal.backup.backup_journal` with the
 per-tenant journal path.
 
-Back up **separately and securely**: the auth/settings DB
-(`state/auth.sqlite` or Postgres via `AIMOS__SAAS__DATABASE_URL`) and
+Back up **separately and securely**: the unified database
+(`storage.database_url` or `state/aimos.sqlite` as fallback) and
 `~/.aimos/secrets/.settings_key` (or `AIMOS_SECRETS_DIR/.settings_key`) — without
 the key, encrypted exchange credentials are unrecoverable. Never drop the settings
 key into `backups/` alongside the journal; treat it as a secret.

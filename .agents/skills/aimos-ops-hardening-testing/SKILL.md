@@ -16,9 +16,9 @@ Run offline end-to-end checks for the PR #4 batch: `/healthz`, `/readyz`, `/api/
   eval "$(pyenv init -)"
   pyenv local 3.11.11
   ```
-- Ensure SaaS extras are installed for the auth timing path:
+- Install runtime + serve extras:
   ```bash
-  python -m pip install -e '.[runtime,saas]' --quiet
+  python -m pip install -e '.[runtime,serve]' --quiet
   ```
 - Set offline flags:
   ```bash
@@ -28,13 +28,11 @@ Run offline end-to-end checks for the PR #4 batch: `/healthz`, `/readyz`, `/api/
 
 ## Devin Secrets Needed
 None for offline mode.
-For the auth test the values are placeholders set via env:
+For the auth test set placeholders via env:
 ```bash
-AIMOS__SAAS__ENABLED=true
-AIMOS__SAAS__ADMIN__EMAIL=admin@example.com
-AIMOS__SAAS__ADMIN__PASSWORD=AdminPass123!
-AIMOS__SAAS__JWT_SECRET=test-secret-32-bytes-long-xxxxxxxxxx
-AIMOS__SAAS__DATABASE_URL=sqlite:///state/auth_test.sqlite
+AIMOS_ADMIN_USERNAME=admin
+AIMOS_ADMIN_PASSWORD=AdminPass123!
+AIMOS_JWT_SECRET=test-secret-32-bytes-long-xxxxxxxxxx
 ```
 
 ## Key gotchas
@@ -68,10 +66,10 @@ Use `TestClient` with `build_app(offline=True)`:
 
 ## Verifying auth not-found timing mask
 ```python
-client.post("/auth/login", json={"email":"nobody@example.com","password":"AdminPass123!"})
-# -> 401 {"detail":"Invalid email or password"}
-client.post("/auth/login", json={"email":"admin@example.com","password":"WrongPass123!"})
-# -> identical 401 message; no "not found" or email-existence leak
+client.post("/auth/login", json={"username":"nobody","password":"AdminPass123!"})
+# -> 401 {"detail":"invalid credentials"}
+client.post("/auth/login", json={"username":"admin","password":"WrongPass123!"})
+# -> identical 401 message; no username-existence leak
 ```
 
 ## Verifying the GPL tripwire

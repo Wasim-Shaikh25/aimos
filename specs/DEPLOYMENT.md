@@ -133,37 +133,33 @@ docker compose up -d          # aimos (serve) + postgres(TimescaleDB) + watchdog
 - **Backups:** `state/aimos.sqlite` is the system of record — back it up (a nightly
   `cp`/`rsync` off-box is enough). Postgres is optional analytics.
 
-### SaaS-enabled deployment (single admin + settings UI)
+### Single-user deployment (login + settings UI)
 
-Enable the login gate and the encrypted settings store with the same Compose
-stack. The auth/settings tables live in the existing Postgres container or
-`state/auth.sqlite` by default.
+The dashboard now requires a single admin login and stores encrypted settings in
+the unified database. Authentication credentials come from the environment.
 
 ```bash
 cp .env.example .env
-# admin is seeded automatically from the env/config below on first start
-docker compose up -d
+# set AIMOS_ADMIN_PASSWORD at minimum; docker compose up -d
 ```
 
 Then set in `.env`:
 
 ```
-AIMOS__FEATURES__SAAS_ENABLED=true
-AIMOS__SAAS__ADMIN__USER_ID=admin
-AIMOS__SAAS__ADMIN__EMAIL=admin@example.com
-AIMOS__SAAS__ADMIN__PASSWORD='CHANGEME'
-AIMOS__SAAS__JWT_SECRET=<32-byte-secret-or-generate-on-first-start>
-AIMOS__SAAS__SMTP__HOST=smtp.example.com
-AIMOS__SAAS__SMTP__PORT=587
-AIMOS__SAAS__SMTP__USERNAME=...
-AIMOS__SAAS__SMTP__PASSWORD=...
-AIMOS__SAAS__SMTP__FROM=AIMOS <noreply@example.com>
+AIMOS_ADMIN_USERNAME=admin
+AIMOS_ADMIN_PASSWORD='CHANGEME'
+# AIMOS_JWT_SECRET=<32-byte-secret-or-generate-on-first-start>
 ```
 
-The admin password is hashed on first start. After login, the Settings UI is the
-single place to set paper/testnet/live mode, features, mandate limits, training
-parameters, and encrypted exchange API keys. There is no public registration,
-organization switching, or member invite flow.
+For unified persistence (journal + state + controls + model registry + user
+settings in one Postgres), also set:
+
+```
+AIMOS__STORAGE__DATABASE_URL=postgresql+psycopg://aimos:aimos@postgres:5432/aimos
+```
+
+After login, the Settings UI is the single place to set paper/testnet/live mode,
+features, mandate limits, training parameters, and encrypted exchange API keys.
 
 Cost floor: a paper deployment runs comfortably for **~$5/month**.
 

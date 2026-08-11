@@ -21,8 +21,8 @@ prerequisite) · ⏭️ not built yet.
 | 4 | Execution: plugins, evaluator, sizer, risk manager, journal (hash chain), backtester | ✅ |
 | 5 | Runtime, API, React dashboard, Telegram, ignition, risk analytics | ✅ |
 | 6 | Learning (shadow), agents, LLM sensor, live broker, go-live gates | ✅ |
-| SaaS P1 | Single-admin auth seeded from config/env, email OTP 2FA, JWT, tenant orgs (multi-user UX removed) | ✅ |
-| SaaS P2/P3 (partial) | Runtime state persistence, per-tenant config/journal/state store, broker/sim resume, streaming scaffold + feed into paper loop, ML registry, dashboard equity + candlestick charts, evidence tables, decision anatomy, org settings, auth screens, org scoping, migration, Dockerfile, vendor manifest + vendoring script, live multi-venue executor wiring (fail-closed), tests | ✅ |
+| Single-user auth | Env-credential login (`AIMOS_ADMIN_USERNAME`/`AIMOS_ADMIN_PASSWORD`), JWT | ✅ |
+| Single-user settings | Encrypted config + exchange API-key store, runtime loads overrides at boot | ✅ |
 
 The §25.9 golden worked example reproduces exactly (fusion 0.766/0.428; execution
 NO_TRADE, EV −0.018). **535 passed, 1 xfailed**; magic-number + naive-datetime lints
@@ -31,22 +31,21 @@ clean; import-linter 6/6.
 > ✅ **Production readiness: STOP — CONDITIONAL GO.** See **`PRODUCTION_READINESS_AUDIT.md`**.
 > **All Critical/High/Medium audit blockers are fixed** — the 2 Criticals (C1
 > traversal, C2 auth-lockout) verified live, and H1–H5 + M8 + L5 fixed with tests
-> (466 → 516). The H3 `email_login_codes.attempts` schema change is now an Alembic
-> migration (REQ-9), the backup scheduler runs hourly by default (REQ-12), the
-> network-exposure model is documented as loopback-only/proxy-or-SaaS (REQ-10),
-> and key material defaults to `~/.aimos/secrets` with a dedicated Docker secrets
-> volume (REQ-14). The dormant on-chain engine now has a Coin Metrics Community
-> API provider (REQ-16), and the dashboard accessibility pass is complete
-> (REQ-15). The independent verification pass is complete and the two go-live
-> blockers it found are fixed: killswitch can now be reset via `POST
-> /api/control/unhalt` and the dashboard Controls screen, and `/api/v2/status` now
-> surfaces runtime feature flags plus `halted` state.
+> (466 → 516). The SaaS/multi-tenant code and Alembic auth migrations have been
+> removed; AIMOS is single-user with env credentials and JWT (REQ-9/REQ-10), the
+> backup scheduler runs hourly by default (REQ-12), and key material defaults to
+> `~/.aimos/secrets` with a dedicated Docker secrets volume (REQ-14). The dormant
+> on-chain engine now has a Coin Metrics Community API provider (REQ-16), and the
+> dashboard accessibility pass is complete (REQ-15). The independent verification
+> pass is complete and the two go-live blockers it found are fixed: killswitch can
+> now be reset via `POST /api/control/unhalt` and the dashboard Controls screen, and
+> `/api/v2/status` now surfaces runtime feature flags plus `halted` state.
 >
 > **REQ-13 (API/loop process split) is implemented.** `AIMOS_PROCESS=combined/api/loop`
 > selects whether `serve.py` runs both the API and loop, only the API with a
 > `RuntimeStateStore`/ControlStore rehydration task, or only the loop via
-> `python -m aimos.runtime.loop_process`. `OrganizationState` gained `view` and
-> `controls` JSON columns with an Alembic migration.
+> `python -m aimos.runtime.loop_process`. Runtime state and controls are persisted
+> through the unified `RuntimeStateRecord` / `ControlStateRecord` tables.
 
 ---
 

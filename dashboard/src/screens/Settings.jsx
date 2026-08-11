@@ -34,7 +34,7 @@ function Toggle({ label, checked, onChange }) {
 }
 
 export default function Settings() {
-  const { user, saasEnabled } = useAuth()
+  const { user } = useAuth()
   const [settings, setSettings] = useState(null)
   const [draft, setDraft] = useState({})
   const [loading, setLoading] = useState(false)
@@ -46,11 +46,6 @@ export default function Settings() {
   const [secret, setSecret] = useState('')
   const [testnet, setTestnet] = useState(true)
   const [withdraw, setWithdraw] = useState(false)
-
-  // Password change form
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
 
   const load = async () => {
     const s = await api.settings()
@@ -98,31 +93,6 @@ export default function Settings() {
     else notify('Failed to remove exchange key')
   }
 
-  const changePassword = async (e) => {
-    e.preventDefault()
-    if (newPassword !== confirmPassword) {
-      notify('New passwords do not match')
-      return
-    }
-    setLoading(true)
-    const res = await api.changePassword(currentPassword, newPassword)
-    setLoading(false)
-    if (res?.ok) {
-      notify('Password changed')
-      setCurrentPassword('')
-      setNewPassword('')
-      setConfirmPassword('')
-    } else {
-      notify('Failed to change password')
-    }
-  }
-
-  if (!saasEnabled) return (
-    <div className="page"><h1>Settings</h1>
-      <p className="muted">Settings are only available when SaaS is enabled.</p>
-    </div>
-  )
-
   if (!settings || !draft.mode) return <div className="page"><h1>Settings</h1><p className="muted">Loading…</p></div>
 
   const exchanges = settings.exchanges || {}
@@ -131,7 +101,7 @@ export default function Settings() {
     <h1>Settings</h1>
     {message && <p style={{ color: 'var(--green)', fontSize: 13 }}>{message}</p>}
     <div className="tiles">
-      <Tile k="User" v={user?.email || user?.id || '—'} />
+      <Tile k="User" v={user?.username || user?.id || '—'} />
       <Tile k="Mode" v={draft.mode || 'paper'} />
       <Tile k="Configured exchanges" v={Object.keys(exchanges).length} />
     </div>
@@ -221,19 +191,6 @@ export default function Settings() {
         <br /><code>python -m scripts.train_from_history --parquet --exchange binance --symbol {draft.training?.symbols?.split(',')[0] || 'BTC/USDT'} --timeframe {draft.training?.timeframe || '1h'}</code>
       </p>
       <button onClick={() => save('training', draft.training)} disabled={loading}>Save training settings</button>
-    </div>
-
-    <h2>Change admin password</h2>
-    <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, padding: 16, marginBottom: 18 }}>
-      <form onSubmit={changePassword}>
-        <Field label="Current password" type="password" value={currentPassword} onChange={setCurrentPassword} required />
-        <Field label="New password" type="password" value={newPassword} onChange={setNewPassword} required />
-        <Field label="Confirm new password" type="password" value={confirmPassword} onChange={setConfirmPassword} required />
-        <p className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
-          Minimum 8 characters, upper and lower case, a digit, and a symbol.
-        </p>
-        <button type="submit" disabled={loading || !currentPassword || !newPassword || !confirmPassword}>Change password</button>
-      </form>
     </div>
 
     <h2>Effective config preview</h2>

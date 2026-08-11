@@ -188,7 +188,6 @@ features:
   multi_venue_live: false           # Phase D — route arb legs to LIVE per-venue brokers
                                     # (needs mandate + per-venue keys; §23.8 go-live ladder)
   streaming_enabled: false          # Phase 3 — public websocket top-of-book/trades/ticker feed
-  saas_enabled: false               # SaaS v2.0 — user registration, auth, multi-tenancy
 
 # Phase 3 — websocket feed tuning (only used when features.streaming_enabled is true)
 streaming:

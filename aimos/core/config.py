@@ -223,7 +223,6 @@ def _build_raw(config_dir: Path) -> dict[str, Any]:
         "counterparty",
         "optimize_space",
         "trade_manager",
-        "saas",
     ]
     for stem in single_files:
         raw[stem] = _read_yaml(config_dir / f"{stem}.yaml")

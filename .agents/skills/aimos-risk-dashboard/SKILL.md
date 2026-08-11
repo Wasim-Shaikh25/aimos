@@ -52,7 +52,7 @@ Required keys: `var_95_pct`, `es_95_pct`, `var_99_pct`, `es_99_pct`, `sample_siz
 
 ## Verifying the dashboard
 - Open `http://localhost:8000/` in Chrome (or the system browser).
-- The app runs in single-user mode: `/api/v2/status` returns `{"saas_enabled": false}`, so the auth provider falls back to a local user with no login prompt.
+- The app runs in single-user mode: log in with `AIMOS_ADMIN_USERNAME`/`AIMOS_ADMIN_PASSWORD`.
 - Navigate to **Positions & Risk** and confirm the **Stress panel (§24.1)** tiles:
   - VaR 95%, ES 95%, VaR 99%, ES 99%
   - BTC beta, BTC beta %, Idiosyncratic %

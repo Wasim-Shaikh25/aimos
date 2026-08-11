@@ -21,7 +21,7 @@ WORKDIR /app
 
 # Copy dependency spec first for layer caching.
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir -e '.[serve,saas,data]'
+RUN pip install --no-cache-dir -e '.[serve,runtime,data]'
 
 # Copy source and built dashboard.
 COPY aimos/ ./aimos/

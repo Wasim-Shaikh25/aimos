@@ -43,10 +43,10 @@ follow **[specs/DEPLOYMENT.md](specs/DEPLOYMENT.md)** (and
 | TimescaleDB time-series | `pip install -e '.[timescale]'` + `AIMOS_TIMESCALE_DSN` |
 | Live balances / account | read-only, **withdrawal-disabled** keys (see `secrets.example.yaml`) |
 | **Live trading** | funded accounts + keys + the **go-live ladder** (§23.8) |
-| **Single-admin login / settings UI** | set `features.saas_enabled: true` and `saas.admin.*` in `config/saas.yaml` or `AIMOS__SAAS__ADMIN__*` env vars |
+| **Single-user login / settings UI** | `AIMOS_ADMIN_USERNAME` + `AIMOS_ADMIN_PASSWORD` |
 
 Paper trading and price monitoring need **none** of these. Details in
-[specs/OPERATIONS.md](specs/OPERATIONS.md) and [specs/AIMOS_SaaS_Requirements_and_Task_Tracker.md](specs/AIMOS_SaaS_Requirements_and_Task_Tracker.md).
+[specs/OPERATIONS.md](specs/OPERATIONS.md).
 
 ## Where data is saved
 

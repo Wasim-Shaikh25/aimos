@@ -41,14 +41,12 @@ from aimos.execution.broker.live import LiveBroker, MandateGate
 from aimos.execution.broker.live_router import MultiVenueLiveRouter
 from aimos.execution.broker.paper import PaperBroker
 from aimos.execution.position_sizer import SizingInputs
+from aimos.auth.security import FailedLoginTracker
 from aimos.journal.backup import backup_journal
 from aimos.journal.journal import Journal
 from aimos.runtime.state_store import ControlStore, RuntimeStateStore, build_snapshot
-from aimos.saas.auth_service import FailedLoginTracker
-from aimos.saas.config_tenant import load_params_for_org
-from aimos.saas.journal_tenant import tenant_journal_path
-from aimos.saas.settings import get_saas_config
-from aimos.saas.settings_store import SettingsStore
+from aimos.settings import SettingsStore
+from aimos.settings.config import load_params_for_user
 from aimos.telegram.sink import TelegramSink
 from aimos.execution.risk_manager import RiskState
 from aimos.runtime.pipeline import PipelineOrchestrator
@@ -166,7 +164,7 @@ def _build_components(offline: Optional[bool] = None) -> dict[str, Any]:
     Path("state").mkdir(exist_ok=True)
     clock = LiveClock()
     org_id = os.environ.get("AIMOS_RUNTIME_ORG_ID", "local")
-    params = load_params_for_org(org_id)
+    params = load_params_for_user()
     features = params.features.model_dump()
     paper = params.paper.model_dump()
     costs_cfg = params.costs.model_dump()
@@ -175,7 +173,7 @@ def _build_components(offline: Optional[bool] = None) -> dict[str, Any]:
     health_cfg = params.model_dump().get("health", {}) or {}
     storage_cfg = params.model_dump().get("storage", {}) or {}
     database_url = storage_cfg.get("database_url", "") or ""
-    jpath = database_url or tenant_journal_path(org_id, params)
+    jpath = database_url or paper.get("journal_path") or ":memory:"
     state_dir: Optional[Path] = Path("state") / "tenants" / org_id
     if not database_url and jpath != ":memory:":
         state_dir = Path(jpath).parent / f"tenant_{org_id}_state"
@@ -657,10 +655,7 @@ def build_app(offline: Optional[bool] = None):
     )
     # Wire failed-login alerts to Telegram (REQ-7).  Uses the same sink as the
     # runtime; tests use the default no-op alert_fn.
-    saas_cfg = get_saas_config()
     state.auth_alert_tracker = FailedLoginTracker(
-        threshold=saas_cfg.failed_login_alert_threshold,
-        window_seconds=saas_cfg.failed_login_alert_window_seconds,
         alert_fn=sink.send if sink is not None else None,
     )
     app = create_app(state)
