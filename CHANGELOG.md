@@ -6,6 +6,27 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added (final audit reconciliation — closing the loop on "is everything documented")
+- Went back through `PRODUCTION_READINESS_AUDIT.md` finding-by-finding against
+  current code, rather than trusting the earlier backlog summary. One genuine gap:
+  - **T-017 (new)** — audit **M6** (`/metrics` requires auth, breaking Prometheus
+    scraping) is **still open in current code**: `_PROTECTED_EXACT = {"/metrics"}`
+    in `aimos/api/server.py` still returns not-public, and `specs/OPERATIONS.md`
+    has no Prometheus mention or documented resolution. Never closed, never
+    explicitly accepted.
+  - Confirmed **M2/M4 are moot**, not open — both lived in `aimos/saas/`, which no
+    longer exists (`ls aimos/saas` → not found), deleted by the single-user refactor.
+  - Confirmed **L3** (go-live gates markable out of order) is already fixed —
+    `GoLiveLadder.mark()` rejects out-of-order completion per **REQ-8**, landed
+    after the audit was written.
+  - **T-006 escalated**: audit finding **L1** recorded this exact failure mode
+    once already (STATUS claimed 465, measured 466) — the test count has now
+    drifted at least twice. Cross-referenced with **L2** (`ta==0.11.0` fails to
+    build against Debian-patched setuptools, reproduced independently while
+    running this suite), which means the count is environment-dependent and a
+    hardcoded figure in a "single source of truth" file will keep drifting.
+    T-006 now asks for a computed count, not just a corrected one.
+
 ### Added (competitive analysis of 7 OSS trading platforms)
 - **`specs/COMPETITIVE_ANALYSIS.md`** — review of QuantConnect LEAN, Hummingbot,
   NautilusTrader, Freqtrade/FreqAI, Abu, Passivbot, and OpenAlgo against AIMOS, with

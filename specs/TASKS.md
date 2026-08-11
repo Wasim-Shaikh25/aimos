@@ -493,7 +493,7 @@ CI. It needs a human decision, not a build fix.
 
 ---
 
-## T-006 ⬜ Reconcile the test-count discrepancy
+## T-006 ⬜ Reconcile the test-count discrepancy — and stop it recurring
 
 **Priority:** P2 · **Est:** S
 
@@ -503,14 +503,68 @@ the gap does not close after installing `lightgbm`/`scikit-learn`. Either 42 tes
 were removed without updating STATUS, or they are gated behind something not
 present in a standard install (`ta` fails to build in the container image).
 
+**This is not the first time.** `PRODUCTION_READINESS_AUDIT.md` finding **L1**
+records the *identical* failure mode against an earlier commit: STATUS claimed
+465, measured was 466. The number has now drifted at least twice. A hand-maintained
+count in a "single source of truth" file is a recurring liability, not a one-off typo.
+
+**Likely root cause, cross-referenced with audit L2:** `ta==0.11.0` ships as an
+sdist with no wheel and fails to build against a Debian-patched system
+setuptools (`AttributeError: install_layout`) — reproduced independently while
+running this suite. L2 accepted this as low-risk because `run.sh` provisions a
+clean venv, but it means test count is **environment-dependent**, which is exactly
+the condition that makes a static number in STATUS.md misleading.
+
 Left unreconciled, the number is a false assurance — the exact failure mode the
 audit warned about with manual gates.
 
 ### Acceptance criteria
 
-- [ ] Root cause identified (removed tests vs environment-gated).
-- [ ] `specs/STATUS.md` corrected to the reproducible number.
+- [ ] Root cause identified (removed tests vs environment-gated vs `ta` build failure).
+- [ ] `specs/STATUS.md` corrected to the reproducible number, **or** replaced with
+      a command (`python -m pytest -q | tail -1`) instead of a hardcoded figure so
+      it cannot drift again.
 - [ ] If environment-gated: documented in `specs/OPERATIONS.md` with the extra needed.
+
+---
+
+## T-017 ⬜ Resolve `/metrics` auth vs. Prometheus scraping (audit M6)
+
+**Priority:** P2 · **Est:** S
+
+Audit finding **M6**, verified still open against current code:
+
+```python
+# aimos/api/server.py:115,124
+_PROTECTED_EXACT = {"/metrics"}
+...
+if path in _PROTECTED_EXACT:
+    return False   # /metrics is NOT public — still requires bearer/cookie auth
+```
+
+Prometheus cannot present a bearer token without extra configuration, so `/metrics`
+being behind auth silently breaks scraping. `specs/OPERATIONS.md` has no mention of
+Prometheus or a documented resolution — this was flagged in the audit and never
+closed or explicitly accepted.
+
+**Unlike M2/M4** (which lived in the now-deleted `aimos/saas/` and are moot), this
+code path is live today.
+
+### Acceptance criteria
+
+- [ ] Decision recorded: either (a) support a static scrape token via config/env, or
+      (b) bind `/metrics` to a separate internal-only port/listener, or (c)
+      explicitly accept unauthenticated `/metrics` as low-risk (decision counts only,
+      no secrets) and move it to `_is_public_path`.
+- [ ] Documented in `specs/OPERATIONS.md` alongside `/healthz`/`/readyz`.
+
+### Test cases
+
+| ID | Test | Assert |
+|---|---|---|
+| T-017.1 | Unauthenticated scrape with chosen solution | succeeds |
+| T-017.2 | If token-gated | wrong/missing token → 401, right token → 200 |
+| T-017.3 | Regression | `/api/*` and `/api/control/*` remain protected regardless |
 
 ---
 
