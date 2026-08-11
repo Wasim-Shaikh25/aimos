@@ -20,6 +20,7 @@ import argparse
 import asyncio
 from dataclasses import dataclass, field
 from datetime import timezone
+from pathlib import Path
 from typing import Optional
 
 import structlog
@@ -29,6 +30,7 @@ from aimos.core.clock import LiveClock
 from aimos.core.config import Params, load_params
 from aimos.core.schemas import Action, CapacityCaps, ExecContext, Timeframe
 from aimos.data.context import build_context
+from aimos.journal.journal import Journal
 from aimos.data.live_source import (
     CcxtPublicSource,
     SyntheticSource,
@@ -91,7 +93,10 @@ async def run_paper(
     from aimos.runtime.golive import guard_live_boot
     guard_live_boot(params)  # fail-closed: refuse to run live before the go-live ladder is complete
     clock = LiveClock()
-    orch = PipelineOrchestrator(params, clock=clock)
+    journal_path = paper.get("journal_path") or ":memory:"
+    if journal_path != ":memory:":
+        Path(journal_path).parent.mkdir(parents=True, exist_ok=True)
+    orch = PipelineOrchestrator(params, clock=clock, journal=Journal(journal_path))
     broker = PaperBroker(float(paper["starting_equity_usdt"]), cost_mod.from_config(costs_cfg))
     caps = _caps(params)
 
@@ -145,6 +150,7 @@ async def run_paper(
                 summary.trades_opened += 1
                 broker.place(result.plan)
             broker.step(base_of(symbol), last.to_dict(), now)
+            orch.flush_broker_outcomes(broker)
             log.info("tick", symbol=symbol, regime=result.understanding.regime.value,
                      p_up=round(result.understanding.p_up, 3), action=result.plan.action.value)
         tick += 1

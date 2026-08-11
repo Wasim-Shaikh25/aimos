@@ -133,12 +133,12 @@ Performance · Config · Agents · Settings.
 > **`specs/TASKS.md` is the tracked backlog** (T-001..T-047, with acceptance
 > criteria and test cases). Three findings gate everything else:
 >
-> - **T-001** — `Journal.write_outcome()` (`journal.py:101`) is implemented,
->   hash-chained, and called by **zero production code**. The `outcomes` table holds
->   0 rows against 2,760 journaled decisions, so no decision has ever been scored
->   against what actually happened. This starves ML training labels, per-strategy
->   attribution, the AI analyst's grounding, drift detection, and the Kronos shadow
->   gate. `PaperBroker._close()` already computes 6 of the 8 `OutcomeRecord` fields.
+> - **T-001 ✅** — `Journal.write_outcome()` is now called by `BacktestEngine`,
+>   `PipelineOrchestrator.flush_broker_outcomes()`, and the paper/live runtime loops.
+>   `PaperBroker` tracks per-position MAE/MFE in R units, builds an `OutcomeRecord`
+>   on close, and `tests/test_outcomes_loop.py` covers all T-001 acceptance criteria.
+>   The measurement loop is closed; downstream tasks (T-003, T-004, Kronos K2) can
+>   now be scored against real outcomes.
 > - **T-002** — cross-exchange arb computes dislocation mid-to-mid (discarding
 >   `best_bid`/`best_ask`) from venue quotes fetched sequentially and stamped with a
 >   shared `now`, so no staleness gate is possible. Both bugs inflate the spread.

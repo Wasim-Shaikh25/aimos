@@ -45,7 +45,7 @@ results just look good. It must be correct *before* the backtest runs.
 
 # P0 — the measurement loop
 
-## T-001 ⬜ Journal trade outcomes (close the loop)
+## T-001 ✅ Journal trade outcomes (close the loop)
 
 **Priority:** P0 · **Blocks:** T-003, T-004, T-020+ · **Est:** M
 
@@ -55,14 +55,16 @@ results just look good. It must be correct *before* the backtest runs.
 hash-chained, with a matching `outcomes` table and an `OutcomeRecord` contract at
 `aimos/core/schemas.py:197`.
 
-**It is called by zero production code.** The only references anywhere are its own
-definition and `tests/test_schemas.py:106`.
+**Now wired into production code.** `BacktestEngine`, `PipelineOrchestrator.flush_broker_outcomes()`,
+`aimos/runtime/paper_trader.py`, and `aimos/runtime/serve.py` all call
+`journal.write_outcome()` for closed trades. The `outcomes` table is no longer empty
+after a backtest or paper run.
 
-Consequence, confirmed against the live DB:
+Consequence resolved:
 
 ```
-decisions   2760
-outcomes       0     ← the loop has never closed, once
+decisions   N
+outcomes    N_closed   ← one row per closed position
 ```
 
 Everything downstream is starved by this one missing call: ML training labels,
@@ -111,12 +113,12 @@ So the real work is: **track excursion, then wire one call.**
 
 ### Acceptance criteria
 
-- [ ] A paper position that hits SL or TP produces exactly one `outcomes` row.
-- [ ] `pnl_r` in the row equals the value appended to `closed_trades_r`.
-- [ ] MAE ≤ 0 ≤ MFE for every record; `|MAE|` ≤ the R distance to the stop.
-- [ ] The hash chain still verifies after outcome writes (`journal/verify.py`).
-- [ ] Backtest and paper produce identical outcome rows for identical bars.
-- [ ] Nothing is written for positions still open.
+- [x] A paper position that hits SL or TP produces exactly one `outcomes` row.
+- [x] `pnl_r` in the row equals the value appended to `closed_trades_r`.
+- [x] MAE ≤ 0 ≤ MFE for every record; `|MAE|` ≤ the R distance to the stop.
+- [x] The hash chain still verifies after outcome writes (`journal/verify.py`).
+- [x] Backtest and paper produce identical outcome rows for identical bars.
+- [x] Nothing is written for positions still open.
 
 ### Test cases
 

@@ -6,6 +6,20 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added (T-001 — trade outcomes loop)
+- `PaperBroker` now tracks per-position MAE/MFE in R units, builds an `OutcomeRecord`
+  on close, and exposes `drain_outcomes()` for the runtime to persist.
+- `BacktestEngine` drains outcomes into the journal after each tick.
+- `PipelineOrchestrator.flush_broker_outcomes()` writes broker outcomes to the
+  journal; journal write failures are logged and do not crash the loop.
+- `aimos/runtime/paper_trader.py` and `aimos/runtime/serve.py` now flush broker
+  outcomes after every `broker.step()`.
+- `paper_trader.py` now uses `paper.journal_path` (default `state/aimos.sqlite`)
+  instead of an in-memory journal so decisions and outcomes survive restarts.
+- New test file `tests/test_outcomes_loop.py` covers TP/SL exits, short sign handling,
+  MAE/MFE tracking, same-bar SL+TP precedence, hash-chain integrity, backtest/paper
+  parity, zero-risk handling, and journal write failure resilience.
+
 ### Added (competitive analysis of 7 OSS trading platforms)
 - **`specs/COMPETITIVE_ANALYSIS.md`** — review of QuantConnect LEAN, Hummingbot,
   NautilusTrader, Freqtrade/FreqAI, Abu, Passivbot, and OpenAlgo against AIMOS, with

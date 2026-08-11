@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Optional
 
 from aimos.core.normalize import BPS, HALF
-from aimos.core.schemas import Action, OrderResult, Position, TradePlan
+from aimos.core.schemas import Action, OrderResult, OutcomeRecord, Position, TradePlan
 from aimos.backtest.costs import CostModel, funding_cost_bps
 
 
@@ -52,6 +52,8 @@ class PaperBroker:
         self._states: dict[str, dict] = {}  # decision_id → {initial_risk, ...}
         self.fills: list[Fill] = []
         self.closed_trades_r: list[float] = []  # realized R-multiples for metrics
+        self.pending_outcomes: list[OutcomeRecord] = []
+        self._excursions: dict[str, tuple[float, float]] = {}
         self._last_mark: dict[str, float] = {}
 
     # -- Broker protocol -----------------------------------------------------
@@ -92,6 +94,8 @@ class PaperBroker:
                 for f in self.fills
             ],
             "closed_trades_r": self.closed_trades_r,
+            "pending_outcomes": [oc.model_dump(mode="json") for oc in self.pending_outcomes],
+            "_excursions": self._excursions,
             "last_mark": self._last_mark,
         }
 
@@ -132,6 +136,8 @@ class PaperBroker:
                 plugin=raw.get("plugin", ""),
             ))
         self.closed_trades_r = [float(x) for x in state.get("closed_trades_r", [])]
+        self.pending_outcomes = [OutcomeRecord.model_validate(raw) for raw in state.get("pending_outcomes", [])]
+        self._excursions = {k: tuple(v) for k, v in state.get("_excursions", {}).items()}
         self._last_mark = {k: float(v) for k, v in state.get("last_mark", {}).items()}
 
     def cancel_all(self, symbol: str) -> None:
@@ -143,6 +149,7 @@ class PaperBroker:
         """Process fills/exits against one bar (open/high/low/close)."""
         self._last_mark[symbol] = float(bar["close"])
         self._fill_pending(symbol, bar, now, depth_usd)
+        self._update_excursions(symbol, bar)
         self._check_exits(symbol, bar, now, depth_usd)
 
     def _fill_pending(self, symbol, bar, now, depth_usd) -> None:
@@ -180,6 +187,7 @@ class PaperBroker:
             plugin=plan.plugin, decision_id=self._order_id(plan), mode_tag="swing",
         )
         self._positions[plan.symbol] = pos
+        self._excursions[pos.decision_id] = (0.0, 0.0)
         self.fills.append(Fill(pos.decision_id, plan.symbol, side, qty, price, fee, "entry",
                                venue=self.venue, ts=now, plugin=plan.plugin))
 
@@ -203,6 +211,30 @@ class PaperBroker:
         if exit_price is not None:
             self._close(pos, exit_price, kind, now)
 
+    def _update_excursions(self, symbol: str, bar: dict) -> None:
+        pos = self._positions.get(symbol)
+        if pos is None:
+            return
+        r = abs(pos.entry - pos.stop)
+        if r <= 0:
+            return
+        long = pos.side is Action.LONG
+        low, high = float(bar["low"]), float(bar["high"])
+        if long:
+            adverse = (low - pos.entry) / r
+            favorable = (high - pos.entry) / r
+        else:
+            adverse = (pos.entry - high) / r
+            favorable = (pos.entry - low) / r
+        mae, mfe = self._excursions.get(pos.decision_id, (0.0, 0.0))
+        self._excursions[pos.decision_id] = (min(mae, adverse), max(mfe, favorable))
+
+    def drain_outcomes(self) -> list[OutcomeRecord]:
+        """Return and clear pending outcome records."""
+        out = self.pending_outcomes
+        self.pending_outcomes = []
+        return out
+
     def _close(self, pos: Position, price: float, kind: str, now) -> None:
         notional = pos.qty * price
         fee = self._fee_quote(notional)
@@ -212,7 +244,16 @@ class PaperBroker:
         self._realized += pnl
         initial_risk_quote = pos.qty * abs(pos.entry - pos.stop)
         if initial_risk_quote > 0:
-            self.closed_trades_r.append(pnl / initial_risk_quote)
+            pnl_r = pnl / initial_risk_quote
+            self.closed_trades_r.append(pnl_r)
+        else:
+            pnl_r = 0.0
+        mae, mfe = self._excursions.pop(pos.decision_id, (0.0, 0.0))
+        self.pending_outcomes.append(OutcomeRecord(
+            decision_id=pos.decision_id, exit_time=now, exit_price=price,
+            pnl_r=pnl_r, pnl_quote=pnl, max_adverse_r=mae, max_favorable_r=mfe,
+            exit_reason=kind,
+        ))
         self.fills.append(Fill(pos.decision_id, pos.symbol, pos.side, pos.qty, price, fee, kind,
                                venue=self.venue, ts=now, pnl_quote=pnl, plugin=pos.plugin))
         del self._positions[pos.symbol]

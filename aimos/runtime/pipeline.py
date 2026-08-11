@@ -147,6 +147,15 @@ class PipelineOrchestrator:
 
         return TickResult(mu, plan, decision_id, forced, list(bundle.evidences))
 
+    def flush_broker_outcomes(self, broker: Any) -> None:
+        """Drain any closed-trade outcomes from the broker into the journal."""
+        drain = getattr(broker, "drain_outcomes", lambda: [])
+        for outcome in drain():
+            try:
+                self.journal.write_outcome(outcome)
+            except Exception:  # noqa: BLE001
+                log.error("journal_write_outcome_failed", decision_id=outcome.decision_id, exc_info=True)
+
     def _observe_understand(self, ctx: MarketContext):
         bundle = run_all(self.obs_engines, ctx)  # per-engine isolation (§10.1)
         reporting = len(engines_reporting(bundle))

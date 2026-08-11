@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 import pandas as pd
+import structlog
 
 from aimos.backtest import costs as cost_mod
 from aimos.backtest.metrics import Metrics, compute_metrics
@@ -36,6 +37,8 @@ from aimos.execution.risk_manager import RiskState
 from aimos.intelligence.understand import IntelligenceLayer
 from aimos.journal.journal import Journal
 from aimos.observation.runner import build_engines, engines_reporting, run_all
+
+log = structlog.get_logger(__name__)
 
 # no_book profile: the 5 book/funding/venue engines can't report → denominator 8
 _NO_BOOK_COVERAGE = 8
@@ -114,6 +117,7 @@ class BacktestEngine:
                 candidates=[], chosen=plan, mode="backtest",
                 decision_id=f"{self.symbol}-{bar_time.isoformat()}",
             ))
+            self._drain_outcomes()
             equity_curve.append(self.broker.equity())
 
         days = max((candles.index[-1] - candles.index[warmup]).days, 1)
@@ -142,6 +146,14 @@ class BacktestEngine:
         bar_vol_quote = float(last_bar["volume"]) * float(last_bar["close"])
         depth = self._depth_frac * bar_vol_quote  # §9.2 volume-proxy depth
         return SizingInputs(volume_24h_usd=bar_vol_quote, book_depth_1pct_usd=depth)
+
+    def _drain_outcomes(self) -> None:
+        """Persist closed trade outcomes; never let a journal failure crash the engine."""
+        for outcome in self.broker.drain_outcomes():
+            try:
+                self.journal.write_outcome(outcome)
+            except Exception:  # noqa: BLE001
+                log.error("journal_write_outcome_failed", decision_id=outcome.decision_id, exc_info=True)
 
     @staticmethod
     def _build_caps(params) -> CapacityCaps:

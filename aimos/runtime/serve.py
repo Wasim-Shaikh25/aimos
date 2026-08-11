@@ -417,6 +417,7 @@ def build_app(offline: Optional[bool] = None):
                                 broker.place(res.plan)  # directional trade on the primary venue
                                 holder["chosen"][res.plan.plugin] = holder["chosen"].get(res.plan.plugin, 0) + 1
                             broker.step(base, last.to_dict(), now)
+                            orch.flush_broker_outcomes(broker)
                             holder["latest"][base] = res.understanding.model_dump(mode="json")
                         else:
                             res = orch.analyze(ctx, exec_ctx, sizing, risk)
