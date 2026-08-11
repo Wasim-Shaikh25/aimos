@@ -175,15 +175,11 @@ def _build_components(offline: Optional[bool] = None) -> dict[str, Any]:
     health_cfg = params.model_dump().get("health", {}) or {}
     storage_cfg = params.model_dump().get("storage", {}) or {}
     database_url = storage_cfg.get("database_url", "") or ""
-    if not database_url:
-        from aimos.saas.settings import get_saas_config
-        saas_cfg = get_saas_config()
-        if saas_cfg.enabled and saas_cfg.database_url:
-            database_url = saas_cfg.database_url
     jpath = database_url or tenant_journal_path(org_id, params)
     state_dir: Optional[Path] = Path("state") / "tenants" / org_id
     if not database_url and jpath != ":memory:":
         state_dir = Path(jpath).parent / f"tenant_{org_id}_state"
+    state_dir.mkdir(parents=True, exist_ok=True)
     state_store = RuntimeStateStore(org_id, state_dir=state_dir, database_url=database_url)
     control_store = ControlStore(org_id, state_dir=state_dir, database_url=database_url)
     saved_state = state_store.load()
@@ -678,7 +674,7 @@ def _assistant_decisions(journal, limit: int = 40) -> list:
     import json as _json
     limit = max(1, min(int(limit), 500))
     rows = journal.conn.execute(
-        "SELECT decision_id, symbol, timestamp, payload FROM decisions ORDER BY seq DESC LIMIT ?",
+        'SELECT decision_id, symbol, "timestamp", payload FROM decisions ORDER BY seq DESC LIMIT ?',
         (limit,),
     ).fetchall()
     out = []

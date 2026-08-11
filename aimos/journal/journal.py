@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any, Optional
@@ -40,7 +41,7 @@ class Journal:
     def __new__(cls, db_path: Path | str = ":memory:", org_id: str = "local") -> "Journal":
         path_str = str(db_path)
         if cls is Journal and "://" in path_str:
-            return _SqlJournal(path_str, org_id)
+            return object.__new__(_SqlJournal)
         return super().__new__(cls)
 
     def __init__(self, db_path: Path | str = ":memory:", org_id: str = "local") -> None:
@@ -151,9 +152,10 @@ class Journal:
 class _SqlJournal(Journal):
     """SQLAlchemy-backed journal for PostgreSQL/SQLite URLs."""
 
-    def __init__(self, db_path: str, org_id: str = "local") -> None:
+    def __init__(self, db_path: Path | str, org_id: str = "local") -> None:
         self.org_id = org_id
-        self._database_url = db_path
+        url = str(db_path)
+        self._database_url = url
         from aimos.storage.db import get_storage_engine, normalize_sqlalchemy_url
         from sqlalchemy import (
             Column,
@@ -166,7 +168,7 @@ class _SqlJournal(Journal):
             text,
         )
 
-        normalized = normalize_sqlalchemy_url(db_path)
+        normalized = normalize_sqlalchemy_url(url)
         # Reuse the shared engine helper so journal + state + registry share the
         # same connection pool when they point at the same database URL.
         self._engine = get_storage_engine(normalized)
@@ -226,11 +228,14 @@ class _SqlJournal(Journal):
         self.conn = _SQLConnection(self._engine, self._schema, self._dialect)
 
     def _sanitize(self, org_id: str) -> str:
-        return org_id.replace('"', '""')
+        # PostgreSQL identifier limit is 63 bytes; keep it safe and collision-resistant
+        # by restricting to alphanumerics, hyphen, underscore, then truncate.
+        safe = re.sub(r"[^a-zA-Z0-9_-]", "_", org_id)
+        return safe[:63]
 
     def _set_schema(self, conn) -> None:
         if self._dialect == "postgresql" and self._schema:
-            conn.execute(self._text(f'SET search_path TO "{self._schema}"'))
+            conn.execute(self._text(f'SET LOCAL search_path TO "{self._schema}"'))
 
     def _tip(self) -> str:
         with self._engine.connect() as conn:
@@ -315,7 +320,7 @@ class _SQLConnection:
         if self._dialect == "postgresql" and self._schema:
             from sqlalchemy import text
 
-            conn.execute(text(f'SET search_path TO "{self._schema}"'))
+            conn.execute(text(f'SET LOCAL search_path TO "{self._schema}"'))
 
     @staticmethod
     def _convert(sql: str, params: Any) -> tuple[str, dict[str, Any]]:
@@ -333,14 +338,15 @@ class _SQLConnection:
         from sqlalchemy import text
 
         sql, mapping = self._convert(sql, parameters)
-        with self._engine.connect() as conn:
+        with self._engine.begin() as conn:
             self._set_schema(conn)
             result = conn.execute(text(sql), mapping)
             rows = [dict(r._mapping) for r in result]
         return _SQLCursor(rows)
 
     def commit(self) -> None:
-        # SQLAlchemy connection is a transient borrow; writes happen in begin() blocks.
+        # engine.begin() commits automatically; writes through this adapter are committed
+        # immediately so callers that expect sqlite3's conn.execute(); conn.commit() still work.
         return None
 
     def close(self) -> None:

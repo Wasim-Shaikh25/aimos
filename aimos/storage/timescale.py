@@ -42,7 +42,7 @@ class TimescaleStore:
         self.dsn = normalize_psycopg_url(dsn or os.environ.get("AIMOS_TIMESCALE_DSN", ""))
         self._conn = None
         self.enabled = False
-        if self.dsn and self.dsn.startswith(("postgresql://", "postgres://")):
+        if self.dsn and not self.dsn.startswith("sqlite"):
             self._connect()
 
     def _connect(self) -> None:
