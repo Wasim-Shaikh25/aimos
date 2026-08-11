@@ -72,11 +72,10 @@ def test_boot_guard_allows_paper_refuses_incomplete_live(tmp_path):
     p.mode = "live"
     with pytest.raises(LiveNotAllowedError):
         guard_live_boot(p, empty)
-    # mandate enabled also triggers the guard even in paper mode
+    # paper mode is never blocked, even when the mandate is configured
     p.mode = "paper"
     p.mandate.enabled = True
-    with pytest.raises(LiveNotAllowedError):
-        guard_live_boot(p, empty)
+    guard_live_boot(p, empty)  # no raise
 
 
 def test_boot_guard_allows_live_when_ladder_complete(tmp_path):

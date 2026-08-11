@@ -248,7 +248,7 @@ def _build_components(offline: Optional[bool] = None) -> dict[str, Any]:
         "monitor": {},
         "risk_report": {},
         "matrix_view": {},
-        "connections": {},
+        "connections": connections,
     }
 
     if saved_state:
