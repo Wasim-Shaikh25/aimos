@@ -6,6 +6,32 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added (coverage audit of the backlog itself)
+- **`specs/TASKS.md`** gains the items a self-audit found missing:
+  - **T-005 — GPL clean-room rewrite (audit PD3).** Verified this is the *only*
+    production-readiness audit item still open: PD1 (network exposure) and PD5
+    (RPO/RTO = 1 hour) are documented in `specs/OPERATIONS.md`, and PD2/PD4 were
+    resolved by the single-user refactor (no `Organization` tables, no `maildrop`
+    remain). Two freqtrade-derived GPL-3.0 files still require rewriting before any
+    distribution; the tripwire exits 0 by design, so CI will never catch this.
+  - **T-006 — test-count discrepancy.** `STATUS.md` claims 535 passed; a clean
+    container run reproduces 493 with no skips or collection errors, and the gap
+    does not close after installing the ML extras.
+  - **Deferred section** — the 9 dormant features (D-01..D-09) and 5 not-built
+    items (N-01..N-05) from `STATUS.md`, each with its gate, so nothing is silently
+    dropped. Notes that **D-03 (ML fusion weight) and D-08 (IgnitionFade) both
+    unblock from T-001**, and that N-02 must not start before T-002.
+- **`specs/KRONOS_INTEGRATION.md` §2.0.2** — upstream's real training and inference
+  settings from `finetune/config.py`, which differ materially from the demo the
+  spec was first written against: they evaluate at **temperature 0.6** (not 1.0),
+  `sample_count` 5, lookback **90** (not 400), and prediction length **10** (not
+  120). KR-37's default is corrected to `temperature: 0.6` accordingly. Also
+  confirms the finetune corpus is **CSI300 Chinese equities** (2011–2025) — a
+  fixed-trading-hours market, which is exactly the calendar prior KR-6 drops for
+  24/7 crypto — and records the full dependency weight (`torch>=2.0.0`,
+  `huggingface_hub`, `safetensors`, `einops`), including that their
+  `pandas==2.2.2` pin conflicts with ours at `2.2.3`.
+
 ### Added (backlog / requirements refinement)
 - **`specs/TASKS.md`** — master tracked backlog (T-001..T-047) with a dependency
   graph, priorities, acceptance criteria, and explicit test cases per task.

@@ -326,6 +326,70 @@ refuses the tick unless a run card exists with permutation p < 0.05.
 
 ---
 
+## T-005 ⬜ GPL clean-room rewrite before any distribution (audit PD3)
+
+**Priority:** P1 *if distribution is ever contemplated*, else P3 · **Est:** M
+
+### Why
+
+`scripts/check_gpl_tripwire.py` prints on every run:
+
+```
+⚠️  GPL TRIPWIRE: 2 GPL-origin source file(s) tracked.
+      - vendor/ft_protections/__init__.py
+      - aimos/universe/filters.py (VolatilityFilter)
+```
+
+Both derive from **freqtrade (GPL-3.0)**. `vendor/GPL_TRIPWIRE.md` records that
+they must be clean-room rewritten from spec **before any distribution** — sale,
+sharing, offering as a service, or open-sourcing.
+
+This is the **only production-readiness audit item still open.** PD1 (network
+exposure) and PD5 (RPO/RTO) are documented in `specs/OPERATIONS.md`; PD2 and PD4
+were resolved by the single-user refactor (no `Organization` tables, no
+`maildrop` remain). PD3 is the remainder.
+
+The tripwire exits 0 by design — private use is fine — so this will never fail
+CI. It needs a human decision, not a build fix.
+
+### Acceptance criteria
+
+- [ ] **Decision recorded** in `specs/OPERATIONS.md`: is AIMOS ever distributed?
+- [ ] If **no** → document the constraint; task closes as accepted risk.
+- [ ] If **yes** → both files rewritten from public spec with no GPL lineage;
+      `vendor/GPL_TRIPWIRE.md` table emptied; tripwire prints clean.
+
+### Test cases
+
+| ID | Test | Assert |
+|---|---|---|
+| T-005.1 | Tripwire with empty table | prints clean, exits 0 |
+| T-005.2 | Rewritten `VolatilityFilter` | behavior matches the documented spec, not freqtrade's implementation |
+| T-005.3 | Copyleft dep added to `pyproject.toml` | tripwire flags it |
+
+---
+
+## T-006 ⬜ Reconcile the test-count discrepancy
+
+**Priority:** P2 · **Est:** S
+
+`specs/STATUS.md` claims **535 passed, 1 xfailed**. A clean run in a fresh
+container gives **493 passed, 1 xfailed** — no skips, no collection errors, and
+the gap does not close after installing `lightgbm`/`scikit-learn`. Either 42 tests
+were removed without updating STATUS, or they are gated behind something not
+present in a standard install (`ta` fails to build in the container image).
+
+Left unreconciled, the number is a false assurance — the exact failure mode the
+audit warned about with manual gates.
+
+### Acceptance criteria
+
+- [ ] Root cause identified (removed tests vs environment-gated).
+- [ ] `specs/STATUS.md` corrected to the reproducible number.
+- [ ] If environment-gated: documented in `specs/OPERATIONS.md` with the extra needed.
+
+---
+
 # P2 — test coverage gaps
 
 Measured by cross-referencing all 135 modules against all 71 test files for both
@@ -407,6 +471,41 @@ Full requirements: **`specs/KRONOS_INTEGRATION.md`** (KR-1..KR-43).
 > outcomes. **T-001 is therefore a hard blocker on the entire Kronos programme** —
 > not a nice-to-have. Building the forecaster before the loop closes produces a
 > model nobody can score.
+
+---
+
+# Deferred — tracked but deliberately not scheduled
+
+These are **known and gated**, not forgotten. Listed so "is everything covered?"
+has an honest answer. Each carries a real prerequisite; none is startable now.
+
+### Dormant features (from `specs/STATUS.md`) — 🟡 real code, waiting on a gate
+
+| ID | Item | Gate |
+|---|---|---|
+| D-01 | Live trading | go-live ladder + funded, withdrawal-disabled keys |
+| D-02 | Live multi-venue execution | ladder + pre-funded per-venue inventory |
+| D-03 | ML fusion weight (0.0) | shadow calibration (§8.3) — **needs T-001 + T-003** |
+| D-04 | LLM news sensor | `ANTHROPIC_API_KEY` |
+| D-05 | On-chain engine | an `OnchainProvider` |
+| D-06 | Cross-venue lead-lag / venue divergence | per-venue price-stream provider (**T-002 touches this path**) |
+| D-07 | Market making (P9) | ≥ $5k live capital |
+| D-08 | IgnitionFade | ≥ 3 months labeled ignition data (**needs T-001**) |
+| D-09 | Agents A1–A3 | enable + human approval flow |
+
+> Note **D-03 and D-08 both unblock from T-001.** Closing the measurement loop
+> reactivates two dormant features as a side effect, which is further reason it
+> ranks first.
+
+### Not built yet (from `specs/STATUS.md`) — ⏭️
+
+| ID | Item | Note |
+|---|---|---|
+| N-01 | Real-exchange testnet validation | needs operator's free testnet keys (`specs/TESTNET.md`) |
+| N-02 | Live multi-venue executor wired into serve loop | router exists; **do not start before T-002** |
+| N-03 | Streaming layer (real 1m scalp, cross-venue top-of-book) | would also fix T-002's staleness root cause properly |
+| N-04 | TimescaleDB dashboards / retention | data is already being written |
+| N-05 | Upstream vendoring at pinned SHAs (P15-T4) | `scripts/vendor.py --apply`; see also T-005 |
 
 ---
 

@@ -92,6 +92,52 @@ by default, learnable when `learn_pe=True`.
 **Reference usage.** Their `prediction_example.py` runs `lookback=400`,
 `pred_len=120`, `T=1.0`, `top_p=0.9`, `sample_count=1`, with OHLCV **+ amount**
 columns and timestamps passed as separate history/future series.
+
+### 2.0.2 Their real training/inference settings (from `finetune/config.py`)
+
+The demo defaults are **not** what they use for evaluation. Worth calibrating
+against:
+
+| Setting | Demo (`prediction_example.py`) | Finetune/backtest (`config.py`) |
+|---|---|---|
+| Lookback | 400 | **90** |
+| Prediction length | 120 | **10** |
+| Temperature `T` | 1.0 | **0.6** |
+| `top_p` / `top_k` | 0.9 / — | 0.9 / 0 |
+| `sample_count` | 1 | **5** |
+
+Training: 30 epochs, batch 50/GPU, 100k samples/epoch, AdamW (β₁ 0.9, β₂ 0.95,
+weight-decay 0.1), LR **2e-4 tokenizer / 4e-5 predictor**, clip 5.0, seed 100.
+Corpus: **CSI300 Chinese equities**, 2011-01-01 → 2025-06-05, walk-forward split
+(train ≤ 2022-12, test 2024-04 →).
+
+**Three things this changes for us:**
+
+1. **Lower the temperature.** KR-37's default of `T: 1.0` follows the demo; their
+   own evaluation uses **0.6**. Lower temperature means less sampling noise, which
+   matters more for us than for them because KR-20 requires reproducibility and
+   KR-22 keeps quantiles rather than a mean. **Adopt `temperature: 0.6` as the
+   config default.**
+2. **A shorter context is defensible.** They finetune at lookback **90**, not 400.
+   Our `context_bars: 256` (KR-5) sits comfortably between, and 128 would still be
+   within their demonstrated range if the latency budget (KR-12) needs relief.
+3. **The horizon should be short.** They predict **10 bars** in the setting they
+   actually evaluate. Our `horizon_bars: 12` (KR-37) is consistent. Resist the
+   temptation to forecast further — their own 120-bar demo is not the configuration
+   they trust.
+
+**Dependency confirmation** (`requirements.txt`): `torch>=2.0.0`,
+`huggingface_hub==0.33.1`, `safetensors==0.6.2`, `einops==0.8.1`,
+`matplotlib==3.9.3`, `pandas==2.2.2`, `tqdm`, `numpy`. This is the full weight of
+what vendoring would pull in — and note `pandas==2.2.2` conflicts with our pinned
+`2.2.3` (§25.8, no floating ranges). Further support for KR-10 (numpy-only
+inference) and §3 (clean-room, not vendored).
+
+> **Corpus caveat, now confirmed.** They finetune on **CSI300 equities** — a
+> market with fixed trading hours, daily auctions, price limits, and a weekday
+> calendar. That is precisely the prior encoded in their `TemporalEmbedding`
+> (minute/hour/weekday/day/month), and precisely why KR-6 drops month and
+> day-of-month for a 24/7 crypto market.
 - **Inference.** Per-channel z-score normalization `(x-mean)/(std+1e-5)` over 6
   channels (OHLCV + amount), clipped to ±5. Autoregressive loop over `pred_len`,
   temperature `T`, `top_p` nucleus filtering, `torch.multinomial` sampling,
@@ -362,9 +408,10 @@ validated against. Neither is worth it for a model at fusion weight 0.
     timeframes: ["15m", "1h"]      # which tf to forecast; keep narrow for budget
     context_bars: 256
     horizon_bars: 12
-    sample_count: 16
-    temperature: 1.0
+    sample_count: 16              # > their 5: we keep quantiles, not a mean (KR-22)
+    temperature: 0.6              # their evaluated setting, not the demo's 1.0 (§2.0.2)
     top_p: 0.9
+    top_k: 0
     clip: 5.0
     max_workers: 1
     quantizer: { s1_bits: 8, s2_bits: 8 }
