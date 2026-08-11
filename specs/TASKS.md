@@ -327,6 +327,11 @@ result just looks good. It is also the same class of bug as Kronos **KR-19**.
 - [ ] Buffer bars are used for indicator computation only, never for training
       labels or test evaluation.
 - [ ] `assert_temporal_split` still holds across buffer + train + test.
+- [ ] **One named guarantee.** Jesse (MIT) documents "backtests without
+      look-ahead bias" as a single explicit product claim, not scattered spec
+      text. AIMOS already has the underlying property (§9.1, KR-19, this task) —
+      state it the same way: one sentence in `specs/ARCHITECTURE.md` or here that
+      a human can point to, backed by T-013.1–T-013.4 as *the* tests that back it.
 
 ### Test cases
 
@@ -730,6 +735,13 @@ Two ideas from Passivbot (**Unlicense** — public domain, freest in the set):
 Paper and live state share `state/aimos.sqlite`. Worth evaluating whether they
 should be separate stores so a paper run can never contaminate live records (or
 vice versa). Generic design question — owes nothing to any upstream implementation.
+
+**Precedent, not a push toward it:** Gainium (MIT, `github.com/Gainium`) runs
+paper-trading (`paper-trading-sh`) and exchange connectivity as separate
+deployable services rather than in-process modules — heavier than AIMOS needs
+today (single operator, single process). If this task's answer is ever "yes,
+separate stores," that org's split is a reference for *how far* to take it. It is
+not, on its own, a reason to conclude "yes."
 
 ---
 

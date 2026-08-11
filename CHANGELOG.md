@@ -6,6 +6,34 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Fixed (competitive analysis coverage gap)
+- The user asked "did we add everything we wanted to borrow from that document?"
+  and checking rather than asserting found a real gap: `specs/COMPETITIVE_ANALYSIS.md`
+  scoped itself to the source PDF's 7-row comparison table and missed **Jesse**
+  and **Gainium**, both named only in the document's prose ("Jesse and Gainium
+  cater to developers and no-code practitioners..."). Both verified and added as
+  new §7a:
+  - **Jesse** (`jesse-ai/jesse`) — **MIT**, fully borrowable. Its backtest
+    decouples metrics from simulation (`jesse.services.report.portfolio_metrics()`,
+    called once at run end) — this **confirms** `aimos/backtest/metrics.py`'s
+    existing `compute_metrics()` design rather than changing it. Its one real
+    contribution: Jesse documents "backtests without look-ahead bias" as a single
+    named product guarantee. AIMOS has the same property (§9.1, KR-19, T-013) but
+    stated across scattered spec text — folded into **T-013**'s acceptance
+    criteria as a one-sentence guarantee with its own test suite, rather than a
+    new task.
+  - **Gainium** (`github.com/Gainium`, self-hosted Community Edition) — **MIT**
+    across its self-hostable services. A no-code visual bot builder — wrong
+    audience for AIMOS's config-and-code, single-operator model, so rejected. Its
+    one structural note: paper-trading and connectivity run as separate deployable
+    services rather than in-process modules — recorded inside **T-016** as
+    precedent for *how far* to take paper/live isolation if that task ever
+    concludes "yes," not as a push toward that conclusion.
+  - Neither addition generated a new task ID — both sharpened existing tasks
+    (T-013, T-016) rather than adding scope, which is itself worth recording: not
+    every source in a document turns into new work, and saying so explicitly is
+    part of an honest "did we cover everything" answer.
+
 ### Added (final audit reconciliation — closing the loop on "is everything documented")
 - Went back through `PRODUCTION_READINESS_AUDIT.md` finding-by-finding against
   current code, rather than trusting the earlier backlog summary. One genuine gap:
