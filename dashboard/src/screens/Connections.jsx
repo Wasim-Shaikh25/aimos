@@ -14,10 +14,10 @@ export default function Connections() {
       and verifies withdrawals are disabled. <b>No orders are ever placed.</b> Keys are only used here,
       never for market-data analysis, and never shown in the UI.</p>
     {venues.length === 0
-      ? <p className="muted">No venue keys configured. Add them via <code className="mono">AIMOS_SECRETS_FILE</code> (a
-        <code className="mono"> secrets.yaml</code>) or <code className="mono">AIMOS_KEY_&lt;VENUE&gt;</code> /
-        <code className="mono">AIMOS_SECRET_&lt;VENUE&gt;</code> env vars, then restart. Paper trading and price
-        monitoring need no keys.</p>
+      ? <p className="muted">No venue keys configured. Add them in <b>Settings → Exchanges</b>, then restart the
+        server (or use the Test connection button on the same screen). Legacy file/env credentials
+        (<code className="mono">AIMOS_SECRETS_FILE</code> or <code className="mono">AIMOS_KEY_&lt;VENUE&gt;</code>)
+        still work as a fallback. Paper trading and price monitoring need no keys.</p>
       : <Table cols={['Venue', 'Configured', 'Connected', 'Withdrawals disabled', 'Can trade', 'USDT free', 'Error']}
         rows={venues.map(v => [
           v.venue,

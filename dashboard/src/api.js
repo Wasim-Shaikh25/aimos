@@ -69,6 +69,7 @@ export const api = {
   balances: () => j('/api/balances'),
   performance: () => j('/api/performance'),
   connections: () => j('/api/connections'),
+  testConnection: (venue) => j('/api/connections/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ venue }) }),
   features: () => j('/api/features'),
   setFeature: (name, enabled) => j('/api/control/feature', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

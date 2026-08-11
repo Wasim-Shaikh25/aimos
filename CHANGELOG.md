@@ -6,6 +6,22 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added (live-trading prerequisites)
+- **Test-connection endpoint** `POST /api/connections/test` runs a fresh read-only
+  preflight for one venue using stored credentials and returns connected/can-trade/
+  withdrawal-disabled/balance/error without echoing the key/secret.
+- **Settings UI test button** on the Exchanges tab calls the new endpoint and shows
+  a per-venue connection badge.
+
+### Changed (live-trading prerequisites)
+- Runtime preflight (`_run_preflight`) and `scripts/validate_integration.py` now
+  read exchange API keys from the encrypted `SettingsStore` first (the UI path),
+  falling back to `AIMOS_SECRETS_FILE` / `AIMOS_KEY_<VENUE>` env vars for backward
+  compatibility. This closes the split where keys added in Settings were invisible
+  to the live/testnet path.
+- The Connections screen and `validate_integration.py` messages now point operators
+  to **Settings → Exchanges** as the primary key-management path.
+
 ### Changed (dashboard UI / shadcn)
 - Replaced raw JSON dumps on Settings, Config, Models, and Controls with structured
   shadcn/ui forms, cards, switches, selects, and tables.

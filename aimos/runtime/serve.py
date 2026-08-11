@@ -639,6 +639,7 @@ def build_app(offline: Optional[bool] = None):
         balances_provider=lambda: _balances_payload(broker, sim, holder.get("connections", connections)),
         connections_provider=lambda: {"venues": list(holder.get("connections", connections).values()),
                                       "any_live": any(c.get("connected") for c in holder.get("connections", connections).values())},
+        connections_test_provider=lambda venue: _test_connection(venue, params),
         performance_provider=lambda: _performance_payload(broker, sim, holder["equity"]),
         graph_provider=lambda did: _decision_graph(orch.journal, did, params),
         features_provider=lambda: {**feature_ctl.snapshot(),
@@ -1069,16 +1070,56 @@ def _trades_payload(broker, sim) -> dict:
 
 def _run_preflight(params, venues) -> dict:
     """Phase D read-only self-check: load secrets, verify each venue connects.
-    Empty (skipped) when no keys are configured — the safe, keyless default."""
+    Empty (skipped) when no keys are configured — the safe, keyless default.
+
+    In single-user mode the Settings UI is the primary credential source, so we
+    read from the encrypted SettingsStore first and fall back to the legacy file
+    or environment variables for backward compatibility."""
     from aimos.account.preflight import preflight_check
     from aimos.account.secrets import load_secrets
+
     pd = params.model_dump()
     account = pd.get("account", {}) or {}
+    if not account.get("preflight_on_start", True):
+        return {}
+
+    storage_cfg = pd.get("storage", {}) or {}
+    store = SettingsStore("default", database_url=storage_cfg.get("database_url", ""))
+
     secrets_file = (pd.get("secrets", {}) or {}).get("file", "")
-    creds = load_secrets(secrets_file, venues=venues)
-    if not creds or not account.get("preflight_on_start", True):
+    legacy = load_secrets(secrets_file, venues=venues)
+
+    creds: dict[str, dict] = {}
+    for venue in venues:
+        vl = venue.lower()
+        stored = store.get_exchange_credentials(vl)
+        if stored:
+            creds[vl] = stored
+        elif vl in legacy:
+            creds[vl] = legacy[vl]
+
+    if not creds:
         return {}
     return preflight_check(venues, creds)  # authenticates + fetch_balance, NO orders
+
+
+def _test_connection(venue: str, params) -> dict:
+    """Run a fresh read-only preflight for a single venue using stored credentials."""
+    from aimos.account.preflight import preflight_check
+    from aimos.account.secrets import load_secrets
+
+    pd = params.model_dump()
+    storage_cfg = pd.get("storage", {}) or {}
+    store = SettingsStore("default", database_url=storage_cfg.get("database_url", ""))
+    vl = venue.lower()
+    creds = store.get_exchange_credentials(vl)
+    if not creds:
+        secrets_file = (pd.get("secrets", {}) or {}).get("file", "")
+        legacy = load_secrets(secrets_file, venues=[venue])
+        creds = legacy.get(vl)
+    if not creds:
+        return {}
+    return preflight_check([venue], {vl: creds}).get(venue, {})
 
 
 def _balances_payload(broker, sim, connections=None) -> dict:
