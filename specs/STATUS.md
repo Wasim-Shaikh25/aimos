@@ -122,6 +122,41 @@ Performance · Config · Agents · Settings.
 - **TimescaleDB dashboards / retention** on the time-series it now writes.
 - The **12-month recorded dataset** download (P1-T6) and upstream **vendoring** at
   pinned SHAs (P15-T4).
+- **K-line forecasting sensor** (Kronos-inspired) — requirements in
+  **`specs/KRONOS_INTEGRATION.md`** (KR-1..KR-43, phases K0–K5). Nothing is built.
+  Blocked on T-001 + T-003 below, plus operator approval of four evidence-registry
+  names (KR-23, invalidates trained ML artifacts). Would enter as a 14th observation
+  engine emitting `Evidence` only, at reliability 0.35 behind `features.forecast_enabled`.
+
+> ### ⛔ P0 — the measurement loop has never closed
+>
+> **`specs/TASKS.md` is the tracked backlog** (T-001..T-047, with acceptance
+> criteria and test cases). Three findings gate everything else:
+>
+> - **T-001** — `Journal.write_outcome()` (`journal.py:101`) is implemented,
+>   hash-chained, and called by **zero production code**. The `outcomes` table holds
+>   0 rows against 2,760 journaled decisions, so no decision has ever been scored
+>   against what actually happened. This starves ML training labels, per-strategy
+>   attribution, the AI analyst's grounding, drift detection, and the Kronos shadow
+>   gate. `PaperBroker._close()` already computes 6 of the 8 `OutcomeRecord` fields.
+> - **T-002** — cross-exchange arb computes dislocation mid-to-mid (discarding
+>   `best_bid`/`best_ask`) from venue quotes fetched sequentially and stamped with a
+>   shared `now`, so no staleness gate is possible. Both bugs inflate the spread.
+> - **T-003** — the `backtest_validated` go-live gate is a manual checkbox and the
+>   12-month dataset is not downloaded, so it cannot honestly be ticked. This is the
+>   task that establishes whether any strategy carries edge.
+>
+> **`specs/COMPETITIVE_ANALYSIS.md`** reviews 7 major OSS trading platforms
+> (LEAN, Hummingbot, NautilusTrader, Freqtrade, Abu, Passivbot, OpenAlgo) with
+> upstream file references and per-platform licence verdicts. Only LEAN and
+> Hummingbot (Apache 2.0) and Passivbot (Unlicense) are code-borrowable; the rest
+> are concept-only or, for OpenAlgo (AGPL-3.0), off-limits. It adds **T-013 to the
+> critical path before T-003** (anti-lookahead warmup buffer) and 7 further tasks.
+>
+> **18 modules have no or weak test coverage** (T-030..T-047), including
+> `intelligence/finalize.py`, `execution/base_plugin.py`, three *enabled* execution
+> plugins, `observation/scalp_micro.py` (live by default), `runtime/atomic_io.py`
+> (where the M8 audit fix lives), and the auth surface.
 
 Runtime state (equity/balances/broker/sim/ladder) persists across restarts via
 `RuntimeStateStore` (`aimos/runtime/state_store.py`, atomic writes since the M8

@@ -6,6 +6,121 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added (competitive analysis of 7 OSS trading platforms)
+- **`specs/COMPETITIVE_ANALYSIS.md`** — review of QuantConnect LEAN, Hummingbot,
+  NautilusTrader, Freqtrade/FreqAI, Abu, Passivbot, and OpenAlgo against AIMOS, with
+  upstream file references and a licence verdict per platform.
+  - **Licences verified at source, and the source document's licence column is wrong
+    in 3 of 7 cases** — Abu is GPL-3.0 and OpenAlgo is **AGPL-3.0** (both listed only
+    as "Open Source"), while Passivbot is Unlicense rather than MIT. Taking that
+    column at face value would have added exactly the copyleft debt T-005 exists to
+    retire. Borrowable: LEAN + Hummingbot (Apache 2.0), Passivbot (Unlicense).
+    Concept-only: NautilusTrader (LGPL-3.0), Freqtrade, Abu (GPL-3.0). Avoid
+    entirely: OpenAlgo (AGPL-3.0 network-use clause — AIMOS serves a dashboard).
+  - **LEAN `Common/Statistics/TradeBuilder.cs` is a direct match for T-001** — it
+    tracks `position.MinPrice`/`MaxPrice` via `SetMarketPrice()` and computes MAE/MFE
+    at close, which is exactly the algorithm T-001 needs, under Apache 2.0. Also
+    surfaces `EndTradeDrawdown` (profit given back before close) and `Duration`,
+    neither of which AIMOS records.
+  - Records where **AIMOS is already ahead** — trade-management barriers (our
+    trailing stop carries a "never widens" invariant Hummingbot's does not),
+    mechanically-enforced layering, hash-chained journal, fail-closed live path, and
+    `NoTrade` as the default decision.
+- **8 new tasks in `specs/TASKS.md`** from that review:
+  - **T-013 (P0)** — anti-lookahead indicator-warmup buffer in train/test splits,
+    from FreqAI's `buffer_timerange()`. Placed on the critical path **before T-003**:
+    a warmup leak silently inflates every backtest number and is invisible unless
+    specifically tested.
+  - **T-007** Probabilistic Sharpe Ratio + Expectancy (LEAN `PortfolioStatistics.cs`)
+    — PSR answers T-003's actual question, whether an edge is real or small-sample
+    noise, which raw Sharpe cannot.
+  - **T-008** power-law market-impact slippage (LEAN, Almgren et al. 2005) — our
+    linear `slip_k` understates large-order cost; constants are equity-calibrated and
+    need refitting for crypto.
+  - **T-009** order-rejection retry state (Hummingbot `dca_executor.py`) — we handle
+    unfilled orders but not exchange-rejected ones.
+  - **T-012** `reduce_only` + OCO, **T-014** Dissimilarity-Index OOD confidence,
+    **T-015** staged de-risking + peak-relative exposure cap, **T-016** paper/live
+    state isolation.
+  - Explicitly **rejected**: Passivbot's martingale grid (contrary to our risk
+    model), Freqtrade strategy logic, and any event-bus rewrite for backtest parity.
+
+### Added (coverage audit of the backlog itself)
+- **`specs/TASKS.md`** gains the items a self-audit found missing:
+  - **T-005 — GPL clean-room rewrite (audit PD3).** Verified this is the *only*
+    production-readiness audit item still open: PD1 (network exposure) and PD5
+    (RPO/RTO = 1 hour) are documented in `specs/OPERATIONS.md`, and PD2/PD4 were
+    resolved by the single-user refactor (no `Organization` tables, no `maildrop`
+    remain). Two freqtrade-derived GPL-3.0 files still require rewriting before any
+    distribution; the tripwire exits 0 by design, so CI will never catch this.
+  - **T-006 — test-count discrepancy.** `STATUS.md` claims 535 passed; a clean
+    container run reproduces 493 with no skips or collection errors, and the gap
+    does not close after installing the ML extras.
+  - **Deferred section** — the 9 dormant features (D-01..D-09) and 5 not-built
+    items (N-01..N-05) from `STATUS.md`, each with its gate, so nothing is silently
+    dropped. Notes that **D-03 (ML fusion weight) and D-08 (IgnitionFade) both
+    unblock from T-001**, and that N-02 must not start before T-002.
+- **`specs/KRONOS_INTEGRATION.md` §2.0.2** — upstream's real training and inference
+  settings from `finetune/config.py`, which differ materially from the demo the
+  spec was first written against: they evaluate at **temperature 0.6** (not 1.0),
+  `sample_count` 5, lookback **90** (not 400), and prediction length **10** (not
+  120). KR-37's default is corrected to `temperature: 0.6` accordingly. Also
+  confirms the finetune corpus is **CSI300 Chinese equities** (2011–2025) — a
+  fixed-trading-hours market, which is exactly the calendar prior KR-6 drops for
+  24/7 crypto — and records the full dependency weight (`torch>=2.0.0`,
+  `huggingface_hub`, `safetensors`, `einops`), including that their
+  `pandas==2.2.2` pin conflicts with ours at `2.2.3`.
+
+### Added (backlog / requirements refinement)
+- **`specs/TASKS.md`** — master tracked backlog (T-001..T-047) with a dependency
+  graph, priorities, acceptance criteria, and explicit test cases per task.
+  Records three P0 findings from a file-by-file review:
+  - **T-001 — the measurement loop has never closed.** `Journal.write_outcome()`
+    (`journal.py:101`) is fully implemented and hash-chained but is called by
+    **zero production code**; the `outcomes` table is empty against 2,760 journaled
+    decisions. `PaperBroker._close()` already computes 6 of 8 `OutcomeRecord`
+    fields — only MAE/MFE tracking and one wiring call are missing. This starves
+    ML labels, per-strategy attribution, analyst grounding, and drift detection.
+  - **T-002 — cross-exchange arb computes phantom spreads.** `compute_dislocation()`
+    compares mid-to-mid and discards `VenueTop.best_bid`/`best_ask`, overstating
+    capture by ~one full spread; `live_venue_snapshot()` fetches venues
+    sequentially then stamps them all with the same `now`, so no staleness gate is
+    possible on that path.
+  - **T-030..T-047 — 18 modules have no or weak test coverage**, including
+    `intelligence/finalize.py`, `execution/base_plugin.py`, three enabled execution
+    plugins, `observation/scalp_micro.py`, `runtime/atomic_io.py`, and the auth
+    surface where the audit's two Criticals were found.
+- **`specs/KRONOS_INTEGRATION.md`** refined:
+  - §2.0.1 adds implementation-level architecture read from upstream `model/module.py`
+    (BSQ straight-through estimator, commitment/entropy losses, bitwise s1/s2 split,
+    cross-attention dependency layer, pre-norm RMSNorm + RoPE + SwiGLU) — enough to
+    reimplement without reference to their code, and confirming KR-10 (numpy-only
+    inference, no torch in the runtime) is realistic.
+  - **KR-43 (new)** — the existing `bayes_engine.py` correlation guard keys on
+    engine name, which a forecaster would evade while re-deriving what momentum and
+    price action already report. Requires grouping by *information family* so
+    double-counted information cannot inflate §6.7 meta-confidence, which gates
+    trade eligibility. Corollary: `forecast_band` (forward range) is the genuinely
+    new signal; `forecast_drift` is largely redundant.
+  - §8 records **T-001 as a hard blocker** on the whole programme — K2's exit gate
+    needs an information coefficient, which needs outcomes that do not exist.
+  - §9 expands to a 60-case test matrix (KT-01..KT-63) mapped to the requirement
+    each case defends.
+
+### Added (research / requirements)
+- **`specs/KRONOS_INTEGRATION.md`** — requirements spec for a K-line forecasting
+  sensor, from a review of the Kronos foundation model (arXiv 2508.02739, MIT).
+  Documents the one capability AIMOS lacks (a forward-looking *distributional*
+  view of price), catalogues all twelve integration routes with binding verdicts,
+  and specifies 42 numbered requirements (KR-1..KR-42) plus a K0–K5 rollout ladder.
+  Decision: build an AIMOS-native clean-room implementation (BSQ-style hierarchical
+  quantizer + ~1.2M-param causal transformer, numpy-only inference, ≈5 MB artifact)
+  sized for a 4 GB CPU host — do **not** clone, vendor, or pip-install upstream, and
+  do **not** add torch to the trading runtime. Enters strictly as a Layer-1
+  `Evidence` sensor at reliability 0.35 behind `features.forecast_enabled`, on the
+  same §8.3 promotion ladder that keeps `MLEngine` inert. No code, config, flag,
+  dependency, or evidence name was added by this change.
+
 ### Added (Coolify / PaaS deployment)
 - `aimos/runtime/serve.py` now reads `AIMOS_PORT` first, then `PORT` (the standard
   PaaS variable), while the bind address remains `AIMOS_HOST` only (default
