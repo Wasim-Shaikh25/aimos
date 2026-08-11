@@ -165,6 +165,11 @@ class _FixedWindowLimiter:
 
 def create_app(state: AppState) -> FastAPI:
     app = FastAPI(title="AIMOS API")
+
+    @app.exception_handler(AuthError)
+    async def _auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:
+        return JSONResponse({"detail": exc.detail}, status_code=401)
+
     auth_limiter = _FixedWindowLimiter(_AUTH_MAX_PER_WINDOW, _AUTH_WINDOW_SECONDS)
 
     @app.middleware("http")
