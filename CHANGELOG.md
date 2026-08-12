@@ -6,6 +6,29 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Fixed (T-003 review follow-up — universe_snapshot_id was the trade count, not a data identity)
+- `scripts/run_backtest_card.py`'s `universe_snapshot_id` was
+  `f"{exchange}-tier1-{len(all_trades)}"` — the number of trades a strategy made,
+  not an identifier for the candle data used. Two runs against different market
+  data could get the same id if they happened to produce the same trade count,
+  and the field could never actually confirm two runs used identical candles —
+  defeating its own stated purpose.
+- New `_candles_fingerprint()` hashes the actual OHLCV values fed to the run
+  (`open`/`high`/`low`/`close`/`volume`, in order), reusing the existing
+  `validation.data_hash()` utility. `universe_snapshot_id` is now
+  `f"{exchange}-{symbol}-{timeframe}-{fingerprint}"` — genuinely content-addressed:
+  identical data always hashes identically, any change to the data changes it.
+- New regression test
+  `test_universe_snapshot_id_is_a_real_data_fingerprint_not_trade_count` in
+  `tests/test_costed_backtest.py` asserts both directions: same data (twice) →
+  same fingerprint regardless of downstream trade count; different data, same
+  row count → different fingerprint.
+- **The 77 run cards already committed under `specs/runcards/` predate this fix**
+  and still carry the old trade-count values in that field — noted in
+  `specs/TASKS.md` T-003 rather than silently left stale. Regenerating them needs
+  the 12-month dataset, which this session doesn't have
+  (`specs/OPERATOR_ACTIONS.md` item 1); all future runs get the corrected field.
+
 ### Added (integration — combine all open PRs and PR #36 Kronos docs)
 - Merged the currently open branches into the `devin/t-003-costed-backtest`
   integration branch: PR #30 (T-001 outcomes), PR #33 (T-002 clock follow-up),

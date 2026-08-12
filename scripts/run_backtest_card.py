@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT))
 
 from aimos.backtest.engine import BacktestEngine  # noqa: E402
 from aimos.backtest.metrics import compute_metrics, max_drawdown  # noqa: E402
-from aimos.backtest.validation import ValidationResult, make_run_card, validate_returns  # noqa: E402
+from aimos.backtest.validation import ValidationResult, data_hash, make_run_card, validate_returns  # noqa: E402
 from aimos.core.config import load_params  # noqa: E402
 from aimos.data.binance_symbols import all_binance_usdt_spot_symbols  # noqa: E402
 from aimos.data.candles import CandleStore  # noqa: E402
@@ -127,6 +127,19 @@ def _strategy_metrics(trades: list[dict], starting_equity: float, n_decisions: i
     }
 
 
+def _candles_fingerprint(candles: pd.DataFrame) -> str:
+    """Content hash of the OHLCV bars actually fed to this run.
+
+    Two runs with the same fingerprint used byte-identical candle data; a
+    changed fingerprint means the underlying market data differs, even if the
+    trade count happens to match. Reuses ``data_hash`` (already used for the
+    run card's output-equity-curve hash) rather than the input trade count,
+    which said nothing about data identity.
+    """
+    values = candles[["open", "high", "low", "close", "volume"]].to_numpy().ravel().tolist()
+    return data_hash(values)
+
+
 def _verdict(metrics: dict, validation: ValidationResult) -> str:
     n = metrics["trades"]
     if n < 30:
@@ -142,6 +155,7 @@ def _run_symbol(
     candles: pd.DataFrame,
     btc_candles: pd.DataFrame | None,
     exchange: str,
+    timeframe: str,
     starting_equity: float,
     engine_profile: str,
     seed: int,
@@ -198,7 +212,7 @@ def _run_symbol(
             validation=validation,
             seed=seed,
             engine_profile=engine_profile,
-            universe_snapshot_id=f"{exchange}-tier1-{len(all_trades)}",
+            universe_snapshot_id=f"{exchange}-{symbol.replace('/', '')}-{timeframe}-{_candles_fingerprint(candles)}",
         )
         path = runcards_dir / f"{run_id}.yaml"
         path.write_text(runcard.to_yaml(), encoding="utf-8")
@@ -286,7 +300,7 @@ def main(argv: list[str] | None = None) -> int:
         summary = _run_symbol(
             params, symbol, candles,
             btc_candles if symbol != "BTC/USDT" else candles,
-            args.exchange, args.starting_equity, args.engine_profile,
+            args.exchange, args.timeframe, args.starting_equity, args.engine_profile,
             args.seed, runcards_dir, git_sha, params_dict,
         )
         summaries.append(summary)
