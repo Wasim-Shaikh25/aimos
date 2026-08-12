@@ -15,6 +15,9 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   after the merge: T-001/T-002/T-003/T-013 are ✅, the critical path is now
   T-001 → T-003 → T-010 with T-004 as the next P0, and Kronos K1-K5 remains
   gated by K0 operator sign-off.
+- Streamlined `specs/TASKS.md` by sorting `## T-XXX` sections numerically within
+  each priority group and removing stray duplicate-number occurrences (verified
+  no actual duplicate task IDs remain).
 
 ### Added (T-003 — 12-month costed walk-forward backtest)
 - New `scripts/run_backtest_card.py` downloads 12 months of Binance 1h klines for the

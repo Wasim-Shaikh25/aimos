@@ -338,45 +338,6 @@ have nothing to say. Once T-001 lands they light up with no new UI work.
 
 ---
 
-## T-013 ✅ Anti-lookahead warmup buffer in train/test splits
-
-**Priority:** **P0** · **Blocks:** T-003 (must be correct *before* the backtest runs) · **Est:** S
-
-### Why
-
-Indicators need warmup bars — `ema_period: 50`, `atr_long_period: 100`,
-`macd_hist_std_window: 100`, `spread_hist_window: 1440`. If those warmup bars come
-from **inside** the training window you lose training data; if they come from the
-**test** window you leak the future into the past.
-
-FreqAI solves this with a dedicated buffer *prepended* to the training window
-(`freqtrade/freqai/freqai_interface.py`, `buffer_timerange()`) so indicators warm
-up on data that belongs to neither split. Concept only — Freqtrade is GPL-3.0.
-
-This must land **before** T-003, not after. A warmup leak silently inflates every
-number the backtest produces, and it is invisible unless specifically tested — the
-result just looks good. It is also the same class of bug as Kronos **KR-19**.
-
-### Acceptance criteria
-
-- [x] Splits carry an explicit warmup buffer sized to the longest indicator window.
-- [x] Buffer bars are used for indicator computation only, never for training
-      labels or test evaluation.
-- [x] `assert_temporal_split` still holds across buffer + train + test.
-- [x] **One named guarantee.** Added to `specs/ARCHITECTURE.md` §8.2 and backed by
-      `tests/test_warmup_buffer.py`.
-
-### Test cases
-
-| ID | Test | Assert |
-|---|---|---|
-| T-013.1 | Indicator value at first train bar | identical with and without future bars present |
-| T-013.2 | Buffer bars in label set | zero — buffer never produces labels |
-| T-013.3 | Buffer shorter than longest window | rejected with a clear error |
-| T-013.4 | Test-window indicators | computed from train+buffer tail, never from test lookahead |
-
----
-
 ## T-007 ⬜ Probabilistic Sharpe Ratio + Expectancy
 
 **Priority:** P1 · **Feeds:** T-003 · **Est:** S
@@ -449,44 +410,46 @@ Hummingbot's `hummingbot/strategy_v2/executors/dca_executor/dca_executor.py` kee
 
 ---
 
+## T-013 ✅ Anti-lookahead warmup buffer in train/test splits
+
+**Priority:** **P0** · **Blocks:** T-003 (must be correct *before* the backtest runs) · **Est:** S
+
+### Why
+
+Indicators need warmup bars — `ema_period: 50`, `atr_long_period: 100`,
+`macd_hist_std_window: 100`, `spread_hist_window: 1440`. If those warmup bars come
+from **inside** the training window you lose training data; if they come from the
+**test** window you leak the future into the past.
+
+FreqAI solves this with a dedicated buffer *prepended* to the training window
+(`freqtrade/freqai/freqai_interface.py`, `buffer_timerange()`) so indicators warm
+up on data that belongs to neither split. Concept only — Freqtrade is GPL-3.0.
+
+This must land **before** T-003, not after. A warmup leak silently inflates every
+number the backtest produces, and it is invisible unless specifically tested — the
+result just looks good. It is also the same class of bug as Kronos **KR-19**.
+
+### Acceptance criteria
+
+- [x] Splits carry an explicit warmup buffer sized to the longest indicator window.
+- [x] Buffer bars are used for indicator computation only, never for training
+      labels or test evaluation.
+- [x] `assert_temporal_split` still holds across buffer + train + test.
+- [x] **One named guarantee.** Added to `specs/ARCHITECTURE.md` §8.2 and backed by
+      `tests/test_warmup_buffer.py`.
+
+### Test cases
+
+| ID | Test | Assert |
+|---|---|---|
+| T-013.1 | Indicator value at first train bar | identical with and without future bars present |
+| T-013.2 | Buffer bars in label set | zero — buffer never produces labels |
+| T-013.3 | Buffer shorter than longest window | rejected with a clear error |
+| T-013.4 | Test-window indicators | computed from train+buffer tail, never from test lookahead |
+
+---
+
 # P1 — correctness and safety
-
-## T-010 ⬜ Fit config parameters to real data
-
-**Priority:** P1 · **Blocked by:** T-003 · **Est:** M
-
-`config/observation.yaml` states in its own header that its values are *"initial
-values"*. RSI 14/70/30, MACD 12/26/9, EMA 50 are textbook defaults, never fitted
-to crypto or to this universe. `aimos/learning/optimize.py` and
-`config/optimize_space.yaml` exist for exactly this and have never been run on
-real data.
-
-**Acceptance:** walk-forward parameter fit; out-of-sample improvement over
-defaults; overfitting guard (parameter stability across folds reported).
-
-| ID | Test | Assert |
-|---|---|---|
-| T-010.1 | Optimizer on synthetic noise | finds no stable edge (overfit guard works) |
-| T-010.2 | Fitted vs default params, out-of-sample | improvement reported honestly, incl. if negative |
-| T-010.3 | Fold-to-fold parameter variance | reported; high variance flagged as unstable |
-
----
-
-## T-011 ⬜ Verify the go-live gate is honestly tickable
-
-**Priority:** P1 · **Est:** S
-
-`backtest_validated` is a manual checkbox with no verification. Add a guard that
-refuses the tick unless a run card exists with permutation p < 0.05.
-
-| ID | Test | Assert |
-|---|---|---|
-| T-011.1 | Tick gate with no run card | rejected |
-| T-011.2 | Tick with p ≥ 0.05 run card | rejected |
-| T-011.3 | Tick with valid run card | accepted |
-| T-011.4 | Gates ticked out of order | rejected (existing ladder rule holds) |
-
----
 
 ## T-005 ⬜ GPL clean-room rewrite before any distribution (audit PD3)
 
@@ -563,6 +526,43 @@ audit warned about with manual gates.
       a command (`python -m pytest -q | tail -1`) instead of a hardcoded figure so
       it cannot drift again.
 - [ ] If environment-gated: documented in `specs/OPERATIONS.md` with the extra needed.
+
+---
+
+## T-010 ⬜ Fit config parameters to real data
+
+**Priority:** P1 · **Blocked by:** T-003 · **Est:** M
+
+`config/observation.yaml` states in its own header that its values are *"initial
+values"*. RSI 14/70/30, MACD 12/26/9, EMA 50 are textbook defaults, never fitted
+to crypto or to this universe. `aimos/learning/optimize.py` and
+`config/optimize_space.yaml` exist for exactly this and have never been run on
+real data.
+
+**Acceptance:** walk-forward parameter fit; out-of-sample improvement over
+defaults; overfitting guard (parameter stability across folds reported).
+
+| ID | Test | Assert |
+|---|---|---|
+| T-010.1 | Optimizer on synthetic noise | finds no stable edge (overfit guard works) |
+| T-010.2 | Fitted vs default params, out-of-sample | improvement reported honestly, incl. if negative |
+| T-010.3 | Fold-to-fold parameter variance | reported; high variance flagged as unstable |
+
+---
+
+## T-011 ⬜ Verify the go-live gate is honestly tickable
+
+**Priority:** P1 · **Est:** S
+
+`backtest_validated` is a manual checkbox with no verification. Add a guard that
+refuses the tick unless a run card exists with permutation p < 0.05.
+
+| ID | Test | Assert |
+|---|---|---|
+| T-011.1 | Tick gate with no run card | rejected |
+| T-011.2 | Tick with p ≥ 0.05 run card | rejected |
+| T-011.3 | Tick with valid run card | accepted |
+| T-011.4 | Gates ticked out of order | rejected (existing ladder rule holds) |
 
 ---
 
