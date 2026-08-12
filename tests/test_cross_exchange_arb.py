@@ -104,7 +104,7 @@ def test_arb_built_when_enabled():
 def test_synthetic_snapshot_has_measurable_dislocation():
     now = datetime(2026, 7, 16, tzinfo=timezone.utc)
     snap = synthetic_venue_snapshot("BTC/USDT", 30_000.0, now, ["binance", "kraken"],
-                                    dislocation_bps=40.0)
+                                    dislocation_bps=40.0, clock=FakeClock(now))
     assert set(snap) == {"binance", "kraken"}
     mids = sorted(t.mid for t in snap.values())
     gap_bps = (mids[1] - mids[0]) / ((mids[0] + mids[1]) / 2) * 10_000.0
@@ -129,6 +129,7 @@ def test_live_snapshot_uses_injected_fetchers_and_skips_failures():
         "BTC/USDT", now, ["binance", "kraken", "coinbase"],
         fetchers={"binance": _OK(100.0, 100.2), "kraken": _OK(100.3, 100.5),
                   "coinbase": _Dead()},
+        clock=FakeClock(now),
     )
     assert set(snap) == {"binance", "kraken"}  # dead venue dropped
     assert snap["binance"].mid == 100.1
@@ -137,7 +138,7 @@ def test_live_snapshot_uses_injected_fetchers_and_skips_failures():
 def test_engine_emits_dislocation_and_layer_surfaces_it():
     now = datetime(2026, 7, 16, tzinfo=timezone.utc)
     snap = synthetic_venue_snapshot("BTC/USDT", 30_000.0, now, ["binance", "kraken"],
-                                    dislocation_bps=40.0)
+                                    dislocation_bps=40.0, clock=FakeClock(now))
     ctx = build_context("BTC", now, {}, venue_snapshot=snap)
     eng = CrossExchangeEngine(obs_cfg(), FakeClock(now), reliability("cross_exchange"))
     evs = eng.observe(ctx)
@@ -217,7 +218,8 @@ def test_t002_realistic_tight_books_no_trade():
 def test_t002_synthetic_snapshot_still_fires():
     now = datetime(2026, 7, 16, tzinfo=timezone.utc)
     snap = synthetic_venue_snapshot("BTC/USDT", 30_000.0, now, ["binance", "kraken"],
-                                    dislocation_bps=40.0, spread_bps=1.0)
+                                    dislocation_bps=40.0, spread_bps=1.0,
+                                    clock=FakeClock(now))
     result = compute_dislocation(snap)
     assert result is not None
     assert result[0] > 35  # gross executable spread still ~38 bps after 1 bps spreads

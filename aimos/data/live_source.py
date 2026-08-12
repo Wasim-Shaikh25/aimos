@@ -89,9 +89,15 @@ def synthetic_venue_snapshot(
     Venue 0 is the reference; each later venue is offset a fixed, per-venue
     number of bps so ``price_dislocation`` fires offline (no network). Lets the
     cross-exchange engine + P8 arb plugin run fully self-contained.
+
+    ``clock`` is required; ``now`` is retained for backward-compatible call sites
+    but the snapshot timestamp comes from ``clock.now()`` so live/synthetic paths
+    use the same time source and cannot silently fall back to stale bar-close time.
     """
+    if clock is None:
+        raise ValueError("synthetic_venue_snapshot requires a Clock")
     snap: dict[str, VenueTop] = {}
-    base_ts = clock.now() if clock is not None else now
+    base_ts = clock.now()
     n = max(len(venues) - 1, 1)
     for i, venue in enumerate(venues):
         # spread venues symmetrically around base_mid so the max pairwise
@@ -115,10 +121,12 @@ def live_venue_snapshot(
 
     ``fetchers`` (venue → object with ``fetch_top_of_book``) is injectable for
     tests; otherwise a ccxt fetcher is built lazily per venue. Each successful
-    fetch is stamped with its own observation time so staleness checks can run.
-    When ``clock`` is provided, observation time is read from the clock; this
-    keeps replay and tests deterministic.
+    fetch is stamped with its own observation time from ``clock.now()`` so
+    staleness checks can run. ``now`` is retained for backward-compatible call
+    sites but is no longer used as a fallback timestamp.
     """
+    if clock is None:
+        raise ValueError("live_venue_snapshot requires a Clock")
     from aimos.data.connectors.ccxt_connector import CcxtCandleFetcher  # lazy
 
     snap: dict[str, VenueTop] = {}
@@ -128,7 +136,7 @@ def live_venue_snapshot(
             bid, ask = f.fetch_top_of_book(symbol)
             snap[venue] = VenueTop(
                 exchange=venue, best_bid=bid, best_ask=ask,
-                mid=(bid + ask) / 2.0, timestamp=clock.now() if clock is not None else now,
+                mid=(bid + ask) / 2.0, timestamp=clock.now(),
             )
         except Exception:  # noqa: BLE001 — a dead venue just drops out of the snapshot
             continue
@@ -184,6 +192,8 @@ def venue_snapshot_for(
         venues = list(paper.get("cross_venues", []))
         if len(venues) < 2:
             return None
+    if clock is None:
+        raise ValueError("venue_snapshot_for requires a Clock")
     if live_data:
         return live_venue_snapshot(symbol, now, venues, clock=clock)
     return synthetic_venue_snapshot(symbol, mid, now, venues, clock=clock)
