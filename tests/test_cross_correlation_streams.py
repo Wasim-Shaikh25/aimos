@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from aimos.core.clock import LiveClock
+from tests.conftest import FakeClock
 from aimos.core.schemas import Direction, MarketContext, Timeframe, VenueTop
 from aimos.data.streams import (
     Liquidation,
@@ -59,7 +60,7 @@ def test_cross_exchange_engine_emits_dislocation():
         "binance": VenueTop(exchange="binance", best_bid=99.9, best_ask=100.1, mid=100.0, timestamp=TS),
         "kraken": VenueTop(exchange="kraken", best_bid=100.4, best_ask=100.6, mid=100.5, timestamp=TS),
     }
-    eng = CrossExchangeEngine(obs_cfg(), LiveClock(), reliability("cross_exchange"))
+    eng = CrossExchangeEngine(obs_cfg(), FakeClock(TS), reliability("cross_exchange"))
     evs = eng.observe(MarketContext(symbol="BTC", now=TS, venue_snapshot=snap))
     assert [e for e in evs if e.name == "price_dislocation"]
 

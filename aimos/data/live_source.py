@@ -10,7 +10,9 @@ generates a deterministic random walk so the whole pipeline runs fully offline
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Mapping, Protocol
+from typing import Mapping, Optional, Protocol
+
+from aimos.core.clock import Clock
 
 import numpy as np
 import pandas as pd
@@ -80,6 +82,7 @@ def base_of(symbol: str) -> str:
 def synthetic_venue_snapshot(
     symbol: str, base_mid: float, now: datetime, venues: list[str],
     dislocation_bps: float = 30.0, spread_bps: float = 1.0,
+    clock: Optional[Clock] = None,
 ) -> dict[str, VenueTop]:
     """Deterministic multi-venue top-of-book with a replay-stable dislocation.
 
@@ -88,6 +91,7 @@ def synthetic_venue_snapshot(
     cross-exchange engine + P8 arb plugin run fully self-contained.
     """
     snap: dict[str, VenueTop] = {}
+    base_ts = clock.now() if clock is not None else now
     n = max(len(venues) - 1, 1)
     for i, venue in enumerate(venues):
         # spread venues symmetrically around base_mid so the max pairwise
@@ -97,7 +101,7 @@ def synthetic_venue_snapshot(
         half = mid * (spread_bps / 2.0) / 10_000.0
         snap[venue] = VenueTop(
             exchange=venue, best_bid=mid - half, best_ask=mid + half,
-            mid=mid, timestamp=now,
+            mid=mid, timestamp=base_ts,
         )
     return snap
 
@@ -105,12 +109,15 @@ def synthetic_venue_snapshot(
 def live_venue_snapshot(
     symbol: str, now: datetime, venues: list[str],
     fetchers: Mapping[str, object] | None = None,
+    clock: Optional[Clock] = None,
 ) -> dict[str, VenueTop]:
     """Public best bid/ask per venue via ccxt (no keys). Skips venues that fail.
 
     ``fetchers`` (venue → object with ``fetch_top_of_book``) is injectable for
     tests; otherwise a ccxt fetcher is built lazily per venue. Each successful
     fetch is stamped with its own observation time so staleness checks can run.
+    When ``clock`` is provided, observation time is read from the clock; this
+    keeps replay and tests deterministic.
     """
     from aimos.data.connectors.ccxt_connector import CcxtCandleFetcher  # lazy
 
@@ -121,7 +128,7 @@ def live_venue_snapshot(
             bid, ask = f.fetch_top_of_book(symbol)
             snap[venue] = VenueTop(
                 exchange=venue, best_bid=bid, best_ask=ask,
-                mid=(bid + ask) / 2.0, timestamp=datetime.now(timezone.utc),
+                mid=(bid + ask) / 2.0, timestamp=clock.now() if clock is not None else now,
             )
         except Exception:  # noqa: BLE001 — a dead venue just drops out of the snapshot
             continue
@@ -155,6 +162,7 @@ def perturb_for_venue(
 def venue_snapshot_for(
     features: Mapping, paper: Mapping, registry, symbol: str, mid: float,
     now: datetime, live_data: bool,
+    clock: Optional[Clock] = None,
 ):
     """Cross-exchange top-of-book for one coin, using ITS actual venues (§5.11).
 
@@ -177,8 +185,8 @@ def venue_snapshot_for(
         if len(venues) < 2:
             return None
     if live_data:
-        return live_venue_snapshot(symbol, now, venues)
-    return synthetic_venue_snapshot(symbol, mid, now, venues)
+        return live_venue_snapshot(symbol, now, venues, clock=clock)
+    return synthetic_venue_snapshot(symbol, mid, now, venues, clock=clock)
 
 
 __all__ = [

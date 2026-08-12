@@ -31,7 +31,8 @@ def compute_dislocation(
 
     Unlike a mid-to-mid gap, an arb is only profitable when the rich venue's
     best_bid exceeds the cheap venue's best_ask: ``bid[rich] - ask[cheap]``.
-    Stale quotes and venues whose observation times differ too much are dropped.
+    Stale quotes are dropped and pairs whose observation times differ too much
+    are rejected per-pair, so one slow exchange does not block valid pairs.
 
     ``venue_quotes[v]`` names each venue's quote stable; ``stable_rates[q]`` is
     that stable's USD rate (defaults to 1.0). Returns (bps, (cheap, rich)) or None.
@@ -47,16 +48,19 @@ def compute_dislocation(
                     continue
             fresh[venue] = top
         venue_tops = fresh
-        if max_venue_skew_seconds is not None and len(venue_tops) >= 2:
-            timestamps = [top.timestamp for top in venue_tops.values() if top.timestamp is not None]
-            if timestamps and (max(timestamps) - min(timestamps)).total_seconds() > max_venue_skew_seconds:
-                return None
     if len(venue_tops) < 2:
         return None
     best_bps = 0.0
     best_pair = ("", "")
     for a, b in combinations(venue_tops, 2):
         top_a, top_b = venue_tops[a], venue_tops[b]
+        if max_venue_skew_seconds is not None:
+            ts_a = top_a.timestamp
+            ts_b = top_b.timestamp
+            if ts_a is not None and ts_b is not None:
+                skew = abs((ts_a - ts_b).total_seconds())
+                if skew > max_venue_skew_seconds:
+                    continue
         quote_a = (venue_quotes or {}).get(a, "USDT")
         quote_b = (venue_quotes or {}).get(b, "USDT")
         rate_a = (stable_rates or {}).get(quote_a, 1.0)
@@ -147,7 +151,7 @@ class CrossExchangeEngine(ObservationEngine):
             venue_quotes=venue_quotes,
             max_quote_age_seconds=cc.get("max_quote_age_seconds"),
             max_venue_skew_seconds=cc.get("max_venue_skew_seconds"),
-            now=ctx.now,
+            now=self.clock.now(),
         )
         if result is None:
             return []
