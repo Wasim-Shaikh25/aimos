@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from aimos.core.config import load_params
-from aimos.core.schemas import Action, OrderResult, TradePlan
+from aimos.core.schemas import Action, OrderResult, TradePlan, VenueTop
 from aimos.execution.broker.live_router import MultiVenueLiveRouter
 from aimos.runtime.golive import GATES, GoLiveLadder
 from aimos.runtime.serve import _build_live_router, _maybe_arb
@@ -130,6 +130,11 @@ def test_build_live_router_skips_venues_without_keys(tmp_path, monkeypatch):
     assert _build_live_router(params, lad, ["binance", "kraken"]) is None
 
 
+def _snap(bid: float, ask: float) -> VenueTop:
+    return VenueTop(exchange="x", best_bid=bid, best_ask=ask, mid=(bid + ask) / 2.0,
+                    timestamp=datetime(2026, 7, 26, tzinfo=timezone.utc))
+
+
 def test_maybe_arb_routes_to_live_router_when_present():
     class NoCallSim:
         trades = []
@@ -149,7 +154,8 @@ def test_maybe_arb_routes_to_live_router_when_present():
     )
     holder = {"chosen": {}}
     now = datetime(2026, 7, 26, tzinfo=timezone.utc)
-    _maybe_arb(NoCallSim(), FakeDecision(plan), "BTC", {"binance": 100.0, "kraken": 100.6},
+    snap = {"binance": _snap(99.9, 100.1), "kraken": _snap(100.5, 100.7)}
+    _maybe_arb(NoCallSim(), FakeDecision(plan), "BTC", snap,
                now, {"starting_equity_usdt": 10000.0}, holder, live_router=router)
     assert len(broker_a.placed) == 1
     assert len(broker_b.placed) == 1
@@ -173,7 +179,8 @@ def test_maybe_arb_falls_back_to_sim_when_no_live_router():
     )
     holder = {"chosen": {}}
     now = datetime(2026, 7, 26, tzinfo=timezone.utc)
-    _maybe_arb(Sim(), FakeDecision(plan), "BTC", {"binance": 100.0, "kraken": 100.6},
+    snap = {"binance": _snap(99.9, 100.1), "kraken": _snap(100.5, 100.7)}
+    _maybe_arb(Sim(), FakeDecision(plan), "BTC", snap,
                now, {"starting_equity_usdt": 10000.0}, holder)
     assert Sim.called
 

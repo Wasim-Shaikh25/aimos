@@ -25,18 +25,27 @@ TS = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
 # ---- cross-exchange ----
 
 def test_dislocation_plain():
-    res = compute_dislocation({"binance": 100.0, "kraken": 100.5})
+    snap = {
+        "binance": VenueTop(exchange="binance", best_bid=99.9, best_ask=100.1, mid=100.0, timestamp=TS),
+        "kraken": VenueTop(exchange="kraken", best_bid=100.4, best_ask=100.6, mid=100.5, timestamp=TS),
+    }
+    res = compute_dislocation(snap)
     assert res is not None
     bps, (cheap, rich) = res
     assert cheap == "binance" and rich == "kraken"
-    assert bps == pytest.approx(0.5 / 100.25 * 10_000, abs=0.1)
+    # Executable spread: sell at kraken bid, buy at binance ask.
+    assert bps == pytest.approx((100.4 - 100.1) / 100.25 * 10_000, abs=0.1)
 
 
 def test_dislocation_depeg_adjusted():
     # Same nominal mid, but kraken quotes in a depegged USDC (0.95). After USD
     # conversion the real dislocation appears (§16.1 B-3).
+    snap = {
+        "binance": VenueTop(exchange="binance", best_bid=99.9, best_ask=100.1, mid=100.0, timestamp=TS),
+        "kraken": VenueTop(exchange="kraken", best_bid=99.9, best_ask=100.1, mid=100.0, timestamp=TS),
+    }
     res = compute_dislocation(
-        {"binance": 100.0, "kraken": 100.0},
+        snap,
         venue_quotes={"binance": "USDT", "kraken": "USDC"},
         stable_rates={"USDT": 1.0, "USDC": 0.95},
     )

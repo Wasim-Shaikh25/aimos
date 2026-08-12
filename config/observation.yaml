@@ -105,6 +105,8 @@ scalp_micro:                 # §17 — proxy fast-loop micro context (feature-f
 cross_exchange:              # §5.11
   fee_floor_bps: 8           # dislocation must exceed fee floor + extra
   dislocation_extra_bps: 2
+  max_quote_age_seconds: 10  # drop stale venue quotes
+  max_venue_skew_seconds: 2   # reject a pair whose observation times differ > this
   venue_div_rel_vol_hi: 3.0  # one venue rel_vol > this...
   venue_div_others_lo: 1.5   # ...others below this → manipulation flag
 
