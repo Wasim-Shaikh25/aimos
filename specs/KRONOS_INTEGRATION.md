@@ -229,36 +229,113 @@ step needs the operator or a differently-provisioned environment.**
 
 > #### ⚠️ OPERATOR ACTION NEEDED
 >
+> #### Which variant — final recommendation: **Kronos-small**, not Kronos-mini
+>
+> Verified this session: PyPI's default `torch` wheel is **526.6 MB on disk**
+> (`pip download torch` — it bundles CUDA support even for CPU-only use, which is
+> wasteful here and must be avoided — see step 3). The CPU-only wheel from
+> `download.pytorch.org/whl/cpu` is smaller, but **that host is also blocked from
+> this session** (403, same as huggingface.co and data.binance.vision — logged in
+> `specs/OPERATOR_ACTIONS.md`), so its exact size needs confirming once you
+> install it — publicly documented CPU-only PyTorch wheels are commonly in the
+> low-to-mid hundreds of MB, but treat that as approximate until you see the real
+> number.
+>
+> The reason this determines mini-vs-small: **torch's own runtime overhead
+> dominates the footprint, not the model weights.**
+>
+> | Component | Kronos-mini | Kronos-small |
+> |---|---|---|
+> | Params | 4.1M | 24.7M |
+> | Weights at fp32 (`4 bytes × params`) | ≈16 MB | ≈99 MB |
+> | Weights at fp16/bf16 | ≈8 MB | ≈49 MB |
+> | Tokenizer pairing | `Kronos-Tokenizer-2k` (ctx 2048) | `Kronos-Tokenizer-base` (ctx 512) |
+> | torch CPU runtime overhead (approx., **verify on your machine**) | same | same |
+>
+> Model-weight sizes above are computed from the published parameter counts
+> (§2), not measured from a downloaded file — **confirm against the actual file
+> size once fetched**; safetensors storage is close to this but not exact.
+>
+> Once torch is loaded at all, the difference between an 8–16 MB and a 49–99 MB
+> weight file is small change against a 300+ MB runtime. Meanwhile
+> **Kronos-small matches what upstream actually evaluates with** — their own
+> `finetune/config.py` uses `lookback=90` (§2.0.2), far under even
+> Kronos-small's 512-token context, so `Kronos-mini`'s extra 2048-token context
+> buys nothing we'd use. **Recommendation: `Kronos-small` +
+> `Kronos-Tokenizer-base`.** Revisit only if the operator's actual measured RSS
+> makes mini necessary — that number doesn't exist yet; this is a prediction,
+> not a measurement (§3.2 step 5 closes that loop).
+>
+> #### Steps
+>
 > 1. **Download the weights** from a machine with Hugging Face access:
 >    ```bash
 >    pip install huggingface_hub
 >    huggingface-cli download NeoQuasar/Kronos-Tokenizer-base --local-dir kronos_weights/tokenizer
 >    huggingface-cli download NeoQuasar/Kronos-small --local-dir kronos_weights/model
 >    ```
->    (`Kronos-mini`/`Kronos-Tokenizer-2k` for the 4.1M-param variant, ctx 2048, if
->    footprint matters more than accuracy — see the size table in §2.)
 > 2. **Add them to the repo** — as a new `vendor/kronos_weights/` path (weights are
->    binary artifacts; consider Git LFS) with a `manifest.yaml` entry per
->    `vendor/VENDOR.md`'s existing pattern, recording the exact HF revision/commit
->    downloaded.
-> 3. **Install the inference-only extra** — `torch`, `einops`, `safetensors` as a
->    **new, separate** `pyproject.toml` optional-dependency group (e.g. `[kronos]`),
->    never added to the base install or the `runtime`/`serve` extras that the
->    trading process installs.
+>    binary artifacts; consider Git LFS given the ≈99 MB weight file) with a
+>    `vendor/manifest.yaml` entry matching the existing style exactly
+>    (`vendor/manifest.yaml:38` shows the `hb_mm` entry as the closest analogue —
+>    an Apache/MIT-licensed upstream, `skip: true` until an operator verifies the
+>    exact artifact):
+>    ```yaml
+>      kronos_weights:
+>        upstream: https://huggingface.co/NeoQuasar/Kronos-small
+>        license: MIT
+>        sha: <commit/revision id shown by huggingface-cli after download>
+>        note: >
+>          Kronos-small (24.7M params) + Kronos-Tokenizer-base (ctx 512), pinned
+>          per KR-39 Option B. Binary artifact, not source — runs out-of-process
+>          only (never imported into aimos/); see specs/KRONOS_INTEGRATION.md §3.2.
+>        paths:
+>          - source: NeoQuasar/Kronos-small (HF)
+>            dest: vendor/kronos_weights/model
+>          - source: NeoQuasar/Kronos-Tokenizer-base (HF)
+>            dest: vendor/kronos_weights/tokenizer
+>        skip: true  # binary artifact; scripts/vendor.py's git-clone flow doesn't apply — operator-placed
+>    ```
+>    (`scripts/vendor.py` clones git repos at a pinned SHA; it doesn't know how to
+>    pull HF model files, hence `skip: true` — this entry is a manifest *record*
+>    of what's there and why, not something the script fetches for you.)
+> 3. **Install the inference-only extra as a new, separate group** — never the
+>    base install or the `runtime`/`serve` extras the trading process installs:
+>    ```toml
+>    # pyproject.toml — new group, NOT added to [project.dependencies] or
+>    # existing [project.optional-dependencies] runtime/serve/data/ml groups
+>    [project.optional-dependencies]
+>    kronos = [
+>        "torch==2.13.0",       # CPU wheel — install with the command below, not plain `pip install torch`
+>        "safetensors==0.6.2",
+>        "einops==0.8.1",
+>    ]
+>    ```
+>    Install with the CPU-only index explicitly, so you get the small wheel, not
+>    the 526.6 MB CUDA-bundled default:
+>    ```bash
+>    pip install torch --index-url https://download.pytorch.org/whl/cpu
+>    pip install -e ".[kronos]"
+>    ```
 > 4. **Run it out-of-process** — per **KR-39**, as an HTTP microservice the
 >    `ForecastProvider` protocol calls, so torch and the weights never enter the
 >    `aimos` trading process's dependency graph or memory footprint. This is the
 >    one requirement that doesn't relax even with the weights in hand — §4 C6
->    (import direction) and the 4 GB RSS budget (KR-11) both still apply, and an
->    out-of-process service is how a torch-based model coexists with either.
-> 5. **Report back what it evaluates to** — with the same costed backtest harness
->    (T-003) and the same shadow-window IC gate (KR-31) as Option A, so the two are
->    comparable on identical terms rather than one being trusted more just because
->    the weights are "real."
+>    (import direction) and the 4 GB RSS budget (KR-11) both still apply to the
+>    *trading process*; the Kronos microservice is a **separate line item** on the
+>    same 4 GB host and needs its own headroom (see the table above — plan for
+>    the torch runtime overhead, confirmed only once you measure it locally).
+> 5. **Report back what it evaluates to** — measured RSS of the running
+>    microservice (closes the "approx., verify on your machine" gaps above), plus
+>    output from the same costed backtest harness (T-003) and the same
+>    shadow-window IC gate (KR-31) as Option A, so the two are comparable on
+>    identical terms rather than one being trusted more just because the weights
+>    are "real."
 >
 > Once weights exist at `vendor/kronos_weights/`, tell me — I'll finish wiring the
 > `ForecastProvider` HTTP client (KR-39), the microservice Dockerfile, and the
-> comparison harness. What I cannot do myself is step 1.
+> comparison harness. What I cannot do myself is steps 1 and the CPU-wheel size
+> confirmation in step 3.
 
 **This does not change the K0–K5 rollout ladder or its blockers.** Option B still
 needs T-001 (outcomes loop) and T-003 (costed backtest with real history — itself

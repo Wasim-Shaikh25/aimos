@@ -26,7 +26,10 @@ command you (or CI, or the production host) can run today.
 4. Tell me it's done — the follow-on work (steps that depend on the fetched data)
    picks up from there in the same or a new session.
 
-Items are ordered by what unblocks the most downstream work.
+Items are ordered by what unblocks the most downstream work — that's a measure of
+leverage, not a required sequence. The operator can and has picked a different
+order (item 2 first, as of 2026-08); each item's **Status** line reflects actual
+progress, independent of its position in the list.
 
 ---
 
@@ -58,44 +61,69 @@ transitively **T-010** (config fitting), **K1** (Kronos forecaster training,
 `specs/KRONOS_INTEGRATION.md`), and every "does any strategy have edge" question
 raised in this project so far.
 
-**Status:** ⬜ not done.
+**Status:** ⬜ not done — **operator has explicitly deferred this** (2026-08) in
+favor of item 2 below; not blocking, just sequenced later by choice. Note this
+means K1 (training AIMOS's own native forecaster on real data) is also on hold
+until this lands, independent of how item 2 goes.
 
 ---
 
-## 2. (Optional) Kronos real pretrained weights — only if Option B is wanted
+## 2. Kronos real pretrained weights — operator is doing this now (Option B)
+
+**Status:** 🟨 **in progress** — operator has chosen to pursue this before item 1.
+Exact download/placement steps and the mini-vs-small sizing decision are fully
+specified in `specs/KRONOS_INTEGRATION.md` §3.2 (not duplicated here to avoid two
+copies drifting) — this entry tracks the network-access finding only.
 
 **Verified blocked from this session:**
 ```
 $ curl https://huggingface.co
 CONNECT tunnel failed, response 403
+$ curl https://download.pytorch.org
+CONNECT tunnel failed, response 403        ← the CPU-only torch wheel lives here
+$ pip download torch                        (default PyPI index, CUDA-bundled)
+Downloaded torch-2.13.0-...-x86_64.whl (526.6 MB)   ← real, measured this session;
+                                                        confirms why the CPU-only
+                                                        wheel from the blocked host
+                                                        above matters — see §3.2
 $ pip install huggingface_hub
 Would install ... huggingface_hub-1.27.0    ← the PACKAGE installs fine; only
                                                 fetching from huggingface.co itself
                                                 is blocked here
 ```
 
-**Not required by default.** `specs/KRONOS_INTEGRATION.md` recommends **Option
-A** — an AIMOS-native clean-room model, smaller than even Kronos's own smallest
-checkpoint, trained on your actual crypto history once item 1 above is done. That
-recommendation holds regardless of whether these weights are ever fetched (see
-`specs/KRONOS_INTEGRATION.md` §3.1 — the reasons are about market fit,
-determinism, and process isolation, not network access).
+**Worth restating even though this is now underway:** `specs/KRONOS_INTEGRATION.md`
+§3.1 still recommends **Option A** (AIMOS-native clean-room model) as the
+architectural default — those reasons are about market fit, determinism, and
+process isolation, and none of them change once the weights exist locally.
+Option B doesn't replace that recommendation; it runs *alongside* it, out-of-
+process (KR-39), so both can be measured on identical, costed terms once item 1
+provides real data to measure against.
 
-**If you want to try the real model anyway** (e.g. to compare against Option A
-before committing), full steps are in `specs/KRONOS_INTEGRATION.md` §3.2. Short
-version:
+**Final recommendation, with reasoning:** `Kronos-small` + `Kronos-Tokenizer-base`,
+not `Kronos-mini` — full sizing table and rationale in §3.2. Short version: once
+torch is loaded at all, its own runtime overhead dwarfs the difference between an
+~8 MB and an ~99 MB weight file, and `Kronos-small` matches the context length
+(90–512 bars) upstream actually finetunes and evaluates with, per their own
+`finetune/config.py` (§2.0.2) — `Kronos-mini`'s extra context (2048) buys nothing
+we'd use.
 
 ```bash
 pip install huggingface_hub
 huggingface-cli download NeoQuasar/Kronos-Tokenizer-base --local-dir kronos_weights/tokenizer
 huggingface-cli download NeoQuasar/Kronos-small --local-dir kronos_weights/model
+
+# CPU-only torch — NOT plain `pip install torch` (that pulls the 526.6 MB
+# CUDA-bundled default wheel, verified above; this needs the blocked host too,
+# so run this from wherever you're running the other commands)
+pip install torch --index-url https://download.pytorch.org/whl/cpu
 ```
 
-Then add the downloaded files to the repo under a new `vendor/kronos_weights/`
-path with a `vendor/manifest.yaml` entry (recording the exact HF revision), and
-tell me — I'll wire the out-of-process `ForecastProvider` adapter (KR-39), the
-inference-only dependency extra, and a harness to compare it against Option A on
-identical, costed terms.
+Then add the downloaded files to the repo under `vendor/kronos_weights/` with the
+exact `vendor/manifest.yaml` stanza given in `specs/KRONOS_INTEGRATION.md` §3.2
+step 2, and tell me — I'll wire the out-of-process `ForecastProvider` adapter
+(KR-39), the microservice Dockerfile, the `[kronos]` `pyproject.toml` extra, and
+the comparison harness against Option A.
 
 **Unblocks:** nothing else is gated on this — it's a genuine option, not a
 prerequisite. Item 1 (history data) is still needed either way, to score either

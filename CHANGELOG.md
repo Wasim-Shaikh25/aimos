@@ -26,6 +26,37 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 - `serve.py` `_maybe_arb()` and `_price_row()` use the live `VenueTop` snapshot
   so prices reflect executable top-of-book.
 
+### Added (finalized Kronos download spec — operator is fetching the weights now)
+- Confirmed `specs/COMPETITIVE_ANALYSIS.md` already covers all 9 platforms from
+  the shared document (7 table rows + Jesse + Gainium, added in an earlier pass
+  this session) — no gap found on re-check.
+- Operator is proceeding with Kronos Option B (real pretrained weights) now and
+  deferring the 12-month history download; `specs/OPERATOR_ACTIONS.md` updated to
+  reflect actual status per item rather than a fixed priority order.
+- **`specs/KRONOS_INTEGRATION.md` §3.2 finalized** with a concrete, unambiguous
+  spec rather than a sketch:
+  - **Real measurement, not an estimate:** `pip download torch` from the default
+    PyPI index produces a **526.6 MB** wheel (bundles CUDA support even for
+    CPU-only use). The CPU-only wheel lives at `download.pytorch.org`, which is
+    **also blocked from this session** (403) — a third host added to
+    `specs/OPERATOR_ACTIONS.md`, alongside `huggingface.co` and
+    `data.binance.vision`.
+  - **Final variant recommendation: `Kronos-small` + `Kronos-Tokenizer-base`, not
+    `Kronos-mini`**, with reasoning: once torch is loaded at all its own runtime
+    overhead dwarfs the difference between an ~8 MB and an ~99 MB weight file, and
+    Kronos-small's context length matches what upstream actually finetunes and
+    evaluates with (`lookback=90`, confirmed via `finetune/config.py`, §2.0.2) —
+    `Kronos-mini`'s extra 2048-token context buys nothing we'd use here.
+  - Exact `huggingface-cli download` commands, exact `pyproject.toml` `[kronos]`
+    optional-dependency group (isolated from the base/runtime/serve extras), the
+    exact CPU-only install command, and an exact `vendor/manifest.yaml` stanza
+    matching the existing `hb_mm`-entry style in that file.
+  - Explicit about what's estimated (weight-file sizes computed from published
+    param counts, torch CPU-wheel size and runtime RSS both unverifiable from this
+    session) versus what's measured (the 526.6 MB CUDA wheel, confirmed by
+    running the download) — step 5 now asks the operator to report measured RSS
+    back, closing those gaps with real numbers instead of leaving them as guesses.
+
 ### Fixed (conflating this session's network limits with architectural decisions)
 - The user pushed back directly: don't rule out a capability just because this
   development sandbox can't reach it — say so explicitly and hand off the exact
