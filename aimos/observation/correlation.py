@@ -66,6 +66,10 @@ class CorrelationEngine(ObservationEngine):
                 return real_candles(df)
         return None
 
+    def _min_bars(self) -> int:
+        cc = self.cfg["correlation"]
+        return int(cc["beta_window"]) + 1
+
     def _ev(self, ctx, name, value, direction, strength, meta) -> Evidence:
         return Evidence(
             source=f"{self.name}.{name}", symbol=ctx.symbol, timeframe=Timeframe.H1,

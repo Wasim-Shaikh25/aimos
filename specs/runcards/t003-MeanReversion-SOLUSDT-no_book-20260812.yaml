@@ -1,0 +1,30 @@
+config_hash: fab4929fff3b2493
+data_hash: c8cca2dd90a50b43
+engine_profile: no_book
+git_sha: 7c64d25
+metrics:
+  avg_mae_r: -0.9722
+  avg_mfe_r: 2.9131
+  avg_pnl_r: -0.6061
+  engine_profile: no_book
+  exchange: binance
+  exposure_pct: 0.0
+  max_drawdown: -0.0332
+  median_pnl_r: -1.0756
+  no_trade_rate: 0.0
+  profit_factor: 0.4017
+  sharpe: -4.9268
+  strategy: MeanReversion
+  symbol: SOL/USDT
+  total_pnl_usd: -306.5781
+  trades: 28
+  verdict: insufficient sample
+  win_rate: 0.07142857142857142
+run_id: t003-MeanReversion-SOLUSDT-no_book-20260812
+seed: 0
+universe_snapshot_id: binance-tier1-28
+validation:
+  passes_promotion_gate: false
+  permutation_p: 0.973
+  sharpe_ci_high: 0.04610658330755483
+  sharpe_ci_low: -36.27858407438566

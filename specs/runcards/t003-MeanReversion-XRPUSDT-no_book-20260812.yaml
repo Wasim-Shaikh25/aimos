@@ -1,0 +1,30 @@
+config_hash: fab4929fff3b2493
+data_hash: be2fd7a5345702cd
+engine_profile: no_book
+git_sha: 7c64d25
+metrics:
+  avg_mae_r: -0.9587
+  avg_mfe_r: 2.1283
+  avg_pnl_r: -0.7112
+  engine_profile: no_book
+  exchange: binance
+  exposure_pct: 0.0
+  max_drawdown: -0.0408
+  median_pnl_r: -1.0854
+  no_trade_rate: 0.0
+  profit_factor: 0.3159
+  sharpe: -8.7415
+  strategy: MeanReversion
+  symbol: XRP/USDT
+  total_pnl_usd: -306.2977
+  trades: 21
+  verdict: insufficient sample
+  win_rate: 0.047619047619047616
+run_id: t003-MeanReversion-XRPUSDT-no_book-20260812
+seed: 0
+universe_snapshot_id: binance-tier1-21
+validation:
+  passes_promotion_gate: false
+  permutation_p: 0.965
+  sharpe_ci_high: 0.020139221662929984
+  sharpe_ci_low: -38.77913292260963

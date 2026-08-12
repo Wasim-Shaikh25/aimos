@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 import pandas as pd
+import structlog
 
 from aimos.backtest import costs as cost_mod
 from aimos.backtest.metrics import Metrics, compute_metrics
@@ -35,7 +36,9 @@ from aimos.execution.position_sizer import SizingInputs
 from aimos.execution.risk_manager import RiskState
 from aimos.intelligence.understand import IntelligenceLayer
 from aimos.journal.journal import Journal
-from aimos.observation.runner import build_engines, engines_reporting, run_all
+from aimos.observation.runner import build_engines, engines_reporting, required_warmup, run_all
+
+log = structlog.get_logger(__name__)
 
 # no_book profile: the 5 book/funding/venue engines can't report → denominator 8
 _NO_BOOK_COVERAGE = 8
@@ -81,16 +84,35 @@ class BacktestEngine:
         self._depth_frac = float(params.costs.model_dump()["volume_proxy_depth_frac"])
         self._primary = params.exchanges["primary"]
 
-    def run(self, candles: pd.DataFrame, warmup: int = 200) -> BacktestResult:
+    def run(
+        self,
+        candles: pd.DataFrame,
+        warmup: Optional[int] = None,
+        peers: Optional[dict[str, pd.DataFrame]] = None,
+    ) -> BacktestResult:
+        min_warmup = required_warmup(self.params)
+        if warmup is None:
+            warmup = min_warmup
+        if warmup < min_warmup:
+            raise ValueError(f"warmup {warmup} shorter than required indicator warmup {min_warmup} (T-013)")
+        n = len(candles)
+        if n < warmup + 2:
+            raise ValueError(f"candles {n} shorter than warmup {warmup} + 2 (need at least one decision bar and one fill bar)")
         equity_curve: list[float] = []
         n_decisions = 0
         n_no_trade = 0
-        n = len(candles)
         for i in range(warmup, n - 1):  # need bar i+1 to fill
             bar_time = candles.index[i].to_pydatetime()
             self.clock.set(bar_time)
-            window = candles.iloc[: i + 1]  # data <= t (anti-lookahead)
-            ctx = build_context(self.symbol, bar_time, {Timeframe.H1: window}, peers={"BTC": window})
+            # Keep only the longest indicator lookback window so engines run in
+            # bounded time while still producing identical values (T-013).
+            start = max(0, i + 1 - min_warmup)
+            window = candles.iloc[start : i + 1]
+            if peers and "BTC" in peers:
+                peer_frames = {"BTC": peers["BTC"].iloc[start : i + 1]}
+            else:
+                peer_frames = {"BTC": window}
+            ctx = build_context(self.symbol, bar_time, {Timeframe.H1: window}, peers=peer_frames)
             bundle = run_all(self.obs_engines, ctx)
             reporting = len(engines_reporting(bundle))
             mu = self.intel.understand(bundle, reporting, coverage_engines=self.coverage)
@@ -100,6 +122,8 @@ class BacktestEngine:
                 mu, exec_ctx, self._sizing_inputs(window.iloc[-1]),
                 RiskState(open_positions=len(self.broker.positions())),
             )
+            decision_id = plan.meta.get("decision_id") or f"{self.symbol}-{bar_time.isoformat()}"
+            plan.meta["decision_id"] = decision_id
             n_decisions += 1
             if plan.action is Action.NO_TRADE:
                 n_no_trade += 1
@@ -112,8 +136,9 @@ class BacktestEngine:
             self.journal.write_decision(DecisionRecord(
                 timestamp=bar_time, symbol=self.symbol, understanding=mu,
                 candidates=[], chosen=plan, mode="backtest",
-                decision_id=f"{self.symbol}-{bar_time.isoformat()}",
+                decision_id=decision_id,
             ))
+            self._drain_outcomes()
             equity_curve.append(self.broker.equity())
 
         days = max((candles.index[-1] - candles.index[warmup]).days, 1)
@@ -142,6 +167,14 @@ class BacktestEngine:
         bar_vol_quote = float(last_bar["volume"]) * float(last_bar["close"])
         depth = self._depth_frac * bar_vol_quote  # §9.2 volume-proxy depth
         return SizingInputs(volume_24h_usd=bar_vol_quote, book_depth_1pct_usd=depth)
+
+    def _drain_outcomes(self) -> None:
+        """Persist closed trade outcomes; never let a journal failure crash the engine."""
+        for outcome in self.broker.drain_outcomes():
+            try:
+                self.journal.write_outcome(outcome)
+            except Exception:  # noqa: BLE001
+                log.error("journal_write_outcome_failed", decision_id=outcome.decision_id, exc_info=True)
 
     @staticmethod
     def _build_caps(params) -> CapacityCaps:

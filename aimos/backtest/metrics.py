@@ -54,11 +54,12 @@ def _sortino(daily_returns: np.ndarray) -> float:
     return float(daily_returns.mean() / dd * math.sqrt(_TRADING_DAYS))
 
 
-def max_drawdown(equity_curve: np.ndarray) -> float:
-    if equity_curve.size == 0:
+def max_drawdown(equity_curve: list[float] | np.ndarray) -> float:
+    eq = np.asarray(equity_curve, dtype=float)
+    if eq.size == 0:
         return 0.0
-    peak = np.maximum.accumulate(equity_curve)
-    dd = (equity_curve - peak) / peak
+    peak = np.maximum.accumulate(eq)
+    dd = (eq - peak) / peak
     return float(dd.min())
 
 

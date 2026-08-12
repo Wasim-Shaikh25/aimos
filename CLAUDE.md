@@ -10,6 +10,12 @@ before doing anything.
 3. For design/behavior questions, consult **`specs/ARCHITECTURE.md`** (the build
    contract; sections are referenced as §N throughout the code).
 4. For run/deploy/config questions, consult **`specs/OPERATIONS.md`**.
+5. Check **`specs/OPERATOR_ACTIONS.md`** before deciding a capability is
+   unreachable. This development environment's network egress is restricted to a
+   specific allowlist — a blocked host is a property of *this session*, not of
+   AIMOS. Never fold "I can't reach X from here" into "X shouldn't be done"
+   without saying so explicitly and logging it in that file with the exact
+   command an operator would run.
 
 Do not re-implement something that STATUS marks ✅. Do not "enable" something
 marked 🟡 without providing its prerequisite. Pick the next ⏭️ item unless told

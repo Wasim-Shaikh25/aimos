@@ -1,0 +1,30 @@
+config_hash: fab4929fff3b2493
+data_hash: eed8b2094d8dd945
+engine_profile: no_book
+git_sha: 7c64d25
+metrics:
+  avg_mae_r: -0.9691
+  avg_mfe_r: 2.5169
+  avg_pnl_r: -0.6353
+  engine_profile: no_book
+  exchange: binance
+  exposure_pct: 0.0
+  max_drawdown: -0.0204
+  median_pnl_r: -1.0919
+  no_trade_rate: 0.0
+  profit_factor: 0.3775
+  sharpe: -11.5152
+  strategy: MeanReversion
+  symbol: LINK/USDT
+  total_pnl_usd: -163.4266
+  trades: 16
+  verdict: insufficient sample
+  win_rate: 0.0625
+run_id: t003-MeanReversion-LINKUSDT-no_book-20260812
+seed: 0
+universe_snapshot_id: binance-tier1-16
+validation:
+  passes_promotion_gate: false
+  permutation_p: 0.924
+  sharpe_ci_high: 0.09496611555270143
+  sharpe_ci_low: -54.1144527307284

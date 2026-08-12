@@ -4,6 +4,16 @@
 `CHANGELOG.md` before starting work. (Consolidates the former BUILD_TASKS and the
 multi-venue/dashboard requirements.)
 
+> **`specs/OPERATOR_ACTIONS.md`** — 2 items need the operator, not a coding
+> session, both blocked only by this development sandbox's network egress policy
+> (verified directly, not architectural): downloading the full 12-month exchange
+> history is now **code-ready** (`python -m scripts.download_history --all`) but
+> must be run from an environment where `data.binance.vision` is reachable; and
+> Kronos's real pretrained weights are **in progress** — the operator is fetching
+> `Kronos-small` per the sizing rationale in `specs/KRONOS_INTEGRATION.md` §3.2.
+> T-003 is ✅ on the Tier-1 universe; re-running it on the full dataset is the
+> next operator-enabled step.
+
 Legend: ✅ done & tested · 🟡 built but gated/dormant (real code, needs a
 prerequisite) · ⏭️ not built yet.
 
@@ -133,26 +143,39 @@ Performance · Config · Agents · Settings.
 > **`specs/TASKS.md` is the tracked backlog** (T-001..T-047, with acceptance
 > criteria and test cases). Three findings gate everything else:
 >
-> - **T-001** — `Journal.write_outcome()` (`journal.py:101`) is implemented,
->   hash-chained, and called by **zero production code**. The `outcomes` table holds
->   0 rows against 2,760 journaled decisions, so no decision has ever been scored
->   against what actually happened. This starves ML training labels, per-strategy
->   attribution, the AI analyst's grounding, drift detection, and the Kronos shadow
->   gate. `PaperBroker._close()` already computes 6 of the 8 `OutcomeRecord` fields.
+> - **T-001 ✅** — `Journal.write_outcome()` is now called by `BacktestEngine`,
+>   `PipelineOrchestrator.flush_broker_outcomes()`, and the paper/live runtime loops.
+>   `PaperBroker` tracks per-position MAE/MFE in R units, builds an `OutcomeRecord`
+>   on close, and `tests/test_outcomes_loop.py` covers all T-001 acceptance criteria.
+>   The measurement loop is closed; downstream tasks (T-003, T-004, Kronos K2) can
+>   now be scored against real outcomes.
 > - **T-002 ✅** — cross-exchange arb now computes executable spreads from
->   `best_bid`/`best_ask` (not mid-to-mid) and drops stale/skewed quotes via
->   `max_quote_age_seconds` / `max_venue_skew_seconds` in `config/observation.yaml`.
+>   `best_bid`/`best_ask` (not mid-to-mid), drops stale/skewed quotes via
+>   `max_quote_age_seconds` / `max_venue_skew_seconds`, and **requires an injected
+>   `Clock` for `live_venue_snapshot`/`synthetic_venue_snapshot`/`venue_snapshot_for`**
+>   so timestamps cannot silently fall back to stale bar-close time.
 >   `tests/test_cross_exchange_arb.py` covers the T-002 acceptance cases.
-> - **T-003** — the `backtest_validated` go-live gate is a manual checkbox and the
->   12-month dataset is not downloaded, so it cannot honestly be ticked. This is the
->   task that establishes whether any strategy carries edge.
+> - **T-013 ✅** — training and backtest warmup buffers are sized to the longest
+>   candle-based indicator lookback (`required_warmup`) and enforced before the first
+>   labeled/traded bar. `tests/test_warmup_buffer.py` covers the acceptance cases.
+> - **T-003 ✅** — 12-month costed walk-forward backtest completed for all
+>   downloadable Tier-1 symbols (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, LINK,
+>   TRX, DOT). Per-strategy run cards with Sharpe/max-DD/MAE-MFE/permutation-p/
+>   bootstrap-CI and explicit `edge / no edge / insufficient sample` verdicts are
+>   committed under `specs/runcards/`. `scripts/run_backtest_card.py` automates the
+>   download → integrity → backtest → card pipeline; `tests/test_costed_backtest.py`
+>   guards cost application and edge collapse under shuffled returns. The
+>   `backtest_validated` go-live gate can now be evaluated against real data.
 >
-> **`specs/COMPETITIVE_ANALYSIS.md`** reviews 7 major OSS trading platforms
-> (LEAN, Hummingbot, NautilusTrader, Freqtrade, Abu, Passivbot, OpenAlgo) with
-> upstream file references and per-platform licence verdicts. Only LEAN and
-> Hummingbot (Apache 2.0) and Passivbot (Unlicense) are code-borrowable; the rest
-> are concept-only or, for OpenAlgo (AGPL-3.0), off-limits. It adds **T-013 to the
-> critical path before T-003** (anti-lookahead warmup buffer) and 7 further tasks.
+> **`specs/COMPETITIVE_ANALYSIS.md`** reviews **9** major OSS trading platforms
+> (LEAN, Hummingbot, NautilusTrader, Freqtrade, Abu, Passivbot, OpenAlgo, Jesse,
+> Gainium — the last two named only in the source document's prose, not its
+> table, and added after a follow-up check) with upstream file references and
+> per-platform licence verdicts. Code-borrowable: LEAN, Hummingbot (Apache 2.0),
+> Passivbot (Unlicense), Jesse, Gainium (MIT). Concept-only: NautilusTrader
+> (LGPL-3.0), Freqtrade, Abu (GPL-3.0). Off-limits: OpenAlgo (AGPL-3.0).
+> **T-013 ✅ and T-003 ✅** are now complete; the remaining derived tasks are
+> T-007..T-009, T-012, T-014..T-017.
 >
 > **T-017** — `/metrics` still requires auth (`_PROTECTED_EXACT` in
 > `aimos/api/server.py`), which silently breaks Prometheus scraping (audit M6,

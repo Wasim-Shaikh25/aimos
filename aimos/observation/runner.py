@@ -13,7 +13,7 @@ from typing import Any
 
 import structlog
 
-from aimos.core.clock import Clock
+from aimos.core.clock import BacktestClock, Clock
 from aimos.core.normalize import HALF
 from aimos.core.schemas import EvidenceBundle, MarketContext
 from aimos.observation.base import ObservationEngine
@@ -106,4 +106,16 @@ def engines_reporting(bundle: EvidenceBundle) -> set[str]:
     return {e.source.split(".")[0] for e in bundle.evidences}
 
 
-__all__ = ["build_engines", "engines_reporting", "run_all"]
+def required_warmup(params: Any) -> int:
+    """Minimum warmup bars so all candle-based indicators have converged (T-013).
+
+    Each engine that consumes candles already advertises ``_min_bars`` from its
+    own config. We take the maximum so the first labeled/traded bar is computed
+    from a buffer that is long enough for every active engine.
+    """
+    engines = build_engines(params, BacktestClock())
+    mins = [int(e._min_bars()) for e in engines if hasattr(e, "_min_bars") and callable(e._min_bars)]
+    return max(mins) if mins else 0
+
+
+__all__ = ["build_engines", "engines_reporting", "required_warmup", "run_all"]

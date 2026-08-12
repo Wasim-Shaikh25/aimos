@@ -1,0 +1,30 @@
+config_hash: fab4929fff3b2493
+data_hash: 853dd7bd74e951b7
+engine_profile: no_book
+git_sha: 7c64d25
+metrics:
+  avg_mae_r: -0.9724
+  avg_mfe_r: 2.62
+  avg_pnl_r: -0.432
+  engine_profile: no_book
+  exchange: binance
+  exposure_pct: 0.0
+  max_drawdown: -0.0259
+  median_pnl_r: -1.1002
+  no_trade_rate: 0.0
+  profit_factor: 0.5772
+  sharpe: -2.0186
+  strategy: MeanReversion
+  symbol: ETH/USDT
+  total_pnl_usd: -134.0353
+  trades: 24
+  verdict: insufficient sample
+  win_rate: 0.08333333333333333
+run_id: t003-MeanReversion-ETHUSDT-no_book-20260812
+seed: 0
+universe_snapshot_id: binance-tier1-24
+validation:
+  passes_promotion_gate: false
+  permutation_p: 0.804
+  sharpe_ci_high: 0.17749280747186427
+  sharpe_ci_low: -28.80940495774382

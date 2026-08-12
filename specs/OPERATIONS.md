@@ -194,6 +194,23 @@ Public liveness/readiness endpoints (REQ-6), exempt from login:
 
 `docker-compose.yml` wires `healthz` into the `aimos` service healthcheck.
 
+### Download full Binance history (`scripts/download_history.py`)
+
+Fetches free monthly kline archives from `data.binance.vision` for the whole
+USDT spot universe or a subset. Stablecoin bases (USDC, FDUSD, etc.) are
+excluded by default so a `--top-n` sort by 24h volume returns tradeable assets.
+
+```bash
+python -m scripts.download_history --all --timeframe 1h --months 12
+python -m scripts.download_history --all --top-n 50 --timeframe 1h --months 12
+python -m scripts.download_history --all --include-stable --timeframe 1h --months 12
+python -m scripts.download_history --symbol BTC/USDT,ETH/USDT --timeframe 1h --months 12
+python -m scripts.dataset_integrity --data-dir data
+```
+
+Run `dataset_integrity.py` afterwards to verify the parquet files are gapless,
+UTC, and deduplicated.
+
 ### Train the ML on older data (`scripts/train_from_history.py`)
 
 Replays historical candles as paper trades, labels them (triple-barrier), and
@@ -205,7 +222,7 @@ and only affects decisions after you deliberately raise its fusion weight.
 |---|---|---|
 | `learning.history.enabled` | `false` | master switch (env `AIMOS__LEARNING__HISTORY__ENABLED=true`) |
 | `learning.history.horizon_bars` | `24` | triple-barrier forward window |
-| `learning.history.warmup` | `200` | bars skipped before the first labelled decision |
+| `learning.history.warmup` | `null` | bars skipped before the first labelled decision; `null` resolves to `required_warmup(params)`, the longest indicator lookback. Explicit values shorter than that are rejected with `ValueError` (T-013). |
 | `learning.history.n_folds` | `3` | walk-forward validation folds |
 | `intelligence.ml_model_path` | `""` | trained artifact the ML engine loads (empty → inert) |
 | `intelligence.fusion_weights.ml` | `0.0` | ML's weight in fusion — **the enable/disable for ML** |

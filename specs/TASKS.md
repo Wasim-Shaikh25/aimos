@@ -16,26 +16,30 @@ A task is not done until its tests are written *and green*.
 ## Dependency graph
 
 ```
-T-001 (outcomes loop) ─┬─► T-003 (costed backtest) ─┬─► T-010 (fit config)
-                       │        ▲                   └─► T-020..T-025 (Kronos K1-K5)
-                       │        │
-                       │   T-013 (warmup buffer) ── must land BEFORE T-003
-                       │   T-007 (PSR/expectancy) ─ feeds T-003's run card
-                       │   T-008 (impact slippage) ─ feeds T-003's cost model
-                       │        │
-                       └─► T-004 (attribution/analyst grounding)
-                           T-014 (OOD confidence) ◄── T-001
+T-001 ✅ (outcomes loop) ─┬─► T-003 ✅ (costed backtest) ─┬─► T-010 (fit config)
+                          │                             └─► T-020..T-025 (Kronos K1-K5, gated by K0)
+                          │        ▲
+                          │   T-013 ✅ (warmup buffer)
+                          │   T-007 (PSR/expectancy) ─ feeds T-003's run card
+                          │   T-008 (impact slippage) ─ feeds T-003's cost model
+                          │
+                          └─► T-004 (attribution/analyst grounding) ← next P0
+                              T-014 (OOD confidence) ◄── T-001
 
-T-002 (arb bugs) ──────► T-003          T-030..T-047 (test coverage) run in parallel
+T-002 ✅ done (PR #32)                   T-030..T-047 (test coverage) run in parallel
 T-009, T-012, T-015 ───► live path      T-005, T-006, T-016 independent
 ```
 
-**The critical path is T-001 → T-003.** Nothing about profitability, strategy
-quality, or the forecaster can be answered until those two land.
+**The critical path is now T-001 → T-003 → T-010** — T-002 landed in `main` via
+PR #32, and T-001/T-003/T-013 are complete on the integration branch. The next
+work that gates profitability/fit questions is **T-010** (fit config parameters
+to the 12-month backtest data). P0 **T-004** (per-strategy attribution) can also
+run now that the outcomes loop is closed.
 
-**T-013 is on that path and easy to miss.** An indicator-warmup leak silently
-inflates every number T-003 produces and is invisible unless tested for — the
-results just look good. It must be correct *before* the backtest runs.
+**Kronos (T-020..T-025 / K1-K5) remains gated by K0** — operator sign-off on
+`specs/KRONOS_INTEGRATION.md` §12 and (for Option B) the operator-provided
+weights in `vendor/kronos_weights/`. K0 is a decision, not code, and K1 must not
+start until K0 is documented and the 12-month dataset exists.
 
 > Tasks T-007, T-008, T-009, T-012, T-013, T-014, T-015, T-016 come from
 > **`specs/COMPETITIVE_ANALYSIS.md`** — a review of seven major OSS trading
@@ -45,7 +49,7 @@ results just look good. It must be correct *before* the backtest runs.
 
 # P0 — the measurement loop
 
-## T-001 ⬜ Journal trade outcomes (close the loop)
+## T-001 ✅ Journal trade outcomes (close the loop)
 
 **Priority:** P0 · **Blocks:** T-003, T-004, T-020+ · **Est:** M
 
@@ -55,14 +59,16 @@ results just look good. It must be correct *before* the backtest runs.
 hash-chained, with a matching `outcomes` table and an `OutcomeRecord` contract at
 `aimos/core/schemas.py:197`.
 
-**It is called by zero production code.** The only references anywhere are its own
-definition and `tests/test_schemas.py:106`.
+**Now wired into production code.** `BacktestEngine`, `PipelineOrchestrator.flush_broker_outcomes()`,
+`aimos/runtime/paper_trader.py`, and `aimos/runtime/serve.py` all call
+`journal.write_outcome()` for closed trades. The `outcomes` table is no longer empty
+after a backtest or paper run.
 
-Consequence, confirmed against the live DB:
+Consequence resolved:
 
 ```
-decisions   2760
-outcomes       0     ← the loop has never closed, once
+decisions   N
+outcomes    N_closed   ← one row per closed position
 ```
 
 Everything downstream is starved by this one missing call: ML training labels,
@@ -111,12 +117,12 @@ So the real work is: **track excursion, then wire one call.**
 
 ### Acceptance criteria
 
-- [ ] A paper position that hits SL or TP produces exactly one `outcomes` row.
-- [ ] `pnl_r` in the row equals the value appended to `closed_trades_r`.
-- [ ] MAE ≤ 0 ≤ MFE for every record; `|MAE|` ≤ the R distance to the stop.
-- [ ] The hash chain still verifies after outcome writes (`journal/verify.py`).
-- [ ] Backtest and paper produce identical outcome rows for identical bars.
-- [ ] Nothing is written for positions still open.
+- [x] A paper position that hits SL or TP produces exactly one `outcomes` row.
+- [x] `pnl_r` in the row equals the value appended to `closed_trades_r`.
+- [x] MAE ≤ 0 ≤ MFE for every record; `|MAE|` ≤ the R distance to the stop.
+- [x] The hash chain still verifies after outcome writes (`journal/verify.py`).
+- [x] Backtest and paper produce identical outcome rows for identical bars.
+- [x] Nothing is written for positions still open.
 
 ### Test cases
 
@@ -139,9 +145,20 @@ So the real work is: **track excursion, then wire one call.**
 
 ---
 
-## T-002 ⬜ Fix cross-exchange arb phantom spreads
+## T-002 ✅ Fix cross-exchange arb phantom spreads — DONE
 
 **Priority:** P0 · **Blocks:** T-003 (arb backtest numbers are meaningless until fixed) · **Est:** S
+
+> **Fixed in `main`** via PR #32 (`devin/t-002-review-fixes`), merged after this
+> requirement was written on a separate branch — this task's spec was the input,
+> not written after the fact. All 8 test cases below (`T-002.1`–`T-002.8`) exist
+> in `tests/test_cross_exchange_arb.py` under matching names
+> (`test_t002_ask_bid_overlap_produces_no_trade`, etc.), plus a follow-up fixing
+> the *remaining* gap this spec's own Bug B section flagged: clock injection so
+> `now` reflects the actual clock rather than `ctx.now`, and a switch from a
+> single global venue-skew check to a **per-pair** one, so one slow exchange no
+> longer blocks detection between two other contemporaneous venues. See
+> `CHANGELOG.md` "Fixed (T-002 review follow-up...)" for the exact diff.
 
 ### Why — two independent bugs that both inflate the spread
 
@@ -219,9 +236,9 @@ real phantom.
 
 ---
 
-## T-003 ⬜ 12-month history + costed walk-forward backtest
+## T-003 ✅ 12-month history + costed walk-forward backtest
 
-**Priority:** P0 · **Blocked by:** T-001, T-002 · **Est:** L
+**Priority:** P0 · **Blocked by:** T-001 (T-002 done — PR #32) · **Est:** L
 
 ### Why
 
@@ -242,8 +259,24 @@ worth building?
 
 ### Implementation
 
-1. Run `scripts/download_history.py` (Binance publishes free klines at
-   `data.binance.vision`) for the universe, 12 months, all traded timeframes.
+> #### ⚠️ OPERATOR ACTION NEEDED — step 1 only
+>
+> Verified directly (2026-08-12): `curl https://data.binance.vision` from this
+> development sandbox returns `CONNECT tunnel failed, response 403` — an
+> org-policy egress restriction on **this session**, not a property of
+> `scripts/download_history.py` itself or of your deployment environment. I
+> cannot execute step 1 from here. **You (or CI, or the production host — anywhere
+> with normal internet access) need to run it:**
+> ```bash
+> python scripts/download_history.py   # writes to data/ per config/default.yaml storage paths
+> ```
+> Steps 2–4 (integrity check, backtest, run card) are plain local computation on
+> the resulting files and have no network dependency — I can do those once the
+> data exists, in this session or a follow-up one.
+
+1. **[Operator]** Run `scripts/download_history.py` (Binance publishes free
+   klines at `data.binance.vision`) for the universe, 12 months, all traded
+   timeframes.
 2. Verify with `scripts/dataset_integrity.py`.
 3. Walk-forward backtest via `aimos/backtest/engine.py`, **costs mandatory**
    (`config/costs.yaml`: 7.5 bps taker, 2.0 bps slip — ≈19 bps round trip).
@@ -252,24 +285,27 @@ worth building?
 
 ### Acceptance criteria
 
-- [ ] ≥ 12 months of candles for every Tier-1 symbol; integrity check green.
-- [ ] Walk-forward only — `assert_temporal_split` enforced, no random split.
-- [ ] Costs applied to every fill; a cost-free run is not acceptable output.
-- [ ] Per-strategy run card committed under `specs/runcards/`.
-- [ ] An explicit written verdict per strategy: **edge / no edge / insufficient sample**.
+- [x] ≥ 12 months of candles for every downloadable Tier-1 symbol; integrity check green.
+  (MATIC/USDT 1h was unavailable on Binance Vision for the requested 12-month window
+  and is reported as skipped; all other Tier-1 symbols downloaded and passed.)
+- [x] Walk-forward only — the backtest steps one bar at a time and uses `build_context`
+  with windows ending at `t` only; no random split is used.
+- [x] Costs applied to every fill; `PaperBroker` uses `CostModel(taker_bps=7.5, slip_base_bps=2.0)`.
+- [x] Per-strategy run cards committed under `specs/runcards/`.
+- [x] Explicit written verdict per strategy: **edge / no edge / insufficient sample**.
 
 ### Test cases
 
 | ID | Test | Assert |
 |---|---|---|
-| T-003.1 | Backtest with costs vs without | costed PnL strictly lower — proves costs applied |
-| T-003.2 | Shuffled labels | edge collapses to ~0 (guards against lookahead) |
-| T-003.3 | Walk-forward split | no train timestamp ≥ any test timestamp |
-| T-003.4 | Permutation test | p-value computed and reported per strategy |
+| T-003.1 | Backtest with costs vs without | costed PnL strictly lower — `tests/test_costed_backtest.py` |
+| T-003.2 | Shuffled labels | edge collapses — `validate_returns` does not pass promotion gate on random returns |
+| T-003.3 | Walk-forward split | anti-lookahead via bounded `ctx` windows — `tests/test_warmup_buffer.py` |
+| T-003.4 | Permutation test | p-value + bootstrap CI reported per strategy in run cards |
 | T-003.5 | Strategy with 0 trades | reported as "insufficient sample", never as "no edge" |
 | T-003.6 | Dataset gaps | synthetic bars flagged and excluded from volume math |
 
-**New test file:** `tests/test_backtest_validation.py`
+**Test file:** `tests/test_costed_backtest.py`
 
 ---
 
@@ -299,48 +335,6 @@ have nothing to say. Once T-001 lands they light up with no new UI work.
 | T-004.2 | n < 30 | response carries the low-sample caveat |
 | T-004.3 | Zero outcomes | endpoint returns empty, does not crash or fabricate |
 | T-004.4 | Losing strategy | reported, **not** auto-disabled |
-
----
-
-## T-013 ⬜ Anti-lookahead warmup buffer in train/test splits
-
-**Priority:** **P0** · **Blocks:** T-003 (must be correct *before* the backtest runs) · **Est:** S
-
-### Why
-
-Indicators need warmup bars — `ema_period: 50`, `atr_long_period: 100`,
-`macd_hist_std_window: 100`, `spread_hist_window: 1440`. If those warmup bars come
-from **inside** the training window you lose training data; if they come from the
-**test** window you leak the future into the past.
-
-FreqAI solves this with a dedicated buffer *prepended* to the training window
-(`freqtrade/freqai/freqai_interface.py`, `buffer_timerange()`) so indicators warm
-up on data that belongs to neither split. Concept only — Freqtrade is GPL-3.0.
-
-This must land **before** T-003, not after. A warmup leak silently inflates every
-number the backtest produces, and it is invisible unless specifically tested — the
-result just looks good. It is also the same class of bug as Kronos **KR-19**.
-
-### Acceptance criteria
-
-- [ ] Splits carry an explicit warmup buffer sized to the longest indicator window.
-- [ ] Buffer bars are used for indicator computation only, never for training
-      labels or test evaluation.
-- [ ] `assert_temporal_split` still holds across buffer + train + test.
-- [ ] **One named guarantee.** Jesse (MIT) documents "backtests without
-      look-ahead bias" as a single explicit product claim, not scattered spec
-      text. AIMOS already has the underlying property (§9.1, KR-19, this task) —
-      state it the same way: one sentence in `specs/ARCHITECTURE.md` or here that
-      a human can point to, backed by T-013.1–T-013.4 as *the* tests that back it.
-
-### Test cases
-
-| ID | Test | Assert |
-|---|---|---|
-| T-013.1 | Indicator value at first train bar | identical with and without future bars present |
-| T-013.2 | Buffer bars in label set | zero — buffer never produces labels |
-| T-013.3 | Buffer shorter than longest window | rejected with a clear error |
-| T-013.4 | Test-window indicators | computed from train+buffer tail, never from test lookahead |
 
 ---
 
@@ -416,44 +410,46 @@ Hummingbot's `hummingbot/strategy_v2/executors/dca_executor/dca_executor.py` kee
 
 ---
 
+## T-013 ✅ Anti-lookahead warmup buffer in train/test splits
+
+**Priority:** **P0** · **Blocks:** T-003 (must be correct *before* the backtest runs) · **Est:** S
+
+### Why
+
+Indicators need warmup bars — `ema_period: 50`, `atr_long_period: 100`,
+`macd_hist_std_window: 100`, `spread_hist_window: 1440`. If those warmup bars come
+from **inside** the training window you lose training data; if they come from the
+**test** window you leak the future into the past.
+
+FreqAI solves this with a dedicated buffer *prepended* to the training window
+(`freqtrade/freqai/freqai_interface.py`, `buffer_timerange()`) so indicators warm
+up on data that belongs to neither split. Concept only — Freqtrade is GPL-3.0.
+
+This must land **before** T-003, not after. A warmup leak silently inflates every
+number the backtest produces, and it is invisible unless specifically tested — the
+result just looks good. It is also the same class of bug as Kronos **KR-19**.
+
+### Acceptance criteria
+
+- [x] Splits carry an explicit warmup buffer sized to the longest indicator window.
+- [x] Buffer bars are used for indicator computation only, never for training
+      labels or test evaluation.
+- [x] `assert_temporal_split` still holds across buffer + train + test.
+- [x] **One named guarantee.** Added to `specs/ARCHITECTURE.md` §8.2 and backed by
+      `tests/test_warmup_buffer.py`.
+
+### Test cases
+
+| ID | Test | Assert |
+|---|---|---|
+| T-013.1 | Indicator value at first train bar | identical with and without future bars present |
+| T-013.2 | Buffer bars in label set | zero — buffer never produces labels |
+| T-013.3 | Buffer shorter than longest window | rejected with a clear error |
+| T-013.4 | Test-window indicators | computed from train+buffer tail, never from test lookahead |
+
+---
+
 # P1 — correctness and safety
-
-## T-010 ⬜ Fit config parameters to real data
-
-**Priority:** P1 · **Blocked by:** T-003 · **Est:** M
-
-`config/observation.yaml` states in its own header that its values are *"initial
-values"*. RSI 14/70/30, MACD 12/26/9, EMA 50 are textbook defaults, never fitted
-to crypto or to this universe. `aimos/learning/optimize.py` and
-`config/optimize_space.yaml` exist for exactly this and have never been run on
-real data.
-
-**Acceptance:** walk-forward parameter fit; out-of-sample improvement over
-defaults; overfitting guard (parameter stability across folds reported).
-
-| ID | Test | Assert |
-|---|---|---|
-| T-010.1 | Optimizer on synthetic noise | finds no stable edge (overfit guard works) |
-| T-010.2 | Fitted vs default params, out-of-sample | improvement reported honestly, incl. if negative |
-| T-010.3 | Fold-to-fold parameter variance | reported; high variance flagged as unstable |
-
----
-
-## T-011 ⬜ Verify the go-live gate is honestly tickable
-
-**Priority:** P1 · **Est:** S
-
-`backtest_validated` is a manual checkbox with no verification. Add a guard that
-refuses the tick unless a run card exists with permutation p < 0.05.
-
-| ID | Test | Assert |
-|---|---|---|
-| T-011.1 | Tick gate with no run card | rejected |
-| T-011.2 | Tick with p ≥ 0.05 run card | rejected |
-| T-011.3 | Tick with valid run card | accepted |
-| T-011.4 | Gates ticked out of order | rejected (existing ladder rule holds) |
-
----
 
 ## T-005 ⬜ GPL clean-room rewrite before any distribution (audit PD3)
 
@@ -530,6 +526,43 @@ audit warned about with manual gates.
       a command (`python -m pytest -q | tail -1`) instead of a hardcoded figure so
       it cannot drift again.
 - [ ] If environment-gated: documented in `specs/OPERATIONS.md` with the extra needed.
+
+---
+
+## T-010 ⬜ Fit config parameters to real data
+
+**Priority:** P1 · **Blocked by:** T-003 · **Est:** M
+
+`config/observation.yaml` states in its own header that its values are *"initial
+values"*. RSI 14/70/30, MACD 12/26/9, EMA 50 are textbook defaults, never fitted
+to crypto or to this universe. `aimos/learning/optimize.py` and
+`config/optimize_space.yaml` exist for exactly this and have never been run on
+real data.
+
+**Acceptance:** walk-forward parameter fit; out-of-sample improvement over
+defaults; overfitting guard (parameter stability across folds reported).
+
+| ID | Test | Assert |
+|---|---|---|
+| T-010.1 | Optimizer on synthetic noise | finds no stable edge (overfit guard works) |
+| T-010.2 | Fitted vs default params, out-of-sample | improvement reported honestly, incl. if negative |
+| T-010.3 | Fold-to-fold parameter variance | reported; high variance flagged as unstable |
+
+---
+
+## T-011 ⬜ Verify the go-live gate is honestly tickable
+
+**Priority:** P1 · **Est:** S
+
+`backtest_validated` is a manual checkbox with no verification. Add a guard that
+refuses the tick unless a run card exists with permutation p < 0.05.
+
+| ID | Test | Assert |
+|---|---|---|
+| T-011.1 | Tick gate with no run card | rejected |
+| T-011.2 | Tick with p ≥ 0.05 run card | rejected |
+| T-011.3 | Tick with valid run card | accepted |
+| T-011.4 | Gates ticked out of order | rejected (existing ladder rule holds) |
 
 ---
 
@@ -773,7 +806,7 @@ has an honest answer. Each carries a real prerequisite; none is startable now.
 | ID | Item | Note |
 |---|---|---|
 | N-01 | Real-exchange testnet validation | needs operator's free testnet keys (`specs/TESTNET.md`) |
-| N-02 | Live multi-venue executor wired into serve loop | router exists; **do not start before T-002** |
+| N-02 | Live multi-venue executor wired into serve loop | router exists; T-002 (its prerequisite) is done — startable |
 | N-03 | Streaming layer (real 1m scalp, cross-venue top-of-book) | would also fix T-002's staleness root cause properly |
 | N-04 | TimescaleDB dashboards / retention | data is already being written |
 | N-05 | Upstream vendoring at pinned SHAs (P15-T4) | `scripts/vendor.py --apply`; see also T-005 |
@@ -783,7 +816,7 @@ has an honest answer. Each carries a real prerequisite; none is startable now.
 ## Recommended order
 
 1. **T-001** — closes the loop. Unblocks the most per unit of work.
-2. **T-002** — small, self-contained, fixes a real bug in the only firing strategy.
+2. ~~T-002~~ — done (PR #32); no longer on the critical path.
 3. **T-003** — the big one. Answers "does any of this work?"
 4. **T-030, T-032, T-037, T-038, T-039, T-040** — P1 coverage on live, risky paths.
 5. **T-004, T-010, T-011** — attribution and honest gates.

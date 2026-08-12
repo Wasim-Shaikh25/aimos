@@ -45,17 +45,22 @@ def test_cross_venue_bias_drops_single_venue_coins():
 def test_venue_snapshot_uses_each_coins_actual_venues():
     from datetime import datetime, timezone
     from aimos.data.live_source import venue_snapshot_for
+    from tests.conftest import FakeClock
     p = load_params()
     uni = build_universe("binance", p.universe.model_dump(), live_data=False, max_symbols=40)
     feats, paper = {"cross_exchange_enabled": True}, p.paper.model_dump()
     now = datetime(2026, 7, 16, tzinfo=timezone.utc)
+    clock = FakeClock(now)
     # BTC trades on 3 venues → snapshot spans all 3 (not a fixed 2-venue list)
-    btc = venue_snapshot_for(feats, paper, uni.registry, "BTC/USDT", 30_000.0, now, live_data=False)
+    btc = venue_snapshot_for(feats, paper, uni.registry, "BTC/USDT", 30_000.0,
+                              now, live_data=False, clock=clock)
     assert set(btc) == {"binance", "kraken", "coinbase"}
     # a single-venue coin can't be arbitraged → skipped
-    assert venue_snapshot_for(feats, paper, uni.registry, "BNB/USDT", 600.0, now, live_data=False) is None
+    assert venue_snapshot_for(feats, paper, uni.registry, "BNB/USDT", 600.0,
+                              now, live_data=False, clock=clock) is None
     # disabled flag → always None
-    assert venue_snapshot_for({}, paper, uni.registry, "BTC/USDT", 1.0, now, live_data=False) is None
+    assert venue_snapshot_for({}, paper, uni.registry, "BTC/USDT", 1.0,
+                              now, live_data=False, clock=clock) is None
 
 
 def test_universe_leveraged_tokens_rejected():

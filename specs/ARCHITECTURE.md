@@ -787,6 +787,12 @@ For ML training, label every decision (traded or not) with the **triple-barrier 
 - Upper barrier: +1.5×ATR from decision price; lower: −1.5×ATR; time barrier: horizon_minutes.
 - label = 1 if upper hit first, 0 if lower first, drop if time barrier hit with |move| < 0.3×ATR (noise).
 
+**Warmup buffer guarantee (T-013):** every labeled bar and every backtest decision
+bar is strictly after a warmup buffer of at least `required_warmup` bars, where
+`required_warmup` is the maximum `_min_bars()` advertised by all candle-based
+observation engines. Buffer bars are used only to warm indicators; they are never
+labels, never in a validation fold, and never mixed with test data after it.
+
 ## 8.3 Training pipeline — `learning/train.py`
 
 Strict promotion ladder (matches design doc):

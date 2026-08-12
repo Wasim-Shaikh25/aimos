@@ -1,0 +1,30 @@
+config_hash: fab4929fff3b2493
+data_hash: 409ad9e4ee422ee1
+engine_profile: no_book
+git_sha: 7c64d25
+metrics:
+  avg_mae_r: 0.0
+  avg_mfe_r: 0.0
+  avg_pnl_r: 0.0
+  engine_profile: no_book
+  exchange: binance
+  exposure_pct: 0.0
+  max_drawdown: 0.0
+  median_pnl_r: 0.0
+  no_trade_rate: 1.0
+  profit_factor: 0.0
+  sharpe: 0.0
+  strategy: SmartDCA
+  symbol: TRX/USDT
+  total_pnl_usd: 0.0
+  trades: 0
+  verdict: insufficient sample
+  win_rate: 0.0
+run_id: t003-SmartDCA-TRXUSDT-no_book-20260812
+seed: 0
+universe_snapshot_id: binance-tier1-14
+validation:
+  passes_promotion_gate: false
+  permutation_p: 1.0
+  sharpe_ci_high: 0.0
+  sharpe_ci_low: 0.0

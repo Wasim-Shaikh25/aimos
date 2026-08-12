@@ -6,10 +6,88 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added (integration — combine all open PRs and PR #36 Kronos docs)
+- Merged the currently open branches into the `devin/t-003-costed-backtest`
+  integration branch: PR #30 (T-001 outcomes), PR #33 (T-002 clock follow-up),
+  PR #34 (T-013 warmup), and PR #36 (Kronos download spec + `OPERATOR_ACTIONS.md`
+  + T-002 reconciliation).
+- Updated `specs/STATUS.md`, `specs/OPERATOR_ACTIONS.md`, and `specs/TASKS.md`
+  after the merge: T-001/T-002/T-003/T-013 are ✅, the critical path is now
+  T-001 → T-003 → T-010 with T-004 as the next P0, and Kronos K1-K5 remains
+  gated by K0 operator sign-off.
+- Streamlined `specs/TASKS.md` by sorting `## T-XXX` sections numerically within
+  each priority group and removing stray duplicate-number occurrences (verified
+  no actual duplicate task IDs remain).
+
+### Added (T-003 — 12-month costed walk-forward backtest)
+- New `scripts/run_backtest_card.py` downloads 12 months of Binance 1h klines for the
+  offline Tier-1 universe, runs a costed walk-forward backtest per symbol, and
+  writes per-strategy run cards to `specs/runcards/`.
+- Run cards include trades, win rate, total PnL, Sharpe, max drawdown, MAE/MFE,
+  permutation p-value, bootstrap Sharpe CI, and an explicit `edge / no edge /
+  insufficient sample` verdict.
+- `BacktestEngine.run()` now accepts an optional `peers` dict and bounds the
+  observation window to the longest indicator lookback so 12-month replays stay
+  O(n) instead of O(n²).
+- Generated run cards for all 11 Tier-1 symbols with 12 months of data
+  (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, LINK, TRX, DOT; MATIC had no
+  2025-08..2026-07 1h files on Binance Vision).
+- `scripts/download_history.py` now supports `--all` / `--top-n` /
+  `--include-stable` to download 12 months of 1h candles for every currently
+  trading Binance USDT spot pair (stablecoin bases excluded by default). This is
+  the simple one-command script for building the full-asset history the user
+  requested. The symbol list is fetched via `www.binance.com/api/v3` and the
+  klines still come from free `data.binance.vision`.
+- `aimos/data/binance_symbols.py` exposes `all_binance_usdt_spot_symbols()` so
+  both `download_history.py` and `run_backtest_card.py` share the same universe
+  source without duplication.
+- `scripts/run_backtest_card.py` now accepts `--all`, `--top-n`, and
+  `--include-stable` so the same full-asset (or top-N) universe can be used for
+  backtest run cards.
+
+### Fixed (T-013 review follow-up)
+- `aimos/backtest/engine.py` and `aimos/learning/dataset.py` length guards now
+  require one extra bar (`+2`) so an empty replay/label pass raises a clear error
+  instead of silently returning all-zero metrics.
+- `scripts/train_from_history.py` catches `ValueError` from `build_training_set`
+  per symbol, reports the skip, and continues with the remaining symbols.
+- `specs/OPERATIONS.md` documents `learning.history.warmup` as `null` / resolved
+  by `required_warmup(params)` rather than the old hard-coded 200.
+
+### Added (T-013 — anti-lookahead warmup buffer)
+- `aimos/observation/runner.py` exposes `required_warmup(params)`, the maximum
+  `_min_bars()` advertised by all candle-based observation engines (currently
+  driven by `correlation.beta_window`).
+- `aimos/learning/dataset.py` and `aimos/backtest/engine.py` size their warmup
+  buffers to `required_warmup()` and reject an explicit `warmup` shorter than the
+  longest indicator lookback, preventing unstable indicator values from entering
+  labels or trades.
+- `config/default.yaml` sets `learning.history.warmup` to `null` so the default
+  comes from the engine-derived minimum rather than the previous hard-coded 200.
+- `tests/test_warmup_buffer.py` verifies buffer sizing, rejection of short
+  warmups, exclusion of buffer bars from the label set, and walk-forward temporal
+  separation.
+
+### Added (T-001 — trade outcomes loop)
+- `PaperBroker` now tracks per-position MAE/MFE in R units, builds an `OutcomeRecord`
+  on close, and exposes `drain_outcomes()` for the runtime to persist.
+- `BacktestEngine` drains outcomes into the journal after each tick.
+- `PipelineOrchestrator.flush_broker_outcomes()` writes broker outcomes to the
+  journal; journal write failures are logged and do not crash the loop.
+- `aimos/runtime/paper_trader.py` and `aimos/runtime/serve.py` now flush broker
+  outcomes after every `broker.step()`.
+- `paper_trader.py` now uses `paper.journal_path` (default `state/aimos.sqlite`)
+  instead of an in-memory journal so decisions and outcomes survive restarts.
+- New test file `tests/test_outcomes_loop.py` covers TP/SL exits, short sign handling,
+  MAE/MFE tracking, same-bar SL+TP precedence, hash-chain integrity, backtest/paper
+  parity, zero-risk handling, and journal write failure resilience.
+
 ### Fixed (T-002 review follow-up — clock, staleness, per-pair skew)
-- `live_venue_snapshot()` and `synthetic_venue_snapshot()` now read observation time
-  from an injected `Clock`; `paper_trader.py` and `serve.py` pass the runtime clock
-  so replay/tests stay deterministic and production snapshots use the real clock.
+- `live_venue_snapshot()`, `synthetic_venue_snapshot()` and `venue_snapshot_for()` now
+  require an injected `Clock`; the `now` argument is retained for call-site
+  compatibility but observation time comes from `clock.now()`. This removes the
+  silent fallback that could stamp live quotes with stale bar-close time and fail
+  the staleness gate.
 - `CrossExchangeEngine._dislocation()` measures quote age against `clock.now()` instead
   of `ctx.now`, so `max_quote_age_seconds` actually rejects stale quotes in live runs.
 - `compute_dislocation()` checks `max_venue_skew_seconds` per pair, not globally, so one
@@ -25,6 +103,92 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   quotes before scoring.
 - `serve.py` `_maybe_arb()` and `_price_row()` use the live `VenueTop` snapshot
   so prices reflect executable top-of-book.
+
+### Added (finalized Kronos download spec — operator is fetching the weights now)
+- Confirmed `specs/COMPETITIVE_ANALYSIS.md` already covers all 9 platforms from
+  the shared document (7 table rows + Jesse + Gainium, added in an earlier pass
+  this session) — no gap found on re-check.
+- Operator is proceeding with Kronos Option B (real pretrained weights) now and
+  deferring the 12-month history download; `specs/OPERATOR_ACTIONS.md` updated to
+  reflect actual status per item rather than a fixed priority order.
+- **`specs/KRONOS_INTEGRATION.md` §3.2 finalized** with a concrete, unambiguous
+  spec rather than a sketch:
+  - **Real measurement, not an estimate:** `pip download torch` from the default
+    PyPI index produces a **526.6 MB** wheel (bundles CUDA support even for
+    CPU-only use). The CPU-only wheel lives at `download.pytorch.org`, which is
+    **also blocked from this session** (403) — a third host added to
+    `specs/OPERATOR_ACTIONS.md`, alongside `huggingface.co` and
+    `data.binance.vision`.
+  - **Final variant recommendation: `Kronos-small` + `Kronos-Tokenizer-base`, not
+    `Kronos-mini`**, with reasoning: once torch is loaded at all its own runtime
+    overhead dwarfs the difference between an ~8 MB and an ~99 MB weight file, and
+    Kronos-small's context length matches what upstream actually finetunes and
+    evaluates with (`lookback=90`, confirmed via `finetune/config.py`, §2.0.2) —
+    `Kronos-mini`'s extra 2048-token context buys nothing we'd use here.
+  - Exact `huggingface-cli download` commands, exact `pyproject.toml` `[kronos]`
+    optional-dependency group (isolated from the base/runtime/serve extras), the
+    exact CPU-only install command, and an exact `vendor/manifest.yaml` stanza
+    matching the existing `hb_mm`-entry style in that file.
+  - Explicit about what's estimated (weight-file sizes computed from published
+    param counts, torch CPU-wheel size and runtime RSS both unverifiable from this
+    session) versus what's measured (the 526.6 MB CUDA wheel, confirmed by
+    running the download) — step 5 now asks the operator to report measured RSS
+    back, closing those gaps with real numbers instead of leaving them as guesses.
+
+### Fixed (conflating this session's network limits with architectural decisions)
+- The user pushed back directly: don't rule out a capability just because this
+  development sandbox can't reach it — say so explicitly and hand off the exact
+  command, since the operator's own machine, CI, or the production host is very
+  likely unrestricted. Checking rather than asserting found this had actually
+  happened, in two places:
+  - `specs/KRONOS_INTEGRATION.md` §3 listed "weights are unreachable" as one of
+    **four** reasons to reject using Kronos's real pretrained model — conflating
+    a session-specific 403 with an architectural verdict. Verified directly:
+    `curl https://huggingface.co` → `403`, but `pip install huggingface_hub`
+    succeeds (PyPI isn't restricted) — the *package* is fine, only fetching from
+    `huggingface.co` from this session is blocked. Rewrote §3 into an explicit
+    **Option A (clean-room, still recommended) vs Option B (real weights,
+    operator-provided)** split: §3.1 keeps the three reasons that hold regardless
+    of who downloads the weights (dependency weight, CSI300-equities corpus
+    mismatch, `torch.multinomial`'s lack of a seed contract), and new §3.2 gives
+    the operator the exact `huggingface-cli download` commands, where to add the
+    files (`vendor/kronos_weights/` + a `manifest.yaml` entry per the existing
+    `vendor/VENDOR.md` pattern), and what still applies even with real weights in
+    hand (out-of-process via KR-39, so torch never enters the trading process).
+  - `specs/TASKS.md` T-003 step 1 (`scripts/download_history.py`) — verified
+    `curl https://data.binance.vision` also returns `403` from this session.
+    Added an explicit operator-action callout with the exact command; steps 2–4
+    (integrity check, backtest, run card) have no network dependency and are
+    unaffected.
+- **New `specs/OPERATOR_ACTIONS.md`** — a single consolidated, living checklist
+  of everything blocked by this session's network policy rather than by AIMOS
+  itself, each entry showing the actual verified failure (not an assumption), the
+  exact command to run, and what it unblocks. Two items currently: the 12-month
+  history download (blocks T-003, the single highest-leverage task in the
+  backlog) and the optional Kronos weights fetch. Explicitly states what is *not*
+  on the list — GitHub, PyPI, and git are all reachable from this session — so the
+  file stays a precise, narrow list rather than a hedge.
+- **`CLAUDE.md`** — added a 5th item to the "before you start" checklist: check
+  `specs/OPERATOR_ACTIONS.md` before concluding a capability is unreachable, and
+  never fold a session-specific network restriction into an architectural
+  decision without logging it there first. This is the fix meant to keep the
+  mistake from recurring in a future session, not just this one.
+- `specs/STATUS.md` now points at `specs/OPERATOR_ACTIONS.md` from the top of the
+  file, so a stalled task is checked against "waiting on the operator" before
+  being read as "not yet built."
+
+### Fixed (STATUS.md drift after the Jesse/Gainium addition)
+- `specs/STATUS.md` still said `specs/COMPETITIVE_ANALYSIS.md` covered "7 major
+  OSS trading platforms" and "7 further tasks" after the Jesse/Gainium fix below
+  landed — found while re-verifying cross-references between `STATUS.md`,
+  `TASKS.md`, `KRONOS_INTEGRATION.md`, and `COMPETITIVE_ANALYSIS.md` in response
+  to being asked whether everything was documented correctly. Corrected to 9
+  platforms and 8 further tasks (T-007..T-009, T-012, T-014..T-017), with Jesse
+  and Gainium named as MIT-licensed additions found only in the source
+  document's prose, not its table. Also confirmed: every T-XXX cross-reference
+  across the four spec documents resolves to a real, matching task — the only
+  false positives were `KT-01..KT-63` (Kronos test-case IDs) substring-matching
+  a naive `T-[0-9]+` grep.
 
 ### Fixed (competitive analysis coverage gap)
 - The user asked "did we add everything we wanted to borrow from that document?"

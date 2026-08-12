@@ -23,7 +23,12 @@ from pathlib import Path
 import httpx
 import pandas as pd
 
-from aimos.data.candles import CandleStore
+# Allow running from repo root without installing (picks up new modules).
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from aimos.data.binance_symbols import all_binance_usdt_spot_symbols  # noqa: E402
+from aimos.data.candles import CandleStore  # noqa: E402
 
 
 _VISION_URL = "https://data.binance.vision/data/spot/monthly/klines"
@@ -137,19 +142,45 @@ async def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Download Binance historical klines to data/")
     ap.add_argument("--exchange", default="binance", help="exchange name for CandleStore")
     ap.add_argument("--symbol", default="BTC/USDT", help="comma-separated symbols")
+    ap.add_argument("--all", action="store_true", help="download all currently trading non-stable USDT spot pairs")
+    ap.add_argument("--top-n", type=int, default=None, help="when --all, download only the top-N by 24h quote volume")
+    ap.add_argument("--include-stable", action="store_true", help="include USDT pairs where the base is a stablecoin")
     ap.add_argument("--timeframe", default="1h", help="candle interval (1m/5m/15m/1h/4h/1d)")
     ap.add_argument("--months", type=int, default=12, help="number of months to fetch")
     ap.add_argument("--data-dir", default="data", help="CandleStore root")
+    ap.add_argument("--max-concurrent", type=int, default=8, help="max symbols to download in parallel")
     args = ap.parse_args(argv)
 
-    symbols = [s.strip() for s in args.symbol.split(",") if s.strip()]
+    if args.all:
+        symbols = await all_binance_usdt_spot_symbols(args.top_n, include_stable=args.include_stable)
+        if not symbols:
+            print("No trading USDT symbols found on Binance.")
+            return 1
+        print(f"Downloading {len(symbols)} USDT spot pairs")
+    else:
+        symbols = [s.strip() for s in args.symbol.split(",") if s.strip()]
+        if not symbols:
+            print("No symbols specified. Use --symbol or --all.")
+            return 2
+
     store = CandleStore(args.data_dir)
     total = 0
-    async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as client:
-        for symbol in symbols:
-            total += await _download_symbol(
+    semaphore = asyncio.Semaphore(max(args.max_concurrent, 1))
+
+    async def fetch_one(client: httpx.AsyncClient, symbol: str) -> int:
+        async with semaphore:
+            return await _download_symbol(
                 client, store, args.exchange, symbol, args.timeframe, args.months,
             )
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as client:
+        tasks = [fetch_one(client, s) for s in symbols]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for symbol, result in zip(symbols, results):
+            if isinstance(result, Exception):
+                print(f"{symbol}: failed ({result})")
+            else:
+                total += result
     print(f"total rows written: {total}")
     return 0 if total > 0 else 2
 
