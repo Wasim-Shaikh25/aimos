@@ -14,6 +14,7 @@ from aimos.core.config import load_params
 from aimos.core.schemas import Action, OutcomeRecord, TradePlan
 from aimos.execution.broker.paper import PaperBroker
 from aimos.journal.journal import Journal
+from aimos.observation.runner import required_warmup
 from aimos.runtime.pipeline import PipelineOrchestrator
 from tests.conftest import make_candles
 
@@ -159,9 +160,10 @@ def test_drain_outcomes_is_empty_after_second_call():
 
 
 def test_backtest_writes_outcomes_and_journal_verifies():
-    candles = make_candles(list(range(50, 110)), start=TS, tf_minutes=60)
+    warmup = required_warmup(load_params())
+    candles = make_candles(list(range(50, 50 + warmup + 80)), start=TS, tf_minutes=60)
     engine = BacktestEngine(load_params(), "SOL", journal_path=":memory:")
-    result = engine.run(candles, warmup=20)
+    result = engine.run(candles, warmup=warmup)
 
     ok, _ = result.journal.verify()
     assert ok
@@ -171,30 +173,25 @@ def test_backtest_writes_outcomes_and_journal_verifies():
 
 def test_paper_and_backtest_produce_identical_outcome_rows():
     start = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    idx = pd.DatetimeIndex(
-        [start + pd.Timedelta(hours=i) for i in range(30)], tz="UTC", name="timestamp"
-    )
+    params = load_params()
+    warmup = required_warmup(params)
     base = 30_000.0
+    n = warmup + 5
+    idx = pd.DatetimeIndex(
+        [start + pd.Timedelta(hours=i) for i in range(n)], tz="UTC", name="timestamp"
+    )
     flat = [{"open": base, "high": base + 100, "low": base - 100, "close": base,
-             "volume": 1000.0, "synthetic": False} for _ in range(26)]
-    last = [
-        {"open": base, "high": base + 100, "low": base - 100, "close": base,
-         "volume": 1000.0, "synthetic": False},
-        {"open": base, "high": base + 100, "low": base - 100, "close": base,
-         "volume": 1000.0, "synthetic": False},
-        {"open": base, "high": base + 100, "low": base - 100, "close": base,
-         "volume": 1000.0, "synthetic": False},
-        {"open": base, "high": 31_100.0, "low": base, "close": 31_000.0,
-         "volume": 1000.0, "synthetic": False},
-    ]
-    candles = pd.DataFrame(flat + last, index=idx)
+             "volume": 1000.0, "synthetic": False} for _ in range(n - 1)]
+    last = {"open": base, "high": 31_100.0, "low": base, "close": 31_000.0,
+            "volume": 1000.0, "synthetic": False}
+    candles = pd.DataFrame(flat + [last], index=idx)
 
     plan = TradePlan(
         plugin="TrendFollowing", symbol="BTC", action=Action.LONG,
         entry=base, stop_loss=base - 1000.0, take_profit=31_000.0, size_quote=3000.0,
     )
 
-    engine = BacktestEngine(load_params(), "BTC", starting_equity=10_000.0, journal_path=":memory:")
+    engine = BacktestEngine(params, "BTC", starting_equity=10_000.0, journal_path=":memory:")
     placed = False
 
     def fixed_decide(*_args, **_kwargs):
@@ -205,13 +202,13 @@ def test_paper_and_backtest_produce_identical_outcome_rows():
         return plan
 
     engine.execution.decide = fixed_decide  # type: ignore[assignment]
-    engine.run(candles, warmup=25)
+    engine.run(candles, warmup=warmup)
 
     back_outcome = _outcome_from_journal(engine.journal)
 
     b = PaperBroker(10_000.0, engine.cost)
     b.place(plan)
-    for i in range(26, 30):
+    for i in range(warmup + 1, n):
         b.step("BTC", candles.iloc[i].to_dict(), candles.index[i].to_pydatetime())
     manual_outcomes = b.drain_outcomes()
 

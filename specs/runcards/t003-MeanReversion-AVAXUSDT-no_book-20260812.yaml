@@ -1,0 +1,30 @@
+config_hash: fab4929fff3b2493
+data_hash: 6defdd971767a0c5
+engine_profile: no_book
+git_sha: 7c64d25
+metrics:
+  avg_mae_r: -0.9631
+  avg_mfe_r: 2.7494
+  avg_pnl_r: -0.3653
+  engine_profile: no_book
+  exchange: binance
+  exposure_pct: 0.0
+  max_drawdown: -0.0175
+  median_pnl_r: -1.0795
+  no_trade_rate: 0.0
+  profit_factor: 0.6214
+  sharpe: -0.9634
+  strategy: MeanReversion
+  symbol: AVAX/USDT
+  total_pnl_usd: -65.8558
+  trades: 27
+  verdict: insufficient sample
+  win_rate: 0.1111111111111111
+run_id: t003-MeanReversion-AVAXUSDT-no_book-20260812
+seed: 0
+universe_snapshot_id: binance-tier1-27
+validation:
+  passes_promotion_gate: false
+  permutation_p: 0.822
+  sharpe_ci_high: 0.1509124848522853
+  sharpe_ci_low: -33.72757769435109

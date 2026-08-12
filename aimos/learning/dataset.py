@@ -77,8 +77,8 @@ def build_training_set(
     if warmup < min_warmup:
         raise ValueError(f"warmup {warmup} shorter than required indicator warmup {min_warmup} (T-013)")
     n = len(candles)
-    if n < warmup + horizon_bars + 1:
-        raise ValueError(f"candles {n} shorter than warmup {warmup} + horizon {horizon_bars} + 1")
+    if n < warmup + horizon_bars + 2:
+        raise ValueError(f"candles {n} shorter than warmup {warmup} + horizon {horizon_bars} + 2 (need a label bar and one future bar)")
 
     clock = BacktestClock()
     engines = build_engines(params, clock)

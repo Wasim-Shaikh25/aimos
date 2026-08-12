@@ -105,6 +105,7 @@ def main(argv=None) -> int:
     ys: list[int] = []
     ts: list = []
     total_scanned = 0
+    failed_symbols: list[str] = []
     for sym in symbols:
         if args.synthetic:
             candles = _load_synthetic(sym, args.bars)
@@ -112,13 +113,21 @@ def main(argv=None) -> int:
             candles = _load_csv(args.csv)
         else:
             candles = _load_parquet(args.exchange, sym, args.timeframe)
-        ds = build_training_set(params, sym, candles, horizon_bars=horizon, warmup=warmup)
+        try:
+            ds = build_training_set(params, sym, candles, horizon_bars=horizon, warmup=warmup)
+        except ValueError as e:
+            print(f"  {sym}: skipped ({e})")
+            failed_symbols.append(sym)
+            continue
         total_scanned += ds.n_scanned
         if ds.n_labeled:
             Xs.append(ds.X)
             ys.extend(ds.y)
             ts.extend(ds.timestamps)
         print(f"  {sym}: {len(candles)} bars → scanned {ds.n_scanned}, labeled {ds.n_labeled}")
+
+    if failed_symbols:
+        print(f"\n⚠️ {len(failed_symbols)} symbol(s) skipped due to short history or invalid warmup: {failed_symbols}")
 
     n = len(ys)
     print(f"\ntotal labeled samples: {n} (scanned {total_scanned}); "

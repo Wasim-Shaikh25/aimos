@@ -148,16 +148,22 @@ Performance · Config · Agents · Settings.
 > - **T-013 ✅** — training and backtest warmup buffers are sized to the longest
 >   candle-based indicator lookback (`required_warmup`) and enforced before the first
 >   labeled/traded bar. `tests/test_warmup_buffer.py` covers the acceptance cases.
-> - **T-003** — the `backtest_validated` go-live gate is a manual checkbox and the
->   12-month dataset is not downloaded, so it cannot honestly be ticked. This is the
->   task that establishes whether any strategy carries edge.
+> - **T-003 ✅** — 12-month costed walk-forward backtest completed for all
+>   downloadable Tier-1 symbols (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, LINK,
+>   TRX, DOT). Per-strategy run cards with Sharpe/max-DD/MAE-MFE/permutation-p/
+>   bootstrap-CI and explicit `edge / no edge / insufficient sample` verdicts are
+>   committed under `specs/runcards/`. `scripts/run_backtest_card.py` automates the
+>   download → integrity → backtest → card pipeline; `tests/test_costed_backtest.py`
+>   guards cost application and edge collapse under shuffled returns. The
+>   `backtest_validated` go-live gate can now be evaluated against real data.
 >
 > **`specs/COMPETITIVE_ANALYSIS.md`** reviews 7 major OSS trading platforms
 > (LEAN, Hummingbot, NautilusTrader, Freqtrade, Abu, Passivbot, OpenAlgo) with
 > upstream file references and per-platform licence verdicts. Only LEAN and
 > Hummingbot (Apache 2.0) and Passivbot (Unlicense) are code-borrowable; the rest
-> are concept-only or, for OpenAlgo (AGPL-3.0), off-limits. **T-013 is now ✅**
-> (anti-lookahead warmup buffer), so T-003 is unblocked.
+> are concept-only or, for OpenAlgo (AGPL-3.0), off-limits. **T-013 ✅ and T-003 ✅**
+> are both complete; the measurement loop and the 12-month costed backtest now
+> provide the evidence needed to evaluate strategy edge.
 >
 > **T-017** — `/metrics` still requires auth (`_PROTECTED_EXACT` in
 > `aimos/api/server.py`), which silently breaks Prometheus scraping (audit M6,

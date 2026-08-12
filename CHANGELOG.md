@@ -7,7 +7,27 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 ## Unreleased
 
 ### Added (T-003 — 12-month costed walk-forward backtest)
-- (to be filled after run cards are generated)
+- New `scripts/run_backtest_card.py` downloads 12 months of Binance 1h klines for the
+  offline Tier-1 universe, runs a costed walk-forward backtest per symbol, and
+  writes per-strategy run cards to `specs/runcards/`.
+- Run cards include trades, win rate, total PnL, Sharpe, max drawdown, MAE/MFE,
+  permutation p-value, bootstrap Sharpe CI, and an explicit `edge / no edge /
+  insufficient sample` verdict.
+- `BacktestEngine.run()` now accepts an optional `peers` dict and bounds the
+  observation window to the longest indicator lookback so 12-month replays stay
+  O(n) instead of O(n²).
+- Generated run cards for all 11 Tier-1 symbols with 12 months of data
+  (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, LINK, TRX, DOT; MATIC had no
+  2025-08..2026-07 1h files on Binance Vision).
+
+### Fixed (T-013 review follow-up)
+- `aimos/backtest/engine.py` and `aimos/learning/dataset.py` length guards now
+  require one extra bar (`+2`) so an empty replay/label pass raises a clear error
+  instead of silently returning all-zero metrics.
+- `scripts/train_from_history.py` catches `ValueError` from `build_training_set`
+  per symbol, reports the skip, and continues with the remaining symbols.
+- `specs/OPERATIONS.md` documents `learning.history.warmup` as `null` / resolved
+  by `required_warmup(params)` rather than the old hard-coded 200.
 
 ### Added (T-013 — anti-lookahead warmup buffer)
 - `aimos/observation/runner.py` exposes `required_warmup(params)`, the maximum

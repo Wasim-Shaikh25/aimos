@@ -36,6 +36,9 @@ class Fill:
     venue: str = "paper"
     ts: Optional[datetime] = None
     pnl_quote: float = 0.0  # realized PnL on exit fills (0 on entries)
+    pnl_r: float = 0.0  # R-multiple on exit fills (0 on entries)
+    max_adverse_r: float = 0.0  # worst excursion in R (exit fills only)
+    max_favorable_r: float = 0.0  # best excursion in R (exit fills only)
     plugin: str = ""
 
 
@@ -89,7 +92,9 @@ class PaperBroker:
                     "qty": f.qty, "price": f.price, "fee_quote": f.fee_quote,
                     "kind": f.kind, "venue": f.venue,
                     "ts": f.ts.isoformat() if f.ts else None,
-                    "pnl_quote": f.pnl_quote, "plugin": f.plugin,
+                    "pnl_quote": f.pnl_quote, "pnl_r": f.pnl_r,
+                    "max_adverse_r": f.max_adverse_r, "max_favorable_r": f.max_favorable_r,
+                    "plugin": f.plugin,
                 }
                 for f in self.fills
             ],
@@ -133,6 +138,9 @@ class PaperBroker:
                 venue=raw.get("venue", self.venue),
                 ts=ts,
                 pnl_quote=raw.get("pnl_quote", 0.0),
+                pnl_r=raw.get("pnl_r", 0.0),
+                max_adverse_r=raw.get("max_adverse_r", 0.0),
+                max_favorable_r=raw.get("max_favorable_r", 0.0),
                 plugin=raw.get("plugin", ""),
             ))
         self.closed_trades_r = [float(x) for x in state.get("closed_trades_r", [])]
@@ -192,7 +200,7 @@ class PaperBroker:
         self._positions[plan.symbol] = pos
         self._excursions[pos.decision_id] = (0.0, 0.0)
         self.fills.append(Fill(pos.decision_id, plan.symbol, side, qty, price, fee, "entry",
-                               venue=self.venue, ts=now, plugin=plan.plugin))
+                               venue=self.venue, ts=now, pnl_r=0.0, plugin=plan.plugin))
 
     def _check_exits(self, symbol, bar, now, depth_usd) -> None:
         pos = self._positions.get(symbol)
@@ -267,7 +275,8 @@ class PaperBroker:
             exit_reason=kind,
         ))
         self.fills.append(Fill(pos.decision_id, pos.symbol, pos.side, pos.qty, price, fee, kind,
-                               venue=self.venue, ts=now, pnl_quote=pnl, plugin=pos.plugin))
+                               venue=self.venue, ts=now, pnl_quote=pnl, pnl_r=pnl_r,
+                               max_adverse_r=mae, max_favorable_r=mfe, plugin=pos.plugin))
         del self._positions[pos.symbol]
 
     def trade_history(self) -> list[dict]:
@@ -283,7 +292,8 @@ class PaperBroker:
                     "kind": "directional", "symbol": f.symbol, "strategy": f.plugin,
                     "venue": f.venue, "side": (e.side.value if e else f.side.value),
                     "qty": f.qty, "entry": e.price if e else None,
-                    "exit": f.price, "pnl_usd": f.pnl_quote,
+                    "exit": f.price, "pnl_usd": f.pnl_quote, "pnl_r": f.pnl_r,
+                    "max_adverse_r": f.max_adverse_r, "max_favorable_r": f.max_favorable_r,
                     "opened_at": e.ts.isoformat() if e and e.ts else None,
                     "closed_at": f.ts.isoformat() if f.ts else None,
                     "result": f.kind, "status": "closed",
@@ -292,7 +302,8 @@ class PaperBroker:
             trades.append({
                 "kind": "directional", "symbol": e.symbol, "strategy": e.plugin,
                 "venue": e.venue, "side": e.side.value, "qty": e.qty,
-                "entry": e.price, "exit": None, "pnl_usd": 0.0,
+                "entry": e.price, "exit": None, "pnl_usd": 0.0, "pnl_r": 0.0,
+                "max_adverse_r": 0.0, "max_favorable_r": 0.0,
                 "opened_at": e.ts.isoformat() if e.ts else None, "closed_at": None,
                 "result": "open", "status": "open",
             })

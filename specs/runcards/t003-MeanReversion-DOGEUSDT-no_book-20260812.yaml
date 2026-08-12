@@ -1,0 +1,30 @@
+config_hash: fab4929fff3b2493
+data_hash: fd543f370f0b8d2a
+engine_profile: no_book
+git_sha: 7c64d25
+metrics:
+  avg_mae_r: -0.9842
+  avg_mfe_r: 2.7563
+  avg_pnl_r: -0.2743
+  engine_profile: no_book
+  exchange: binance
+  exposure_pct: 0.0
+  max_drawdown: -0.0301
+  median_pnl_r: -1.0843
+  no_trade_rate: 0.0
+  profit_factor: 0.7158
+  sharpe: 0.1634
+  strategy: MeanReversion
+  symbol: DOGE/USDT
+  total_pnl_usd: 11.3584
+  trades: 34
+  verdict: no edge
+  win_rate: 0.11764705882352941
+run_id: t003-MeanReversion-DOGEUSDT-no_book-20260812
+seed: 0
+universe_snapshot_id: binance-tier1-34
+validation:
+  passes_promotion_gate: false
+  permutation_p: 0.736
+  sharpe_ci_high: 0.1838107616115551
+  sharpe_ci_low: -0.8607654159062796

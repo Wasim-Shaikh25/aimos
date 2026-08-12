@@ -84,23 +84,35 @@ class BacktestEngine:
         self._depth_frac = float(params.costs.model_dump()["volume_proxy_depth_frac"])
         self._primary = params.exchanges["primary"]
 
-    def run(self, candles: pd.DataFrame, warmup: Optional[int] = None) -> BacktestResult:
+    def run(
+        self,
+        candles: pd.DataFrame,
+        warmup: Optional[int] = None,
+        peers: Optional[dict[str, pd.DataFrame]] = None,
+    ) -> BacktestResult:
         min_warmup = required_warmup(self.params)
         if warmup is None:
             warmup = min_warmup
         if warmup < min_warmup:
             raise ValueError(f"warmup {warmup} shorter than required indicator warmup {min_warmup} (T-013)")
         n = len(candles)
-        if n < warmup + 1:
-            raise ValueError(f"candles {n} shorter than warmup {warmup} + 1")
+        if n < warmup + 2:
+            raise ValueError(f"candles {n} shorter than warmup {warmup} + 2 (need at least one decision bar and one fill bar)")
         equity_curve: list[float] = []
         n_decisions = 0
         n_no_trade = 0
         for i in range(warmup, n - 1):  # need bar i+1 to fill
             bar_time = candles.index[i].to_pydatetime()
             self.clock.set(bar_time)
-            window = candles.iloc[: i + 1]  # data <= t (anti-lookahead)
-            ctx = build_context(self.symbol, bar_time, {Timeframe.H1: window}, peers={"BTC": window})
+            # Keep only the longest indicator lookback window so engines run in
+            # bounded time while still producing identical values (T-013).
+            start = max(0, i + 1 - min_warmup)
+            window = candles.iloc[start : i + 1]
+            if peers and "BTC" in peers:
+                peer_frames = {"BTC": peers["BTC"].iloc[start : i + 1]}
+            else:
+                peer_frames = {"BTC": window}
+            ctx = build_context(self.symbol, bar_time, {Timeframe.H1: window}, peers=peer_frames)
             bundle = run_all(self.obs_engines, ctx)
             reporting = len(engines_reporting(bundle))
             mu = self.intel.understand(bundle, reporting, coverage_engines=self.coverage)

@@ -1,0 +1,30 @@
+config_hash: fab4929fff3b2493
+data_hash: 995f8577bf728ef3
+engine_profile: no_book
+git_sha: 7c64d25
+metrics:
+  avg_mae_r: -0.8602
+  avg_mfe_r: 3.3106
+  avg_pnl_r: 0.664
+  engine_profile: no_book
+  exchange: binance
+  exposure_pct: 0.0
+  max_drawdown: -0.0158
+  median_pnl_r: -1.0641
+  no_trade_rate: 0.0
+  profit_factor: 1.8256
+  sharpe: 3.9359
+  strategy: MeanReversion
+  symbol: ADA/USDT
+  total_pnl_usd: 294.4196
+  trades: 24
+  verdict: insufficient sample
+  win_rate: 0.25
+run_id: t003-MeanReversion-ADAUSDT-no_book-20260812
+seed: 0
+universe_snapshot_id: binance-tier1-25
+validation:
+  passes_promotion_gate: false
+  permutation_p: 0.155
+  sharpe_ci_high: 0.5260928386768051
+  sharpe_ci_low: -0.14102008607003458

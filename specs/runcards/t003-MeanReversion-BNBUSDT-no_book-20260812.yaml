@@ -1,0 +1,30 @@
+config_hash: fab4929fff3b2493
+data_hash: c7c30531274d6a1e
+engine_profile: no_book
+git_sha: 7c64d25
+metrics:
+  avg_mae_r: -0.9141
+  avg_mfe_r: 3.1093
+  avg_pnl_r: -0.1737
+  engine_profile: no_book
+  exchange: binance
+  exposure_pct: 0.0
+  max_drawdown: -0.0156
+  median_pnl_r: -1.1029
+  no_trade_rate: 0.0
+  profit_factor: 0.8221
+  sharpe: -2.7574
+  strategy: MeanReversion
+  symbol: BNB/USDT
+  total_pnl_usd: -88.5711
+  trades: 16
+  verdict: insufficient sample
+  win_rate: 0.125
+run_id: t003-MeanReversion-BNBUSDT-no_book-20260812
+seed: 0
+universe_snapshot_id: binance-tier1-16
+validation:
+  passes_promotion_gate: false
+  permutation_p: 0.624
+  sharpe_ci_high: 0.34294244475933855
+  sharpe_ci_low: -27.96662913626564
