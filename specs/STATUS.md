@@ -4,6 +4,15 @@
 `CHANGELOG.md` before starting work. (Consolidates the former BUILD_TASKS and the
 multi-venue/dashboard requirements.)
 
+> **`specs/OPERATOR_ACTIONS.md`** — 2 items need the operator, not a coding
+> session, both blocked only by this development sandbox's network egress policy
+> (verified directly, not architectural): downloading 12-month exchange history
+> (blocks T-003, the highest-leverage task below — **deferred by operator
+> choice**), and Kronos's real pretrained weights (**in progress** — operator is
+> fetching `Kronos-small` per the sizing rationale in
+> `specs/KRONOS_INTEGRATION.md` §3.2). Check that file whenever a task looks
+> stalled; it may be waiting on you, not on more code.
+
 Legend: ✅ done & tested · 🟡 built but gated/dormant (real code, needs a
 prerequisite) · ⏭️ not built yet.
 
@@ -157,13 +166,15 @@ Performance · Config · Agents · Settings.
 >   guards cost application and edge collapse under shuffled returns. The
 >   `backtest_validated` go-live gate can now be evaluated against real data.
 >
-> **`specs/COMPETITIVE_ANALYSIS.md`** reviews 7 major OSS trading platforms
-> (LEAN, Hummingbot, NautilusTrader, Freqtrade, Abu, Passivbot, OpenAlgo) with
-> upstream file references and per-platform licence verdicts. Only LEAN and
-> Hummingbot (Apache 2.0) and Passivbot (Unlicense) are code-borrowable; the rest
-> are concept-only or, for OpenAlgo (AGPL-3.0), off-limits. **T-013 ✅ and T-003 ✅**
-> are both complete; the measurement loop and the 12-month costed backtest now
-> provide the evidence needed to evaluate strategy edge.
+> **`specs/COMPETITIVE_ANALYSIS.md`** reviews **9** major OSS trading platforms
+> (LEAN, Hummingbot, NautilusTrader, Freqtrade, Abu, Passivbot, OpenAlgo, Jesse,
+> Gainium — the last two named only in the source document's prose, not its
+> table, and added after a follow-up check) with upstream file references and
+> per-platform licence verdicts. Code-borrowable: LEAN, Hummingbot (Apache 2.0),
+> Passivbot (Unlicense), Jesse, Gainium (MIT). Concept-only: NautilusTrader
+> (LGPL-3.0), Freqtrade, Abu (GPL-3.0). Off-limits: OpenAlgo (AGPL-3.0).
+> **T-013 ✅ and T-003 ✅** are now complete; the remaining derived tasks are
+> T-007..T-009, T-012, T-014..T-017.
 >
 > **T-017** — `/metrics` still requires auth (`_PROTECTED_EXACT` in
 > `aimos/api/server.py`), which silently breaks Prometheus scraping (audit M6,

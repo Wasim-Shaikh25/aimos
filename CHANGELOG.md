@@ -91,6 +91,92 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 - `serve.py` `_maybe_arb()` and `_price_row()` use the live `VenueTop` snapshot
   so prices reflect executable top-of-book.
 
+### Added (finalized Kronos download spec — operator is fetching the weights now)
+- Confirmed `specs/COMPETITIVE_ANALYSIS.md` already covers all 9 platforms from
+  the shared document (7 table rows + Jesse + Gainium, added in an earlier pass
+  this session) — no gap found on re-check.
+- Operator is proceeding with Kronos Option B (real pretrained weights) now and
+  deferring the 12-month history download; `specs/OPERATOR_ACTIONS.md` updated to
+  reflect actual status per item rather than a fixed priority order.
+- **`specs/KRONOS_INTEGRATION.md` §3.2 finalized** with a concrete, unambiguous
+  spec rather than a sketch:
+  - **Real measurement, not an estimate:** `pip download torch` from the default
+    PyPI index produces a **526.6 MB** wheel (bundles CUDA support even for
+    CPU-only use). The CPU-only wheel lives at `download.pytorch.org`, which is
+    **also blocked from this session** (403) — a third host added to
+    `specs/OPERATOR_ACTIONS.md`, alongside `huggingface.co` and
+    `data.binance.vision`.
+  - **Final variant recommendation: `Kronos-small` + `Kronos-Tokenizer-base`, not
+    `Kronos-mini`**, with reasoning: once torch is loaded at all its own runtime
+    overhead dwarfs the difference between an ~8 MB and an ~99 MB weight file, and
+    Kronos-small's context length matches what upstream actually finetunes and
+    evaluates with (`lookback=90`, confirmed via `finetune/config.py`, §2.0.2) —
+    `Kronos-mini`'s extra 2048-token context buys nothing we'd use here.
+  - Exact `huggingface-cli download` commands, exact `pyproject.toml` `[kronos]`
+    optional-dependency group (isolated from the base/runtime/serve extras), the
+    exact CPU-only install command, and an exact `vendor/manifest.yaml` stanza
+    matching the existing `hb_mm`-entry style in that file.
+  - Explicit about what's estimated (weight-file sizes computed from published
+    param counts, torch CPU-wheel size and runtime RSS both unverifiable from this
+    session) versus what's measured (the 526.6 MB CUDA wheel, confirmed by
+    running the download) — step 5 now asks the operator to report measured RSS
+    back, closing those gaps with real numbers instead of leaving them as guesses.
+
+### Fixed (conflating this session's network limits with architectural decisions)
+- The user pushed back directly: don't rule out a capability just because this
+  development sandbox can't reach it — say so explicitly and hand off the exact
+  command, since the operator's own machine, CI, or the production host is very
+  likely unrestricted. Checking rather than asserting found this had actually
+  happened, in two places:
+  - `specs/KRONOS_INTEGRATION.md` §3 listed "weights are unreachable" as one of
+    **four** reasons to reject using Kronos's real pretrained model — conflating
+    a session-specific 403 with an architectural verdict. Verified directly:
+    `curl https://huggingface.co` → `403`, but `pip install huggingface_hub`
+    succeeds (PyPI isn't restricted) — the *package* is fine, only fetching from
+    `huggingface.co` from this session is blocked. Rewrote §3 into an explicit
+    **Option A (clean-room, still recommended) vs Option B (real weights,
+    operator-provided)** split: §3.1 keeps the three reasons that hold regardless
+    of who downloads the weights (dependency weight, CSI300-equities corpus
+    mismatch, `torch.multinomial`'s lack of a seed contract), and new §3.2 gives
+    the operator the exact `huggingface-cli download` commands, where to add the
+    files (`vendor/kronos_weights/` + a `manifest.yaml` entry per the existing
+    `vendor/VENDOR.md` pattern), and what still applies even with real weights in
+    hand (out-of-process via KR-39, so torch never enters the trading process).
+  - `specs/TASKS.md` T-003 step 1 (`scripts/download_history.py`) — verified
+    `curl https://data.binance.vision` also returns `403` from this session.
+    Added an explicit operator-action callout with the exact command; steps 2–4
+    (integrity check, backtest, run card) have no network dependency and are
+    unaffected.
+- **New `specs/OPERATOR_ACTIONS.md`** — a single consolidated, living checklist
+  of everything blocked by this session's network policy rather than by AIMOS
+  itself, each entry showing the actual verified failure (not an assumption), the
+  exact command to run, and what it unblocks. Two items currently: the 12-month
+  history download (blocks T-003, the single highest-leverage task in the
+  backlog) and the optional Kronos weights fetch. Explicitly states what is *not*
+  on the list — GitHub, PyPI, and git are all reachable from this session — so the
+  file stays a precise, narrow list rather than a hedge.
+- **`CLAUDE.md`** — added a 5th item to the "before you start" checklist: check
+  `specs/OPERATOR_ACTIONS.md` before concluding a capability is unreachable, and
+  never fold a session-specific network restriction into an architectural
+  decision without logging it there first. This is the fix meant to keep the
+  mistake from recurring in a future session, not just this one.
+- `specs/STATUS.md` now points at `specs/OPERATOR_ACTIONS.md` from the top of the
+  file, so a stalled task is checked against "waiting on the operator" before
+  being read as "not yet built."
+
+### Fixed (STATUS.md drift after the Jesse/Gainium addition)
+- `specs/STATUS.md` still said `specs/COMPETITIVE_ANALYSIS.md` covered "7 major
+  OSS trading platforms" and "7 further tasks" after the Jesse/Gainium fix below
+  landed — found while re-verifying cross-references between `STATUS.md`,
+  `TASKS.md`, `KRONOS_INTEGRATION.md`, and `COMPETITIVE_ANALYSIS.md` in response
+  to being asked whether everything was documented correctly. Corrected to 9
+  platforms and 8 further tasks (T-007..T-009, T-012, T-014..T-017), with Jesse
+  and Gainium named as MIT-licensed additions found only in the source
+  document's prose, not its table. Also confirmed: every T-XXX cross-reference
+  across the four spec documents resolves to a real, matching task — the only
+  false positives were `KT-01..KT-63` (Kronos test-case IDs) substring-matching
+  a naive `T-[0-9]+` grep.
+
 ### Fixed (competitive analysis coverage gap)
 - The user asked "did we add everything we wanted to borrow from that document?"
   and checking rather than asserting found a real gap: `specs/COMPETITIVE_ANALYSIS.md`
