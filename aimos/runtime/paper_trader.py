@@ -120,7 +120,8 @@ async def run_paper(
             now = df.index[-1].to_pydatetime().astimezone(timezone.utc)
             last = df.iloc[-1]
             venue_snapshot = venue_snapshot_for(features, paper, universe.registry,
-                                                symbol, float(last["close"]), now, live_data)
+                                                symbol, float(last["close"]), now,
+                                                live_data, clock=clock)
             ctx = build_context(base_of(symbol), now, {Timeframe(tf): df},
                                 peers={"BTC": btc_df}, venue_snapshot=venue_snapshot)
             exec_ctx = ExecContext(

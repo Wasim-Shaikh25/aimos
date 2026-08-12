@@ -6,6 +6,15 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Fixed (T-002 review follow-up — clock, staleness, per-pair skew)
+- `live_venue_snapshot()` and `synthetic_venue_snapshot()` now read observation time
+  from an injected `Clock`; `paper_trader.py` and `serve.py` pass the runtime clock
+  so replay/tests stay deterministic and production snapshots use the real clock.
+- `CrossExchangeEngine._dislocation()` measures quote age against `clock.now()` instead
+  of `ctx.now`, so `max_quote_age_seconds` actually rejects stale quotes in live runs.
+- `compute_dislocation()` checks `max_venue_skew_seconds` per pair, not globally, so one
+  slow exchange no longer blocks detection between the other contemporaneous venues.
+
 ### Fixed (cross-exchange arb phantom spreads — T-002)
 - `compute_dislocation()` now consumes `VenueTop` bid/ask and computes the
   executable spread `bid[rich] - ask[cheap]` (after USD stable conversion)

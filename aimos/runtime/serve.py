@@ -397,7 +397,7 @@ def build_app(offline: Optional[bool] = None):
                     primary = primary_venue if primary_venue in venue_df else next(iter(venue_df))
                     now = venue_df[primary].index[-1].to_pydatetime().astimezone(timezone.utc)
                     # 2) cross-venue snapshot from the per-venue mids (for §5.11 engine)
-                    vsnap = _snapshot_from_mids(venue_df, now, holder["features"])
+                    vsnap = _snapshot_from_mids(venue_df, now, holder["features"], clock)
                     # 3) analyze on EVERY venue (primary journaled/traded; others display)
                     per_venue, prices, primary_res = {}, {}, None
                     for v, d in venue_df.items():
@@ -831,7 +831,7 @@ def _exec_ctx(broker, costs_cfg, caps, venue):
     )
 
 
-def _snapshot_from_mids(venue_df, now, features):
+def _snapshot_from_mids(venue_df, now, features, clock=None):
     """VenueTop per venue from each venue's last close (feeds the §5.11 engine)."""
     if not features.get("cross_exchange_enabled") or len(venue_df) < 2:
         return None
@@ -841,7 +841,7 @@ def _snapshot_from_mids(venue_df, now, features):
     for v, d in venue_df.items():
         mid = float(d.iloc[-1]["close"])
         snap[v] = VenueTop(exchange=v, best_bid=mid * (1 - half), best_ask=mid * (1 + half),
-                           mid=mid, timestamp=now)
+                           mid=mid, timestamp=clock.now() if clock is not None else now)
     return snap
 
 
