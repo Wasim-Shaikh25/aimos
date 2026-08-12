@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -26,7 +27,7 @@ from aimos.data.context import build_context
 from aimos.intelligence.understand import IntelligenceLayer
 from aimos.learning.features import feature_names
 from aimos.learning.labeling import BarrierConfig, triple_barrier_label
-from aimos.observation.runner import build_engines, engines_reporting, run_all
+from aimos.observation.runner import build_engines, engines_reporting, required_warmup, run_all
 
 _DEF_UPPER, _DEF_LOWER, _DEF_NOISE = 1.5, 1.5, 0.3  # triple-barrier defaults (§8.2)
 
@@ -58,7 +59,7 @@ def build_training_set(
     symbol: str,
     candles: pd.DataFrame,
     horizon_bars: int,
-    warmup: int = 200,
+    warmup: Optional[int] = None,
 ) -> TrainingSet:
     """Replay ``candles`` through observation+intelligence and label each bar.
 
@@ -66,7 +67,19 @@ def build_training_set(
     0 the other way, dropped (noise) if it times out inside the band — the exact
     triple-barrier semantics the calibration path expects. Feature vectors match
     inference via ``IntelligenceLayer.ml_feature_vector``.
+
+    The warmup buffer is sized to the longest indicator lookback so the first
+    labeled/traded bar is never part of the indicator warmup (T-013).
     """
+    min_warmup = required_warmup(params)
+    if warmup is None:
+        warmup = min_warmup
+    if warmup < min_warmup:
+        raise ValueError(f"warmup {warmup} shorter than required indicator warmup {min_warmup} (T-013)")
+    n = len(candles)
+    if n < warmup + horizon_bars + 1:
+        raise ValueError(f"candles {n} shorter than warmup {warmup} + horizon {horizon_bars} + 1")
+
     clock = BacktestClock()
     engines = build_engines(params, clock)
     intel = IntelligenceLayer(params)
@@ -78,7 +91,6 @@ def build_training_set(
     ys: list[int] = []
     ts: list[datetime] = []
     n_scanned = 0
-    n = len(candles)
     last = n - horizon_bars - 1  # need horizon_bars of future to label
     for i in range(warmup, last):
         bar_time = candles.index[i].to_pydatetime()

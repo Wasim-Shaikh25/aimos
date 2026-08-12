@@ -304,7 +304,7 @@ have nothing to say. Once T-001 lands they light up with no new UI work.
 
 ---
 
-## T-013 ⬜ Anti-lookahead warmup buffer in train/test splits
+## T-013 ✅ Anti-lookahead warmup buffer in train/test splits
 
 **Priority:** **P0** · **Blocks:** T-003 (must be correct *before* the backtest runs) · **Est:** S
 
@@ -325,15 +325,12 @@ result just looks good. It is also the same class of bug as Kronos **KR-19**.
 
 ### Acceptance criteria
 
-- [ ] Splits carry an explicit warmup buffer sized to the longest indicator window.
-- [ ] Buffer bars are used for indicator computation only, never for training
+- [x] Splits carry an explicit warmup buffer sized to the longest indicator window.
+- [x] Buffer bars are used for indicator computation only, never for training
       labels or test evaluation.
-- [ ] `assert_temporal_split` still holds across buffer + train + test.
-- [ ] **One named guarantee.** Jesse (MIT) documents "backtests without
-      look-ahead bias" as a single explicit product claim, not scattered spec
-      text. AIMOS already has the underlying property (§9.1, KR-19, this task) —
-      state it the same way: one sentence in `specs/ARCHITECTURE.md` or here that
-      a human can point to, backed by T-013.1–T-013.4 as *the* tests that back it.
+- [x] `assert_temporal_split` still holds across buffer + train + test.
+- [x] **One named guarantee.** Added to `specs/ARCHITECTURE.md` §8.2 and backed by
+      `tests/test_warmup_buffer.py`.
 
 ### Test cases
 

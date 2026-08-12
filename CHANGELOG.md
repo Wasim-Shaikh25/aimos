@@ -6,6 +6,23 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added (T-003 — 12-month costed walk-forward backtest)
+- (to be filled after run cards are generated)
+
+### Added (T-013 — anti-lookahead warmup buffer)
+- `aimos/observation/runner.py` exposes `required_warmup(params)`, the maximum
+  `_min_bars()` advertised by all candle-based observation engines (currently
+  driven by `correlation.beta_window`).
+- `aimos/learning/dataset.py` and `aimos/backtest/engine.py` size their warmup
+  buffers to `required_warmup()` and reject an explicit `warmup` shorter than the
+  longest indicator lookback, preventing unstable indicator values from entering
+  labels or trades.
+- `config/default.yaml` sets `learning.history.warmup` to `null` so the default
+  comes from the engine-derived minimum rather than the previous hard-coded 200.
+- `tests/test_warmup_buffer.py` verifies buffer sizing, rejection of short
+  warmups, exclusion of buffer bars from the label set, and walk-forward temporal
+  separation.
+
 ### Added (T-001 — trade outcomes loop)
 - `PaperBroker` now tracks per-position MAE/MFE in R units, builds an `OutcomeRecord`
   on close, and exposes `drain_outcomes()` for the runtime to persist.
