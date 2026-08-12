@@ -140,9 +140,14 @@ Performance · Config · Agents · Settings.
 >   attribution, the AI analyst's grounding, drift detection, and the Kronos shadow
 >   gate. `PaperBroker._close()` already computes 6 of the 8 `OutcomeRecord` fields.
 > - **T-002 ✅** — cross-exchange arb now computes executable spreads from
->   `best_bid`/`best_ask` (not mid-to-mid) and drops stale/skewed quotes via
->   `max_quote_age_seconds` / `max_venue_skew_seconds` in `config/observation.yaml`.
+>   `best_bid`/`best_ask` (not mid-to-mid), drops stale/skewed quotes via
+>   `max_quote_age_seconds` / `max_venue_skew_seconds`, and **requires an injected
+>   `Clock` for `live_venue_snapshot`/`synthetic_venue_snapshot`/`venue_snapshot_for`**
+>   so timestamps cannot silently fall back to stale bar-close time.
 >   `tests/test_cross_exchange_arb.py` covers the T-002 acceptance cases.
+> - **T-013 ✅** — training and backtest warmup buffers are sized to the longest
+>   candle-based indicator lookback (`required_warmup`) and enforced before the first
+>   labeled/traded bar. `tests/test_warmup_buffer.py` covers the acceptance cases.
 > - **T-003** — the `backtest_validated` go-live gate is a manual checkbox and the
 >   12-month dataset is not downloaded, so it cannot honestly be ticked. This is the
 >   task that establishes whether any strategy carries edge.
@@ -151,8 +156,8 @@ Performance · Config · Agents · Settings.
 > (LEAN, Hummingbot, NautilusTrader, Freqtrade, Abu, Passivbot, OpenAlgo) with
 > upstream file references and per-platform licence verdicts. Only LEAN and
 > Hummingbot (Apache 2.0) and Passivbot (Unlicense) are code-borrowable; the rest
-> are concept-only or, for OpenAlgo (AGPL-3.0), off-limits. It adds **T-013 to the
-> critical path before T-003** (anti-lookahead warmup buffer) and 7 further tasks.
+> are concept-only or, for OpenAlgo (AGPL-3.0), off-limits. **T-013 is now ✅**
+> (anti-lookahead warmup buffer), so T-003 is unblocked.
 >
 > **T-017** — `/metrics` still requires auth (`_PROTECTED_EXACT` in
 > `aimos/api/server.py`), which silently breaks Prometheus scraping (audit M6,

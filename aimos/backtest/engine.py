@@ -35,7 +35,7 @@ from aimos.execution.position_sizer import SizingInputs
 from aimos.execution.risk_manager import RiskState
 from aimos.intelligence.understand import IntelligenceLayer
 from aimos.journal.journal import Journal
-from aimos.observation.runner import build_engines, engines_reporting, run_all
+from aimos.observation.runner import build_engines, engines_reporting, required_warmup, run_all
 
 # no_book profile: the 5 book/funding/venue engines can't report → denominator 8
 _NO_BOOK_COVERAGE = 8
@@ -81,11 +81,18 @@ class BacktestEngine:
         self._depth_frac = float(params.costs.model_dump()["volume_proxy_depth_frac"])
         self._primary = params.exchanges["primary"]
 
-    def run(self, candles: pd.DataFrame, warmup: int = 200) -> BacktestResult:
+    def run(self, candles: pd.DataFrame, warmup: Optional[int] = None) -> BacktestResult:
+        min_warmup = required_warmup(self.params)
+        if warmup is None:
+            warmup = min_warmup
+        if warmup < min_warmup:
+            raise ValueError(f"warmup {warmup} shorter than required indicator warmup {min_warmup} (T-013)")
+        n = len(candles)
+        if n < warmup + 1:
+            raise ValueError(f"candles {n} shorter than warmup {warmup} + 1")
         equity_curve: list[float] = []
         n_decisions = 0
         n_no_trade = 0
-        n = len(candles)
         for i in range(warmup, n - 1):  # need bar i+1 to fill
             bar_time = candles.index[i].to_pydatetime()
             self.clock.set(bar_time)

@@ -165,7 +165,7 @@ learning:
     enabled: false                  # master switch for scripts/train_from_history
                                     # (env AIMOS__LEARNING__HISTORY__ENABLED=true)
     horizon_bars: 24                # triple-barrier forward window · bars
-    warmup: 200                     # bars skipped before the first labelled decision
+    warmup: null                   # defaults to required indicator warmup (T-013)
     n_folds: 3                      # walk-forward validation folds
 
 mode: paper                         # paper | live — live requires §23.8 gate ladder

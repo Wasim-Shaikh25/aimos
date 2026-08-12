@@ -91,7 +91,8 @@ def main(argv=None) -> int:
         return 3
 
     horizon = int(hist.get("horizon_bars", 24))
-    warmup = int(hist.get("warmup", 200))
+    warmup_raw = hist.get("warmup")
+    warmup = int(warmup_raw) if warmup_raw is not None else None
     n_folds = int(hist.get("n_folds", 3))
     ml_cfg = params.intelligence.model_dump()  # fusion_weights, coverage, etc.
     lm = params.model_dump().get("learning", {}).get("ml", {})

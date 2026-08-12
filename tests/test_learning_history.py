@@ -17,6 +17,7 @@ from aimos.data.live_source import SyntheticSource
 from aimos.learning.dataset import build_training_set
 from aimos.learning.features import feature_names
 from aimos.learning.train import train_model
+from aimos.observation.runner import required_warmup
 
 
 @pytest.fixture(scope="module")
@@ -30,7 +31,8 @@ def candles():
 
 
 def test_dataset_shape_and_labels(params, candles):
-    ds = build_training_set(params, "BTC/USDT", candles, horizon_bars=12, warmup=100)
+    ds = build_training_set(params, "BTC/USDT", candles, horizon_bars=12,
+                            warmup=required_warmup(params))
     assert ds.n_labeled > 0
     assert ds.width == len(feature_names()) == 70
     assert set(ds.y) <= {0, 1}
@@ -64,7 +66,8 @@ def test_feature_vector_matches_inference_construction(params, candles):
 
 
 def test_trained_model_roundtrips(params, candles, tmp_path):
-    ds = build_training_set(params, "BTC/USDT", candles, horizon_bars=12, warmup=100)
+    ds = build_training_set(params, "BTC/USDT", candles, horizon_bars=12,
+                            warmup=required_warmup(params))
     model = train_model(ds.X, ds.y, ds.timestamps, n_folds=3)
     assert model.n_features == 70
     assert 0.0 <= model.val_auc <= 1.0
@@ -86,9 +89,8 @@ def test_cli_enabled_trains_and_saves(monkeypatch, tmp_path):
     monkeypatch.setenv("AIMOS__LEARNING__HISTORY__ENABLED", "true")
     monkeypatch.setenv("AIMOS__LEARNING__ML__MIN_LABELED_SAMPLES", "50")
     monkeypatch.setenv("AIMOS__LEARNING__HISTORY__HORIZON_BARS", "12")
-    monkeypatch.setenv("AIMOS__LEARNING__HISTORY__WARMUP", "100")
     out = tmp_path / "ml.json"
     from scripts.train_from_history import main
-    rc = main(["--synthetic", "--symbol", "BTC/USDT", "--bars", "700", "--out", str(out)])
+    rc = main(["--synthetic", "--symbol", "BTC/USDT", "--bars", "1000", "--out", str(out)])
     assert rc in (0, 1)  # 0 = passed AUC gate, 1 = trained but below gate — both save
     assert out.exists()
