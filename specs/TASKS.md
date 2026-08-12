@@ -26,12 +26,14 @@ T-001 (outcomes loop) ─┬─► T-003 (costed backtest) ─┬─► T-010 (f
                        └─► T-004 (attribution/analyst grounding)
                            T-014 (OOD confidence) ◄── T-001
 
-T-002 (arb bugs) ──────► T-003          T-030..T-047 (test coverage) run in parallel
+T-002 ✅ done (PR #32)                   T-030..T-047 (test coverage) run in parallel
 T-009, T-012, T-015 ───► live path      T-005, T-006, T-016 independent
 ```
 
-**The critical path is T-001 → T-003.** Nothing about profitability, strategy
-quality, or the forecaster can be answered until those two land.
+**The critical path is now T-001 → T-003 alone** — T-002 landed in `main` via
+PR #32 while this backlog's requirement was still on a separate branch (the spec
+was the input, not written after the fact). Nothing about profitability, strategy
+quality, or the forecaster can be answered until T-001 and T-003 land.
 
 **T-013 is on that path and easy to miss.** An indicator-warmup leak silently
 inflates every number T-003 produces and is invisible unless tested for — the
@@ -139,9 +141,20 @@ So the real work is: **track excursion, then wire one call.**
 
 ---
 
-## T-002 ⬜ Fix cross-exchange arb phantom spreads
+## T-002 ✅ Fix cross-exchange arb phantom spreads — DONE
 
 **Priority:** P0 · **Blocks:** T-003 (arb backtest numbers are meaningless until fixed) · **Est:** S
+
+> **Fixed in `main`** via PR #32 (`devin/t-002-review-fixes`), merged after this
+> requirement was written on a separate branch — this task's spec was the input,
+> not written after the fact. All 8 test cases below (`T-002.1`–`T-002.8`) exist
+> in `tests/test_cross_exchange_arb.py` under matching names
+> (`test_t002_ask_bid_overlap_produces_no_trade`, etc.), plus a follow-up fixing
+> the *remaining* gap this spec's own Bug B section flagged: clock injection so
+> `now` reflects the actual clock rather than `ctx.now`, and a switch from a
+> single global venue-skew check to a **per-pair** one, so one slow exchange no
+> longer blocks detection between two other contemporaneous venues. See
+> `CHANGELOG.md` "Fixed (T-002 review follow-up...)" for the exact diff.
 
 ### Why — two independent bugs that both inflate the spread
 
@@ -221,7 +234,7 @@ real phantom.
 
 ## T-003 ⬜ 12-month history + costed walk-forward backtest
 
-**Priority:** P0 · **Blocked by:** T-001, T-002 · **Est:** L
+**Priority:** P0 · **Blocked by:** T-001 (T-002 done — PR #32) · **Est:** L
 
 ### Why
 
@@ -789,7 +802,7 @@ has an honest answer. Each carries a real prerequisite; none is startable now.
 | ID | Item | Note |
 |---|---|---|
 | N-01 | Real-exchange testnet validation | needs operator's free testnet keys (`specs/TESTNET.md`) |
-| N-02 | Live multi-venue executor wired into serve loop | router exists; **do not start before T-002** |
+| N-02 | Live multi-venue executor wired into serve loop | router exists; T-002 (its prerequisite) is done — startable |
 | N-03 | Streaming layer (real 1m scalp, cross-venue top-of-book) | would also fix T-002's staleness root cause properly |
 | N-04 | TimescaleDB dashboards / retention | data is already being written |
 | N-05 | Upstream vendoring at pinned SHAs (P15-T4) | `scripts/vendor.py --apply`; see also T-005 |
@@ -799,7 +812,7 @@ has an honest answer. Each carries a real prerequisite; none is startable now.
 ## Recommended order
 
 1. **T-001** — closes the loop. Unblocks the most per unit of work.
-2. **T-002** — small, self-contained, fixes a real bug in the only firing strategy.
+2. ~~T-002~~ — done (PR #32); no longer on the critical path.
 3. **T-003** — the big one. Answers "does any of this work?"
 4. **T-030, T-032, T-037, T-038, T-039, T-040** — P1 coverage on live, risky paths.
 5. **T-004, T-010, T-011** — attribution and honest gates.
