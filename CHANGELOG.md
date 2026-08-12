@@ -7,9 +7,11 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 ## Unreleased
 
 ### Fixed (T-002 review follow-up — clock, staleness, per-pair skew)
-- `live_venue_snapshot()` and `synthetic_venue_snapshot()` now read observation time
-  from an injected `Clock`; `paper_trader.py` and `serve.py` pass the runtime clock
-  so replay/tests stay deterministic and production snapshots use the real clock.
+- `live_venue_snapshot()`, `synthetic_venue_snapshot()` and `venue_snapshot_for()` now
+  require an injected `Clock`; the `now` argument is retained for call-site
+  compatibility but observation time comes from `clock.now()`. This removes the
+  silent fallback that could stamp live quotes with stale bar-close time and fail
+  the staleness gate.
 - `CrossExchangeEngine._dislocation()` measures quote age against `clock.now()` instead
   of `ctx.now`, so `max_quote_age_seconds` actually rejects stale quotes in live runs.
 - `compute_dislocation()` checks `max_venue_skew_seconds` per pair, not globally, so one
