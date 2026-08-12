@@ -147,12 +147,15 @@ Performance · Config · Agents · Settings.
 >   12-month dataset is not downloaded, so it cannot honestly be ticked. This is the
 >   task that establishes whether any strategy carries edge.
 >
-> **`specs/COMPETITIVE_ANALYSIS.md`** reviews 7 major OSS trading platforms
-> (LEAN, Hummingbot, NautilusTrader, Freqtrade, Abu, Passivbot, OpenAlgo) with
-> upstream file references and per-platform licence verdicts. Only LEAN and
-> Hummingbot (Apache 2.0) and Passivbot (Unlicense) are code-borrowable; the rest
-> are concept-only or, for OpenAlgo (AGPL-3.0), off-limits. It adds **T-013 to the
-> critical path before T-003** (anti-lookahead warmup buffer) and 7 further tasks.
+> **`specs/COMPETITIVE_ANALYSIS.md`** reviews **9** major OSS trading platforms
+> (LEAN, Hummingbot, NautilusTrader, Freqtrade, Abu, Passivbot, OpenAlgo, Jesse,
+> Gainium — the last two named only in the source document's prose, not its
+> table, and added after a follow-up check) with upstream file references and
+> per-platform licence verdicts. Code-borrowable: LEAN, Hummingbot (Apache 2.0),
+> Passivbot (Unlicense), Jesse, Gainium (MIT). Concept-only: NautilusTrader
+> (LGPL-3.0), Freqtrade, Abu (GPL-3.0). Off-limits: OpenAlgo (AGPL-3.0). It adds
+> **T-013 to the critical path before T-003** (anti-lookahead warmup buffer) and
+> 8 further tasks (T-007..T-009, T-012, T-014..T-017).
 >
 > **T-017** — `/metrics` still requires auth (`_PROTECTED_EXACT` in
 > `aimos/api/server.py`), which silently breaks Prometheus scraping (audit M6,

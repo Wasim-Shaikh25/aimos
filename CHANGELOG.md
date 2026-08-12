@@ -26,6 +26,19 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 - `serve.py` `_maybe_arb()` and `_price_row()` use the live `VenueTop` snapshot
   so prices reflect executable top-of-book.
 
+### Fixed (STATUS.md drift after the Jesse/Gainium addition)
+- `specs/STATUS.md` still said `specs/COMPETITIVE_ANALYSIS.md` covered "7 major
+  OSS trading platforms" and "7 further tasks" after the Jesse/Gainium fix below
+  landed — found while re-verifying cross-references between `STATUS.md`,
+  `TASKS.md`, `KRONOS_INTEGRATION.md`, and `COMPETITIVE_ANALYSIS.md` in response
+  to being asked whether everything was documented correctly. Corrected to 9
+  platforms and 8 further tasks (T-007..T-009, T-012, T-014..T-017), with Jesse
+  and Gainium named as MIT-licensed additions found only in the source
+  document's prose, not its table. Also confirmed: every T-XXX cross-reference
+  across the four spec documents resolves to a real, matching task — the only
+  false positives were `KT-01..KT-63` (Kronos test-case IDs) substring-matching
+  a naive `T-[0-9]+` grep.
+
 ### Fixed (competitive analysis coverage gap)
 - The user asked "did we add everything we wanted to borrow from that document?"
   and checking rather than asserting found a real gap: `specs/COMPETITIVE_ANALYSIS.md`
