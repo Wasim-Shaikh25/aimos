@@ -19,6 +19,18 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 - Generated run cards for all 11 Tier-1 symbols with 12 months of data
   (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, LINK, TRX, DOT; MATIC had no
   2025-08..2026-07 1h files on Binance Vision).
+- `scripts/download_history.py` now supports `--all` / `--top-n` /
+  `--include-stable` to download 12 months of 1h candles for every currently
+  trading Binance USDT spot pair (stablecoin bases excluded by default). This is
+  the simple one-command script for building the full-asset history the user
+  requested. The symbol list is fetched via `www.binance.com/api/v3` and the
+  klines still come from free `data.binance.vision`.
+- `aimos/data/binance_symbols.py` exposes `all_binance_usdt_spot_symbols()` so
+  both `download_history.py` and `run_backtest_card.py` share the same universe
+  source without duplication.
+- `scripts/run_backtest_card.py` now accepts `--all`, `--top-n`, and
+  `--include-stable` so the same full-asset (or top-N) universe can be used for
+  backtest run cards.
 
 ### Fixed (T-013 review follow-up)
 - `aimos/backtest/engine.py` and `aimos/learning/dataset.py` length guards now

@@ -9,6 +9,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import subprocess
 import sys
@@ -26,6 +27,7 @@ from aimos.backtest.engine import BacktestEngine  # noqa: E402
 from aimos.backtest.metrics import compute_metrics, max_drawdown  # noqa: E402
 from aimos.backtest.validation import ValidationResult, make_run_card, validate_returns  # noqa: E402
 from aimos.core.config import load_params  # noqa: E402
+from aimos.data.binance_symbols import all_binance_usdt_spot_symbols  # noqa: E402
 from aimos.data.candles import CandleStore  # noqa: E402
 from aimos.data.universe_source import build_universe  # noqa: E402
 
@@ -219,6 +221,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--data-dir", default="data", help="CandleStore root")
     ap.add_argument("--runcards-dir", default=str(_DEFAULT_RUNCARDS), help="output directory")
     ap.add_argument("--symbols", default="", help="comma-separated symbols; default = Tier-1 universe")
+    ap.add_argument("--all", action="store_true", help="use all currently trading non-stable Binance USDT spot pairs")
+    ap.add_argument("--top-n", type=int, default=None, help="when --all, backtest only the top-N by 24h quote volume")
+    ap.add_argument("--include-stable", action="store_true", help="when --all, include USDT pairs where the base is a stablecoin")
     ap.add_argument("--t1-max", type=int, default=None, help="max Tier-1 symbols to backtest")
     ap.add_argument("--starting-equity", type=float, default=10_000.0)
     ap.add_argument("--engine-profile", default="no_book")
@@ -234,6 +239,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.symbols:
         symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
+    elif args.all:
+        symbols = asyncio.run(
+            all_binance_usdt_spot_symbols(args.top_n, include_stable=args.include_stable)
+        )
     else:
         symbols = _tier1_symbols(params, args.exchange, args.t1_max)
 
@@ -241,7 +250,7 @@ def main(argv: list[str] | None = None) -> int:
         print("No symbols to backtest.")
         return 2
 
-    print("Tier-1 symbols:", symbols)
+    print("Symbols:", symbols)
 
     if not args.skip_download:
         # Always have BTC as a peer for the correlation engine.
