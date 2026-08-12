@@ -117,3 +117,31 @@ def test_compute_metrics_with_costs_lower_return():
     m_cost = compute_metrics(equity_cost, [-0.1, 0.3], n_decisions=2, n_no_trade=0, days=1.0)
     m_free = compute_metrics(equity_free, [0.0, 0.8], n_decisions=2, n_no_trade=0, days=1.0)
     assert m_cost.total_return < m_free.total_return
+
+
+def test_universe_snapshot_id_is_a_real_data_fingerprint_not_trade_count():
+    """universe_snapshot_id must identify the candle data used, not the trade count.
+
+    Regression for a bug where the field was `f"{exchange}-tier1-{len(all_trades)}"`
+    — two runs against different market data but the same trade count got the
+    same "snapshot id", and two runs against identical data with different
+    strategies (different trade counts) got different ids, making the field
+    useless for verifying two runs used the same underlying candles.
+    """
+    from scripts.run_backtest_card import _candles_fingerprint
+
+    idx = pd.DatetimeIndex(
+        [datetime(2026, 1, 1, tzinfo=timezone.utc) + pd.Timedelta(hours=i) for i in range(5)],
+        tz="UTC", name="timestamp",
+    )
+    candles_a = pd.DataFrame(
+        {"open": [1.0] * 5, "high": [1.5] * 5, "low": [0.5] * 5, "close": [1.2] * 5, "volume": [100.0] * 5},
+        index=idx,
+    )
+    candles_b = candles_a.copy()
+    candles_b.loc[idx[0], "close"] = 9.9  # different market data
+
+    # Same data → same fingerprint, regardless of how many trades a strategy made on it.
+    assert _candles_fingerprint(candles_a) == _candles_fingerprint(candles_a.copy())
+    # Different data → different fingerprint, even with an identical row count.
+    assert _candles_fingerprint(candles_a) != _candles_fingerprint(candles_b)

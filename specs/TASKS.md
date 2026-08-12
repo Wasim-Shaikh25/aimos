@@ -294,6 +294,16 @@ worth building?
 - [x] Per-strategy run cards committed under `specs/runcards/`.
 - [x] Explicit written verdict per strategy: **edge / no edge / insufficient sample**.
 
+> **Fixed post-review:** `universe_snapshot_id` in `scripts/run_backtest_card.py`
+> was `f"{exchange}-tier1-{len(all_trades)}"` — the trade count, not a data
+> identity, so it couldn't verify two runs used the same candles. Now
+> `_candles_fingerprint()` hashes the actual OHLCV values fed to the run
+> (content-addressed, reusing `validation.data_hash`). **The 77 run cards already
+> committed under `specs/runcards/` predate this fix and still carry the old
+> trade-count values** — regenerating them needs the 12-month dataset, which
+> isn't available in this session (`specs/OPERATOR_ACTIONS.md` item 1). All
+> future `run_backtest_card.py` runs get the corrected field.
+
 ### Test cases
 
 | ID | Test | Assert |
