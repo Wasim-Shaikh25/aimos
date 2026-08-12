@@ -164,8 +164,14 @@ Performance · Config · Agents · Settings.
 >   bootstrap-CI and explicit `edge / no edge / insufficient sample` verdicts are
 >   committed under `specs/runcards/`. `scripts/run_backtest_card.py` automates the
 >   download → integrity → backtest → card pipeline; `tests/test_costed_backtest.py`
->   guards cost application and edge collapse under shuffled returns. The
->   `backtest_validated` go-live gate can now be evaluated against real data.
+>   guards cost application and edge collapse under shuffled returns.
+> - **T-004 ✅** — `/api/performance` and `/api/strategies` now surface per-strategy
+>   attribution from real journaled `outcomes` (win rate, PnL, expectancy, MAE/MFE,
+>   low-sample caveat) so the AI analyst has real stats to ground on. Advisory only —
+>   no auto-disable.
+> - **T-011 ✅** — `backtest_validated` go-live gate now refuses sign-off unless
+>   `specs/runcards/` contains at least one run card with `validation.permutation_p`
+>   < 0.05, in addition to the existing sequential gate order check.
 >
 > **`specs/COMPETITIVE_ANALYSIS.md`** reviews **9** major OSS trading platforms
 > (LEAN, Hummingbot, NautilusTrader, Freqtrade, Abu, Passivbot, OpenAlgo, Jesse,

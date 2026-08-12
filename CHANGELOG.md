@@ -6,6 +6,18 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added
+- T-004: `aimos/journal/analytics.py` computes per-strategy attribution from
+  journaled `outcomes` joined to `decisions`. `/_performance` now surfaces
+  `from_outcomes` with win rate, PnL, expectancy, MAE/MFE, and a `low_sample`
+  caveat when a strategy has fewer than 30 trades. `/api/strategies` includes the
+  same per-strategy outcome block. The AI analyst grounding bundle sees real
+  per-strategy stats via the existing `performance` provider.
+- T-011: `GoLiveLadder.mark()` now refuses to tick `backtest_validated` unless
+  `specs/runcards/` contains at least one run card with `validation.permutation_p`
+  < 0.05. Gate order checks are still enforced. `runcards_dir` is an optional
+  constructor argument (defaults to `specs/runcards`).
+
 ### Fixed (T-003 review follow-up — universe_snapshot_id was the trade count, not a data identity)
 - `scripts/run_backtest_card.py`'s `universe_snapshot_id` was
   `f"{exchange}-tier1-{len(all_trades)}"` — the number of trades a strategy made,

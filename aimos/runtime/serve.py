@@ -42,6 +42,7 @@ from aimos.execution.broker.live_router import MultiVenueLiveRouter
 from aimos.execution.broker.paper import PaperBroker
 from aimos.execution.position_sizer import SizingInputs
 from aimos.auth.security import FailedLoginTracker
+from aimos.journal.analytics import per_strategy_attribution
 from aimos.journal.backup import backup_journal
 from aimos.journal.journal import Journal
 from aimos.runtime.state_store import ControlStore, RuntimeStateStore, build_snapshot
@@ -301,12 +302,12 @@ def _build_components(offline: Optional[bool] = None) -> dict[str, Any]:
         from aimos.runtime.assistant import Assistant
         assistant = Assistant({
             "decisions": lambda limit=40: _assistant_decisions(orch.journal, limit),
-            "performance": lambda: _performance_payload(broker, sim, holder["equity"]),
+            "performance": lambda: _performance_payload(broker, sim, holder["equity"], orch.journal),
             "models": lambda: _models_payload(params, holder["latest"]),
             "monitor": lambda: holder["monitor"],
             "features": feature_ctl.snapshot,
             "golive": ladder.status,
-            "strategies": lambda: _strategies_payload(params, holder["chosen"]),
+            "strategies": lambda: _strategies_payload(params, holder["chosen"], orch.journal),
             "equity": lambda: holder["equity"],
             "graph": lambda did: _decision_graph(orch.journal, did, params),
         }, cfg=asst_cfg)
@@ -637,7 +638,7 @@ def build_app(offline: Optional[bool] = None):
             "evidences": _pick_evidence(holder["evidence"].get(base_of(sym), {}), venue),
             "venues": sorted(holder["evidence"].get(base_of(sym), {})),
         },
-        strategies_provider=lambda: _strategies_payload(params, holder["chosen"]),
+        strategies_provider=lambda: _strategies_payload(params, holder["chosen"], orch.journal),
         models_provider=lambda: _models_payload(params, holder["latest"]),
         prices_provider=lambda: _prices_payload(holder),
         candles_provider=lambda sym: _candles_payload(holder, base_of(sym)),
@@ -647,7 +648,7 @@ def build_app(offline: Optional[bool] = None):
         connections_provider=lambda: {"venues": list(holder.get("connections", connections).values()),
                                       "any_live": any(c.get("connected") for c in holder.get("connections", connections).values())},
         connections_test_provider=lambda venue: _test_connection(venue, params),
-        performance_provider=lambda: _performance_payload(broker, sim, holder["equity"]),
+        performance_provider=lambda: _performance_payload(broker, sim, holder["equity"], orch.journal),
         graph_provider=lambda did: _decision_graph(orch.journal, did, params),
         features_provider=lambda: {**feature_ctl.snapshot(),
                                    "halted": orch.state.halted if orch else False},
@@ -740,34 +741,42 @@ def _universe_payload(universe, paper, holder) -> dict:
     }
 
 
-def _strategies_payload(params, chosen: dict) -> dict:
-    """Every execution plugin: config + how often it was chosen this run (§7)."""
+def _strategies_payload(params, chosen: dict, journal=None) -> dict:
+    """Every execution plugin: config + how often it was chosen + real outcomes (§7, T-004)."""
     from aimos.execution.plugins import _CORE
     plugin_cfgs = params.plugins
+    outcomes = per_strategy_attribution(journal, chosen_counts=chosen) if journal else None
+    outcome_by_name = outcomes["per_strategy"] if outcomes else {}
     rows = []
     for cls, key in _CORE:
         raw = plugin_cfgs.get(key)
         cfg = raw.model_dump() if hasattr(raw, "model_dump") else (raw or {})
         regimes = sorted(r.value for r in getattr(cls, "required_regimes", set())) or ["any"]
+        name = cls.name
         rows.append({
-            "name": cls.name, "key": key,
+            "name": name, "key": key,
             "enabled": bool(cfg.get("enabled", True)),
             "regimes": regimes,
             "min_confidence": cfg.get("min_confidence", 0),
             "min_coin_health": cfg.get("min_coin_health", 0),
-            "chosen": chosen.get(cls.name, 0),
+            "chosen": chosen.get(name, 0),
+            "outcomes": outcome_by_name.get(name, {"trades": 0, "low_sample": True, "chosen_count": chosen.get(name, 0)}),
             "config": cfg,
         })
     feats = params.features.model_dump()
     if feats.get("scalp_enabled"):  # §17 — appended dynamically in build_plugins
         scfg = params.scalp.model_dump() if hasattr(params.scalp, "model_dump") else {}
+        name = "MomentumScalp"
         rows.append({
-            "name": "MomentumScalp", "key": "scalp", "enabled": True,
+            "name": name, "key": "scalp", "enabled": True,
             "regimes": scfg.get("context_gate", {}).get("allowed_regimes", ["any"]),
             "min_confidence": scfg.get("context_gate", {}).get("min_confidence", 0),
-            "min_coin_health": 0, "chosen": chosen.get("MomentumScalp", 0), "config": scfg,
+            "min_coin_health": 0, "chosen": chosen.get(name, 0),
+            "outcomes": outcome_by_name.get(name, {"trades": 0, "low_sample": True, "chosen_count": chosen.get(name, 0)}),
+            "config": scfg,
         })
-    return {"strategies": rows}
+    return {"strategies": rows, "low_sample": outcomes["low_sample"] if outcomes else True,
+            "caveat": outcomes.get("caveat") if outcomes else None}
 
 
 def _models_payload(params, latest: dict) -> dict:
@@ -1175,9 +1184,17 @@ def _balances_payload(broker, sim, connections=None) -> dict:
                      else "simulated — add read-only keys for live balances (Phase D preflight)")}
 
 
-def _performance_payload(broker, sim, equity) -> dict:
+def _performance_payload(broker, sim, equity, journal=None) -> dict:
     from aimos.execution.broker.multivenue import performance
-    return performance(broker.trade_history(), list(sim.trades), list(equity))
+    base = performance(broker.trade_history(), list(sim.trades), list(equity))
+    if journal is None:
+        base["from_outcomes"] = None
+        return base
+    attr = per_strategy_attribution(journal)
+    base["from_outcomes"] = attr
+    base["outcomes_caveat"] = attr.get("caveat")
+    base["outcomes_low_sample"] = attr.get("low_sample", True)
+    return base
 
 
 def _venue_summary(res) -> dict:

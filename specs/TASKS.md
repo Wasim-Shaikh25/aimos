@@ -319,7 +319,7 @@ worth building?
 
 ---
 
-## T-004 ⬜ Per-strategy attribution from real outcomes
+## T-004 ✅ Per-strategy attribution from real outcomes
 
 **Priority:** P0 · **Blocked by:** T-001 · **Est:** S
 
@@ -332,10 +332,10 @@ have nothing to say. Once T-001 lands they light up with no new UI work.
 
 ### Acceptance criteria
 
-- [ ] Win rate, PnL, expectancy, and trade count per strategy, computed from `outcomes`.
-- [ ] Sample-size caveat surfaced when n < 30 (per `ASSISTANT.md` guidance).
-- [ ] The analyst's grounding bundle includes real per-strategy stats.
-- [ ] Attribution stays **advisory** — nothing auto-disables a strategy (§15.3).
+- [x] Win rate, PnL, expectancy, and trade count per strategy, computed from `outcomes`.
+- [x] Sample-size caveat surfaced when n < 30 (per `ASSISTANT.md` guidance).
+- [x] The analyst's grounding bundle includes real per-strategy stats.
+- [x] Attribution stays **advisory** — nothing auto-disables a strategy (§15.3).
 
 ### Test cases
 
@@ -560,12 +560,13 @@ defaults; overfitting guard (parameter stability across folds reported).
 
 ---
 
-## T-011 ⬜ Verify the go-live gate is honestly tickable
+## T-011 ✅ Verify the go-live gate is honestly tickable
 
 **Priority:** P1 · **Est:** S
 
-`backtest_validated` is a manual checkbox with no verification. Add a guard that
-refuses the tick unless a run card exists with permutation p < 0.05.
+`backtest_validated` now requires at least one run card under `specs/runcards/`
+with `validation.permutation_p` < 0.05 before it can be ticked. The existing
+sequential gate-order check still applies.
 
 | ID | Test | Assert |
 |---|---|---|

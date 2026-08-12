@@ -61,7 +61,13 @@ class FakeDecision:
 
 
 def _complete_ladder(tmp_path: Path) -> GoLiveLadder:
-    lad = GoLiveLadder(state_path=str(tmp_path / "gl.json"))
+    d = tmp_path / "runcards"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "valid.yaml").write_text(
+        yaml.safe_dump({"validation": {"permutation_p": 0.01}, "verdict": "edge"}),
+        encoding="utf-8",
+    )
+    lad = GoLiveLadder(state_path=str(tmp_path / "gl.json"), runcards_dir=str(d))
     for gid, *_ in GATES:
         lad.mark(gid)
     return lad

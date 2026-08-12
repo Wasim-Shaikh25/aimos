@@ -36,9 +36,11 @@ _SECONDS_PER_DAY = 86400.0
 
 
 class GoLiveLadder:
-    def __init__(self, state_path: str = "state/go_live.json", journal=None) -> None:
+    def __init__(self, state_path: str = "state/go_live.json", journal=None,
+                 runcards_dir: str = "specs/runcards") -> None:
         self.path = Path(state_path)
         self.journal = journal
+        self.runcards_dir = Path(runcards_dir)
         self._state = self._load()
 
     def _load(self) -> dict:
@@ -81,10 +83,33 @@ class GoLiveLadder:
             prev = gate_ids[idx - 1]
             if not self._passed(prev):
                 return {"ok": False, "error": f"out of order: gate {prev!r} must be passed first"}
+        if gate_id == "backtest_validated" and not self._has_valid_run_card():
+            return {"ok": False, "error": "no run card with permutation p < 0.05"}
         self._state.setdefault("gates", {})[gate_id] = {"status": "passed", "note": note,
                                                         "marked_at": _now_iso()}
         self._save()
         return {"ok": True, "gate": gate_id}
+
+    def _has_valid_run_card(self) -> bool:
+        """Return True if any run card under ``runcards_dir`` has permutation_p < 0.05."""
+        import yaml
+        if not self.runcards_dir.exists():
+            return False
+        for path in self.runcards_dir.glob("*.yaml"):
+            try:
+                data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            except Exception:  # noqa: BLE001 — malformed card is not a pass
+                continue
+            validation = data.get("validation") or {}
+            p_value = validation.get("permutation_p")
+            if p_value is None:
+                continue
+            try:
+                if float(p_value) < 0.05:
+                    return True
+            except (TypeError, ValueError):
+                continue
+        return False
 
     def unmark(self, gate_id: str) -> dict:
         gate_ids = [g[0] for g in GATES]
