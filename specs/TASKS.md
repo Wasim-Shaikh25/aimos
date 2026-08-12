@@ -242,8 +242,24 @@ worth building?
 
 ### Implementation
 
-1. Run `scripts/download_history.py` (Binance publishes free klines at
-   `data.binance.vision`) for the universe, 12 months, all traded timeframes.
+> #### ⚠️ OPERATOR ACTION NEEDED — step 1 only
+>
+> Verified directly (2026-08-12): `curl https://data.binance.vision` from this
+> development sandbox returns `CONNECT tunnel failed, response 403` — an
+> org-policy egress restriction on **this session**, not a property of
+> `scripts/download_history.py` itself or of your deployment environment. I
+> cannot execute step 1 from here. **You (or CI, or the production host — anywhere
+> with normal internet access) need to run it:**
+> ```bash
+> python scripts/download_history.py   # writes to data/ per config/default.yaml storage paths
+> ```
+> Steps 2–4 (integrity check, backtest, run card) are plain local computation on
+> the resulting files and have no network dependency — I can do those once the
+> data exists, in this session or a follow-up one.
+
+1. **[Operator]** Run `scripts/download_history.py` (Binance publishes free
+   klines at `data.binance.vision`) for the universe, 12 months, all traded
+   timeframes.
 2. Verify with `scripts/dataset_integrity.py`.
 3. Walk-forward backtest via `aimos/backtest/engine.py`, **costs mandatory**
    (`config/costs.yaml`: 7.5 bps taker, 2.0 bps slip — ≈19 bps round trip).

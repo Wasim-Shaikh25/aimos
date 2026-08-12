@@ -4,6 +4,13 @@
 `CHANGELOG.md` before starting work. (Consolidates the former BUILD_TASKS and the
 multi-venue/dashboard requirements.)
 
+> **`specs/OPERATOR_ACTIONS.md`** — 2 items currently need the operator, not a
+> coding session: downloading 12-month exchange history (blocks T-003, the
+> highest-leverage task below) and, optionally, Kronos's real pretrained weights.
+> Both are blocked only by this development sandbox's network egress policy,
+> verified directly — not by anything architectural. Check that file whenever a
+> task looks stalled; it may be waiting on you, not on more code.
+
 Legend: ✅ done & tested · 🟡 built but gated/dormant (real code, needs a
 prerequisite) · ⏭️ not built yet.
 

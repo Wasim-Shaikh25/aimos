@@ -174,25 +174,97 @@ The upstream authors and reviewers state plainly:
 
 ---
 
-## 3. Sourcing decision — why clean-room, not vendored
+## 3. Sourcing decision — Option A (clean-room, recommended default) vs Option B (real weights, operator-provided)
 
 `vendor/VENDOR.md` already establishes the house pattern: vendored packages hold
 **clean-room reference implementations written from public formulas/specs**, with
 a `manifest.yaml` entry, a pinned SHA, and a `LICENSES/` record. Kronos is MIT, so
-vendoring would be *legally* fine. We still decline, for four operational reasons:
+using its actual weights is *legally* fine.
+
+**Important correction (2026-08-12):** an earlier version of this document listed
+"weights are unreachable" as one of four reasons to reject Kronos's real model
+outright. That reason was wrong to include as an architectural verdict — it was
+true only of the sandboxed development session that wrote this spec, verified
+directly:
+
+```
+$ curl https://huggingface.co        → CONNECT tunnel failed, response 403
+$ curl https://data.binance.vision   → CONNECT tunnel failed, response 403
+$ pip install huggingface_hub        → succeeds (PyPI is not restricted)
+```
+
+That 403 is this development sandbox's own egress policy, not a property of
+Kronos, of AIMOS, or of the operator's machine, CI runner, or deploy target. **The
+operator can fetch these files** — see §3.2. Ruling out an entire capability
+because *this session* can't reach a domain, without saying so, is exactly the
+kind of silent gap this document should not have. Reclassified below into what
+actually still holds and what is now an operator-provided option.
+
+### 3.1 Reasons that hold regardless of who downloads the weights
+
+These are not environment limits — they hold even if the `.safetensors` files are
+sitting in the repo tomorrow:
 
 | Reason | Detail |
 |---|---|
-| **Dependency weight** | Upstream requires `torch` + `huggingface_hub` + Qlib for the finetune path. `pyproject.toml` pins a deliberately lean runtime (§25.8). Adding torch to the trading runtime for one sensor is a bad trade at 4 GB. |
-| **Weights are unreachable here** | `huggingface.co` and `arxiv.org` are **blocked by this environment's egress proxy**. A runtime that lazily downloads weights from HF cannot boot in our container, CI, or an air-gapped deploy. |
-| **Pretraining corpus mismatch** | Kronos is pre-trained on equities-heavy global exchange data. Our universe is crypto majors + alts on binance/kraken/coinbase, 24/7, with funding and perp microstructure. Its calendar embedding (weekday/month) encodes a market-hours prior that is wrong for us. |
-| **Determinism** | AIMOS is a *deterministic* system. Upstream sampling is `torch.multinomial` with no seed contract. We need bit-reproducible replay (**KR-20**). |
+| **Dependency weight** | Upstream requires `torch>=2.0.0` + `huggingface_hub` + Qlib for the finetune path (confirmed, `requirements.txt`, §2.0.2). `pyproject.toml` pins a deliberately lean runtime (§25.8). Adding torch to the **trading runtime process** for one sensor is a bad trade at 4 GB — this is about where torch runs, not whether the weights exist. |
+| **Pretraining corpus mismatch** | Kronos's finetune corpus is CSI300 — Chinese equities, fixed trading hours, confirmed via `finetune/config.py` (§2.0.2). Our universe is crypto majors + alts on binance/kraken/coinbase, 24/7, with funding and perp microstructure. Its calendar embedding (weekday/month) encodes a market-hours prior that is wrong for us — **downloading the weights doesn't retrain them on the right market.** |
+| **Determinism** | AIMOS is a *deterministic* system. Upstream sampling is `torch.multinomial` with no seed contract. We need bit-reproducible replay (**KR-20**) — a property of the inference code, not of where the weights came from. |
+| **`pandas==2.2.2` pin conflicts** | Upstream pins `pandas==2.2.2`; AIMOS pins `2.2.3` (§25.8, no floating ranges). Resolvable, but real. |
 
-**Therefore:** implement `aimos/observation/forecast/` natively — BSQ-style
-hierarchical quantizer + small causal transformer — trained on *our own* recorded
-candles by *our own* walk-forward trainer. Cite Kronos as prior art in the module
-docstring. No upstream code is copied; **KR-39** keeps the door open for an
-out-of-process adapter if we ever want the real weights.
+**Recommendation stands: Option A, the AIMOS-native clean-room model (§7.1, KR-1
+onward), is still the better default** — not because the real weights are
+unreachable, but because even with them in hand, they'd need refitting to a
+different market, isolating from the trading process, and reconciling with a
+determinism guarantee that upstream doesn't provide. Option A is smaller
+(~1.2M params vs. even Kronos-mini's 4.1M), trained on the right corpus from day
+one, and numpy-only by construction.
+
+### 3.2 Option B — using the real Kronos weights (operator action required)
+
+If the operator wants to try the actual pretrained model — e.g. to compare
+against Option A's output before committing to a full build-out — here is the
+concrete path. **Nothing below can be done from this development sandbox; every
+step needs the operator or a differently-provisioned environment.**
+
+> #### ⚠️ OPERATOR ACTION NEEDED
+>
+> 1. **Download the weights** from a machine with Hugging Face access:
+>    ```bash
+>    pip install huggingface_hub
+>    huggingface-cli download NeoQuasar/Kronos-Tokenizer-base --local-dir kronos_weights/tokenizer
+>    huggingface-cli download NeoQuasar/Kronos-small --local-dir kronos_weights/model
+>    ```
+>    (`Kronos-mini`/`Kronos-Tokenizer-2k` for the 4.1M-param variant, ctx 2048, if
+>    footprint matters more than accuracy — see the size table in §2.)
+> 2. **Add them to the repo** — as a new `vendor/kronos_weights/` path (weights are
+>    binary artifacts; consider Git LFS) with a `manifest.yaml` entry per
+>    `vendor/VENDOR.md`'s existing pattern, recording the exact HF revision/commit
+>    downloaded.
+> 3. **Install the inference-only extra** — `torch`, `einops`, `safetensors` as a
+>    **new, separate** `pyproject.toml` optional-dependency group (e.g. `[kronos]`),
+>    never added to the base install or the `runtime`/`serve` extras that the
+>    trading process installs.
+> 4. **Run it out-of-process** — per **KR-39**, as an HTTP microservice the
+>    `ForecastProvider` protocol calls, so torch and the weights never enter the
+>    `aimos` trading process's dependency graph or memory footprint. This is the
+>    one requirement that doesn't relax even with the weights in hand — §4 C6
+>    (import direction) and the 4 GB RSS budget (KR-11) both still apply, and an
+>    out-of-process service is how a torch-based model coexists with either.
+> 5. **Report back what it evaluates to** — with the same costed backtest harness
+>    (T-003) and the same shadow-window IC gate (KR-31) as Option A, so the two are
+>    comparable on identical terms rather than one being trusted more just because
+>    the weights are "real."
+>
+> Once weights exist at `vendor/kronos_weights/`, tell me — I'll finish wiring the
+> `ForecastProvider` HTTP client (KR-39), the microservice Dockerfile, and the
+> comparison harness. What I cannot do myself is step 1.
+
+**This does not change the K0–K5 rollout ladder or its blockers.** Option B still
+needs T-001 (outcomes loop) and T-003 (costed backtest with real history — itself
+partially operator-blocked, see §12.1 below) before either model's shadow window
+can be scored. Fetching the weights early is fine and lets Option A vs. B be
+compared the moment the loop closes; it does not let either skip the gate.
 
 ---
 
@@ -627,9 +699,17 @@ requirement each case defends.
 
 ## 11. Explicit non-goals
 
-1. **Not** cloning, vendoring, or pip-installing Kronos.
-2. **Not** downloading Hugging Face weights (egress-blocked; also a boot dependency we refuse).
-3. **Not** adding torch to the trading runtime (KR-10).
+1. **Not** cloning, vendoring, or pip-installing Kronos as a runtime dependency
+   of `aimos/` — Option B (§3.2) is an explicit, operator-actionable exception:
+   the *weights* can be fetched and added by the operator; the *inference code*
+   still runs out-of-process, never imported into `aimos/`.
+2. **Not** having the trading runtime **fetch** Hugging Face weights at boot —
+   this is an architectural choice (no network dependency on the hot path), not
+   a statement that the weights are unreachable. If Option B is pursued, the
+   operator downloads them once, ahead of time, outside the runtime (§3.2).
+3. **Not** adding torch to the **trading runtime process** (KR-10) — an
+   out-of-process Kronos microservice (§3.2 step 4) may use torch; it just never
+   shares a process, dependency graph, or memory budget with `aimos`.
 4. **Not** adding a 4th `EngineOpinion` engine (C2).
 5. **Not** letting execution plugins consume forecasts (route K).
 6. **Not** auto-promoting the model to nonzero influence (KR-31).
@@ -639,6 +719,18 @@ requirement each case defends.
 ---
 
 ## 12. Open questions for the operator
+
+### 12.1 Actions only the operator can take (this session is network-restricted to these hosts)
+
+Consolidated in one place — full detail and exact commands in
+**`specs/OPERATOR_ACTIONS.md`**:
+
+- Run `scripts/download_history.py` (T-003 step 1 — `data.binance.vision` is
+  403-blocked from this development sandbox).
+- If Option B (§3.2) is wanted: download Kronos weights from Hugging Face and add
+  them to the repo (`huggingface.co` is likewise 403-blocked here).
+
+### 12.2 Decisions
 
 1. **Registry approval (KR-23).** Approve the four evidence names? Adding them
    invalidates existing trained `LogisticModel` artifacts and forces a retrain.
