@@ -8,10 +8,12 @@ IntelligenceLayer.key_levels["dislocation"] → CrossExchangeArb.propose.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+import pytest
 
 from aimos.core.config import load_params
-from aimos.core.schemas import Action, EvidenceBundle, Timeframe
+from aimos.core.schemas import Action, EvidenceBundle, Timeframe, VenueTop
 from aimos.data.context import build_context
 from aimos.data.live_source import (
     live_venue_snapshot,
@@ -19,7 +21,7 @@ from aimos.data.live_source import (
 )
 from aimos.execution.plugins import CrossExchangeArb, build_plugins
 from aimos.intelligence.understand import IntelligenceLayer
-from aimos.observation.cross_exchange import CrossExchangeEngine
+from aimos.observation.cross_exchange import CrossExchangeEngine, compute_dislocation
 from tests.conftest import FakeClock, make_exec_ctx, make_mu, obs_cfg, reliability
 
 _ARB_CFG = {
@@ -148,3 +150,83 @@ def test_engine_emits_dislocation_and_layer_surfaces_it():
     assert "dislocation" in kl
     assert kl["dislocation"]["buy_venue"] and kl["dislocation"]["sell_venue"]
     assert kl["dislocation"]["buy_venue"] != kl["dislocation"]["sell_venue"]
+
+
+# ---- T-002 phantom-spread fixes ---------------------------------------------
+
+
+TS = datetime(2026, 7, 16, tzinfo=timezone.utc)
+
+
+def _top(bid: float, ask: float, ts: datetime = TS) -> VenueTop:
+    return VenueTop(exchange="x", best_bid=bid, best_ask=ask, mid=(bid + ask) / 2.0, timestamp=ts)
+
+
+def test_t002_ask_bid_overlap_produces_no_trade():
+    # Wide 20 bps mid gap, but 10 bps spreads on each side overlap.
+    snap = {"binance": _top(99.90, 100.10), "kraken": _top(100.00, 100.20)}
+    assert compute_dislocation(snap) is None
+
+
+def test_t002_genuine_executable_gap():
+    snap = {"binance": _top(100.0, 100.2), "kraken": _top(100.6, 100.8)}
+    bps, (cheap, rich) = compute_dislocation(snap)
+    assert cheap == "binance" and rich == "kraken"
+    assert bps == pytest.approx((100.6 - 100.2) / 100.4 * 10_000, abs=0.1)
+
+
+def test_t002_stale_quote_dropped():
+    fresh = TS
+    stale = TS - timedelta(seconds=15)
+    snap = {
+        "binance": _top(100.0, 100.2, fresh),
+        "kraken": _top(100.6, 100.8, stale),
+    }
+    assert compute_dislocation(snap, max_quote_age_seconds=10, now=TS) is None
+
+
+def test_t002_only_one_fresh_venue_returns_none():
+    stale = TS - timedelta(seconds=15)
+    snap = {
+        "binance": _top(100.0, 100.2, stale),
+        "kraken": _top(100.6, 100.8, stale),
+    }
+    assert compute_dislocation(snap, max_quote_age_seconds=5, now=TS) is None
+
+
+def test_t002_venue_skew_rejects_pair():
+    t1 = TS
+    t2 = TS - timedelta(seconds=3)
+    snap = {
+        "binance": _top(100.0, 100.2, t1),
+        "kraken": _top(100.6, 100.8, t2),
+    }
+    assert compute_dislocation(snap, max_venue_skew_seconds=2, now=TS) is None
+
+
+def test_t002_realistic_tight_books_no_trade():
+    # 2 bps markets across 3 venues; after executable pricing there is no gap.
+    snap = {
+        "binance": _top(99.99, 100.01),
+        "kraken": _top(99.98, 100.00),
+        "coinbase": _top(100.00, 100.02),
+    }
+    assert compute_dislocation(snap) is None
+
+
+def test_t002_synthetic_snapshot_still_fires():
+    now = datetime(2026, 7, 16, tzinfo=timezone.utc)
+    snap = synthetic_venue_snapshot("BTC/USDT", 30_000.0, now, ["binance", "kraken"],
+                                    dislocation_bps=40.0, spread_bps=1.0)
+    result = compute_dislocation(snap)
+    assert result is not None
+    assert result[0] > 35  # gross executable spread still ~38 bps after 1 bps spreads
+
+
+def test_t002_mid_gap_with_wider_spreads_no_trade():
+    # 30 bps mid gap, 35 bps spreads → the ask/bid overlap kills the arb.
+    snap = {
+        "binance": _top(99.825, 100.175),  # 35 bps spread around 100
+        "kraken": _top(100.125, 100.475),  # 35 bps spread around 100.3 (30 bps mid gap)
+    }
+    assert compute_dislocation(snap) is None

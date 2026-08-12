@@ -20,6 +20,17 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
   MAE/MFE tracking, same-bar SL+TP precedence, hash-chain integrity, backtest/paper
   parity, zero-risk handling, and journal write failure resilience.
 
+### Fixed (cross-exchange arb phantom spreads — T-002)
+- `compute_dislocation()` now consumes `VenueTop` bid/ask and computes the
+  executable spread `bid[rich] - ask[cheap]` (after USD stable conversion)
+  instead of `mid - mid`, eliminating phantom spreads.
+- `live_venue_snapshot()` stamps each successful venue fetch with its own
+  observation time; `CrossExchangeEngine` uses `max_quote_age_seconds` and
+  `max_venue_skew_seconds` from `config/observation.yaml` to drop stale/skewed
+  quotes before scoring.
+- `serve.py` `_maybe_arb()` and `_price_row()` use the live `VenueTop` snapshot
+  so prices reflect executable top-of-book.
+
 ### Fixed (competitive analysis coverage gap)
 - The user asked "did we add everything we wanted to borrow from that document?"
   and checking rather than asserting found a real gap: `specs/COMPETITIVE_ANALYSIS.md`

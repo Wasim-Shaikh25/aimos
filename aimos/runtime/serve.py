@@ -425,10 +425,10 @@ def build_app(offline: Optional[bool] = None):
                         per_venue[v] = _venue_summary(res)
                         prices[v] = float(last["close"])
                     # 4) cross-venue arb → two-leg execution against per-venue balances (§4)
-                    _maybe_arb(sim, primary_res, base, prices, now, paper, holder,
+                    _maybe_arb(sim, primary_res, base, vsnap, now, paper, holder,
                                live_router=live_router)
                     holder["venue_state"][base] = per_venue
-                    holder["prices"][base] = _price_row(prices)
+                    holder["prices"][base] = _price_row(prices, vsnap)
                     holder["candles"][base] = {v: d for v, d in venue_df.items()}
                     if primary_res is not None:  # time-series (optional TimescaleDB)
                         mu = primary_res.understanding
@@ -904,7 +904,7 @@ def _decision_graph(journal, decision_id: str, params) -> dict:
             "reasons": mu.get("reasons", []), "decision_id": decision_id}
 
 
-def _maybe_arb(sim, primary_res, base, prices, now, paper, holder,
+def _maybe_arb(sim, primary_res, base, snap: Optional[dict[str, VenueTop]], now, paper, holder,
                live_router: Optional[MultiVenueLiveRouter] = None) -> None:
     """Execute a chosen cross-venue arb as two simulated legs (buy cheap/sell rich).
 
@@ -912,26 +912,27 @@ def _maybe_arb(sim, primary_res, base, prices, now, paper, holder,
     per-venue API keys present), the legs are routed through :class:`LiveBroker` so
     they can be placed on real exchanges.  Otherwise the paper/sim ledger is used.
     """
-    if primary_res is None or primary_res.plan.action is Action.NO_TRADE:
+    if primary_res is None or primary_res.plan.action is Action.NO_TRADE or not snap:
         return
     m = primary_res.plan.meta
     if not m.get("cross_venue"):
         return
     bv, sv = m.get("buy_venue"), m.get("sell_venue")
-    if bv not in prices or sv not in prices:
+    if bv not in snap or sv not in snap:
         return
+    buy_top, sell_top = snap[bv], snap[sv]
     notional = float(primary_res.plan.size_quote or 0.0) or float(paper["starting_equity_usdt"]) * 0.01
     if live_router is not None and live_router.brokers:
         live_router.execute_arb(
             base_symbol=f"{base}/USDT", buy_venue=bv, sell_venue=sv,
             notional_usd=notional,
-            buy_price=prices[bv], sell_price=prices[sv],
+            buy_price=buy_top.best_ask, sell_price=sell_top.best_bid,
             total_notional_after=notional,
             positions_after=len(sim.trades) + 1,
         )
         holder["chosen"]["CrossExchangeArb"] = holder["chosen"].get("CrossExchangeArb", 0) + 1
         return
-    sim.execute_arb(base, bv, sv, prices[bv], prices[sv], notional, now)
+    sim.execute_arb(base, bv, sv, buy_top.best_ask, sell_top.best_bid, notional, now)
     holder["chosen"]["CrossExchangeArb"] = holder["chosen"].get("CrossExchangeArb", 0) + 1
 
 
@@ -1186,12 +1187,12 @@ def _venue_summary(res) -> dict:
             "plugin": res.plan.plugin}
 
 
-def _price_row(prices: dict) -> dict:
-    """Per-venue mids + max pairwise dislocation (cheap→rich) for the price matrix."""
+def _price_row(prices: dict, snap: Optional[dict[str, VenueTop]] = None) -> dict:
+    """Per-venue mids + max executable dislocation (cheap→rich) for the price matrix."""
     from aimos.observation.cross_exchange import compute_dislocation
     row = {"venues": {v: round(m, 4) for v, m in prices.items()}}
-    if len(prices) >= 2:
-        result = compute_dislocation(prices)
+    if snap and len(snap) >= 2:
+        result = compute_dislocation(snap)
         if result:
             bps, (cheap, rich) = result
             row.update(dislocation_bps=round(bps, 2), cheap=cheap, rich=rich)

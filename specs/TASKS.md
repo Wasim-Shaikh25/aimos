@@ -197,12 +197,12 @@ real phantom.
 
 ### Acceptance criteria
 
-- [ ] Dislocation is computed from executable prices (ask to buy, bid to sell).
-- [ ] Each venue carries its true observation time.
-- [ ] Quotes older than `max_quote_age_seconds` are excluded.
-- [ ] A pair whose observation times differ by more than the skew limit is rejected.
-- [ ] With realistic tight books, the arb plugin proposes **nothing** (the honest result).
-- [ ] Config keys documented in `specs/OPERATIONS.md`; no magic numbers (C4).
+- [x] Dislocation is computed from executable prices (ask to buy, bid to sell).
+- [x] Each venue carries its true observation time.
+- [x] Quotes older than `max_quote_age_seconds` are excluded.
+- [x] A pair whose observation times differ by more than the skew limit is rejected.
+- [x] With realistic tight books, the arb plugin proposes **nothing** (the honest result).
+- [x] Config keys documented in `specs/OPERATIONS.md`; no magic numbers (C4).
 
 ### Test cases
 

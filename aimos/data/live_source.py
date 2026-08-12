@@ -109,7 +109,8 @@ def live_venue_snapshot(
     """Public best bid/ask per venue via ccxt (no keys). Skips venues that fail.
 
     ``fetchers`` (venue → object with ``fetch_top_of_book``) is injectable for
-    tests; otherwise a ccxt fetcher is built lazily per venue.
+    tests; otherwise a ccxt fetcher is built lazily per venue. Each successful
+    fetch is stamped with its own observation time so staleness checks can run.
     """
     from aimos.data.connectors.ccxt_connector import CcxtCandleFetcher  # lazy
 
@@ -120,7 +121,7 @@ def live_venue_snapshot(
             bid, ask = f.fetch_top_of_book(symbol)
             snap[venue] = VenueTop(
                 exchange=venue, best_bid=bid, best_ask=ask,
-                mid=(bid + ask) / 2.0, timestamp=now,
+                mid=(bid + ask) / 2.0, timestamp=datetime.now(timezone.utc),
             )
         except Exception:  # noqa: BLE001 — a dead venue just drops out of the snapshot
             continue

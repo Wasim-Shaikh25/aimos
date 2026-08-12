@@ -139,9 +139,10 @@ Performance · Config · Agents · Settings.
 >   on close, and `tests/test_outcomes_loop.py` covers all T-001 acceptance criteria.
 >   The measurement loop is closed; downstream tasks (T-003, T-004, Kronos K2) can
 >   now be scored against real outcomes.
-> - **T-002** — cross-exchange arb computes dislocation mid-to-mid (discarding
->   `best_bid`/`best_ask`) from venue quotes fetched sequentially and stamped with a
->   shared `now`, so no staleness gate is possible. Both bugs inflate the spread.
+> - **T-002 ✅** — cross-exchange arb now computes executable spreads from
+>   `best_bid`/`best_ask` (not mid-to-mid) and drops stale/skewed quotes via
+>   `max_quote_age_seconds` / `max_venue_skew_seconds` in `config/observation.yaml`.
+>   `tests/test_cross_exchange_arb.py` covers the T-002 acceptance cases.
 > - **T-003** — the `backtest_validated` go-live gate is a manual checkbox and the
 >   12-month dataset is not downloaded, so it cannot honestly be ticked. This is the
 >   task that establishes whether any strategy carries edge.

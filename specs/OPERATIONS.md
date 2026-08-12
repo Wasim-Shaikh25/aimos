@@ -84,6 +84,15 @@ nesting). Key files: `default.yaml`, `observation.yaml`, `universe.yaml`,
 | `paper.max_symbols` | `40` | top-N assets analyzed per tick |
 | `paper.cross_venues` | `[binance, kraken]` | venues sampled for cross-exchange work |
 
+### Cross-exchange observation (`config/observation.yaml cross_exchange:`)
+
+| Key | Default | Meaning |
+|---|---|---|
+| `fee_floor_bps` | `8` | round-trip fee estimate; dislocation must exceed this plus `dislocation_extra_bps` |
+| `dislocation_extra_bps` | `2` | safety margin on top of fees before an arb is signalled |
+| `max_quote_age_seconds` | `10` | drop a venue whose top-of-book is older than this |
+| `max_venue_skew_seconds` | `2` | reject a pair if its two observation times differ by more than this |
+
 Scalp and cross_exchange can also be **toggled at runtime** from the dashboard
 **Controls** screen or Telegram (`/enable scalp`, `/disable cross_exchange`) — no
 restart. Live/funded flags are LOCKED there.

@@ -8,44 +8,75 @@ rel-vols when a provider supplies them (the streaming layer, §5.11 rules 2-3).
 
 from __future__ import annotations
 
+from datetime import datetime
 from itertools import combinations
 from typing import Mapping, Optional
 
 import numpy as np
 
 from aimos.core.normalize import BPS, HALF
-from aimos.core.schemas import Direction, Evidence, MarketContext, Timeframe
+from aimos.core.schemas import Direction, Evidence, MarketContext, Timeframe, VenueTop
 from aimos.observation.base import ObservationEngine
 
 
 def compute_dislocation(
-    venue_mids: Mapping[str, float],
+    venue_tops: Mapping[str, VenueTop],
     venue_quotes: Optional[Mapping[str, str]] = None,
     stable_rates: Optional[Mapping[str, float]] = None,
+    max_quote_age_seconds: Optional[float] = None,
+    max_venue_skew_seconds: Optional[float] = None,
+    now: Optional[datetime] = None,
 ) -> tuple[float, tuple[str, str]] | None:
-    """Max pairwise mid deviation in bps after converting mids to USD (§5.11).
+    """Max executable pairwise spread in bps after converting to USD (§5.11).
+
+    Unlike a mid-to-mid gap, an arb is only profitable when the rich venue's
+    best_bid exceeds the cheap venue's best_ask: ``bid[rich] - ask[cheap]``.
+    Stale quotes and venues whose observation times differ too much are dropped.
 
     ``venue_quotes[v]`` names each venue's quote stable; ``stable_rates[q]`` is
     that stable's USD rate (defaults to 1.0). Returns (bps, (cheap, rich)) or None.
     """
-    if len(venue_mids) < 2:
+    if now is not None and (max_quote_age_seconds is not None or max_venue_skew_seconds is not None):
+        fresh: dict[str, VenueTop] = {}
+        for venue, top in venue_tops.items():
+            if top.timestamp is not None:
+                age = (now - top.timestamp).total_seconds()
+                if age < 0:
+                    age = 0
+                if max_quote_age_seconds is not None and age > max_quote_age_seconds:
+                    continue
+            fresh[venue] = top
+        venue_tops = fresh
+        if max_venue_skew_seconds is not None and len(venue_tops) >= 2:
+            timestamps = [top.timestamp for top in venue_tops.values() if top.timestamp is not None]
+            if timestamps and (max(timestamps) - min(timestamps)).total_seconds() > max_venue_skew_seconds:
+                return None
+    if len(venue_tops) < 2:
         return None
-    usd: dict[str, float] = {}
-    for venue, mid in venue_mids.items():
-        quote = (venue_quotes or {}).get(venue, "USDT")
-        rate = (stable_rates or {}).get(quote, 1.0)
-        usd[venue] = mid * rate
     best_bps = 0.0
     best_pair = ("", "")
-    for a, b in combinations(usd, 2):
-        ref = (usd[a] + usd[b]) / 2.0
+    for a, b in combinations(venue_tops, 2):
+        top_a, top_b = venue_tops[a], venue_tops[b]
+        quote_a = (venue_quotes or {}).get(a, "USDT")
+        quote_b = (venue_quotes or {}).get(b, "USDT")
+        rate_a = (stable_rates or {}).get(quote_a, 1.0)
+        rate_b = (stable_rates or {}).get(quote_b, 1.0)
+        ref = (top_a.mid * rate_a + top_b.mid * rate_b) / 2.0
         if ref <= 0:
             continue
-        dev_bps = abs(usd[a] - usd[b]) / ref * BPS
-        if dev_bps > best_bps:
-            best_bps = dev_bps
-            best_pair = (a, b) if usd[a] < usd[b] else (b, a)
-    return best_bps, best_pair
+        # a = cheap if we can buy at a's ask and sell at b's bid at a profit.
+        executable_ab = top_b.best_bid * rate_b - top_a.best_ask * rate_a
+        bps_ab = executable_ab / ref * BPS
+        if bps_ab > best_bps:
+            best_bps = bps_ab
+            best_pair = (a, b)
+        # b = cheap, a = rich.
+        executable_ba = top_a.best_bid * rate_a - top_b.best_ask * rate_b
+        bps_ba = executable_ba / ref * BPS
+        if bps_ba > best_bps:
+            best_bps = bps_ba
+            best_pair = (b, a)
+    return (best_bps, best_pair) if best_bps > 0 else None
 
 
 def compute_lead_lag(
@@ -109,8 +140,15 @@ class CrossExchangeEngine(ObservationEngine):
         snap = ctx.venue_snapshot
         if len(snap) < 2:
             return []
-        mids = {v: top.mid for v, top in snap.items()}
-        result = compute_dislocation(mids)
+        quote = ctx.symbol.split("/")[1] if "/" in ctx.symbol else "USDT"
+        venue_quotes = {v: quote for v in snap}
+        result = compute_dislocation(
+            snap,
+            venue_quotes=venue_quotes,
+            max_quote_age_seconds=cc.get("max_quote_age_seconds"),
+            max_venue_skew_seconds=cc.get("max_venue_skew_seconds"),
+            now=ctx.now,
+        )
         if result is None:
             return []
         bps, (cheap, rich) = result
