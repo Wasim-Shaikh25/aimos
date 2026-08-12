@@ -16,28 +16,30 @@ A task is not done until its tests are written *and green*.
 ## Dependency graph
 
 ```
-T-001 (outcomes loop) ─┬─► T-003 (costed backtest) ─┬─► T-010 (fit config)
-                       │        ▲                   └─► T-020..T-025 (Kronos K1-K5)
-                       │        │
-                       │   T-013 (warmup buffer) ── must land BEFORE T-003
-                       │   T-007 (PSR/expectancy) ─ feeds T-003's run card
-                       │   T-008 (impact slippage) ─ feeds T-003's cost model
-                       │        │
-                       └─► T-004 (attribution/analyst grounding)
-                           T-014 (OOD confidence) ◄── T-001
+T-001 ✅ (outcomes loop) ─┬─► T-003 ✅ (costed backtest) ─┬─► T-010 (fit config)
+                          │                             └─► T-020..T-025 (Kronos K1-K5, gated by K0)
+                          │        ▲
+                          │   T-013 ✅ (warmup buffer)
+                          │   T-007 (PSR/expectancy) ─ feeds T-003's run card
+                          │   T-008 (impact slippage) ─ feeds T-003's cost model
+                          │
+                          └─► T-004 (attribution/analyst grounding) ← next P0
+                              T-014 (OOD confidence) ◄── T-001
 
 T-002 ✅ done (PR #32)                   T-030..T-047 (test coverage) run in parallel
 T-009, T-012, T-015 ───► live path      T-005, T-006, T-016 independent
 ```
 
-**The critical path is now T-001 → T-003 alone** — T-002 landed in `main` via
-PR #32 while this backlog's requirement was still on a separate branch (the spec
-was the input, not written after the fact). Nothing about profitability, strategy
-quality, or the forecaster can be answered until T-001 and T-003 land.
+**The critical path is now T-001 → T-003 → T-010** — T-002 landed in `main` via
+PR #32, and T-001/T-003/T-013 are complete on the integration branch. The next
+work that gates profitability/fit questions is **T-010** (fit config parameters
+to the 12-month backtest data). P0 **T-004** (per-strategy attribution) can also
+run now that the outcomes loop is closed.
 
-**T-013 is on that path and easy to miss.** An indicator-warmup leak silently
-inflates every number T-003 produces and is invisible unless tested for — the
-results just look good. It must be correct *before* the backtest runs.
+**Kronos (T-020..T-025 / K1-K5) remains gated by K0** — operator sign-off on
+`specs/KRONOS_INTEGRATION.md` §12 and (for Option B) the operator-provided
+weights in `vendor/kronos_weights/`. K0 is a decision, not code, and K1 must not
+start until K0 is documented and the 12-month dataset exists.
 
 > Tasks T-007, T-008, T-009, T-012, T-013, T-014, T-015, T-016 come from
 > **`specs/COMPETITIVE_ANALYSIS.md`** — a review of seven major OSS trading

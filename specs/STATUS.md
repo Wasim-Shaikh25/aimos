@@ -6,12 +6,13 @@ multi-venue/dashboard requirements.)
 
 > **`specs/OPERATOR_ACTIONS.md`** — 2 items need the operator, not a coding
 > session, both blocked only by this development sandbox's network egress policy
-> (verified directly, not architectural): downloading 12-month exchange history
-> (blocks T-003, the highest-leverage task below — **deferred by operator
-> choice**), and Kronos's real pretrained weights (**in progress** — operator is
-> fetching `Kronos-small` per the sizing rationale in
-> `specs/KRONOS_INTEGRATION.md` §3.2). Check that file whenever a task looks
-> stalled; it may be waiting on you, not on more code.
+> (verified directly, not architectural): downloading the full 12-month exchange
+> history is now **code-ready** (`python -m scripts.download_history --all`) but
+> must be run from an environment where `data.binance.vision` is reachable; and
+> Kronos's real pretrained weights are **in progress** — the operator is fetching
+> `Kronos-small` per the sizing rationale in `specs/KRONOS_INTEGRATION.md` §3.2.
+> T-003 is ✅ on the Tier-1 universe; re-running it on the full dataset is the
+> next operator-enabled step.
 
 Legend: ✅ done & tested · 🟡 built but gated/dormant (real code, needs a
 prerequisite) · ⏭️ not built yet.

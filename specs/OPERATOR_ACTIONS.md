@@ -43,17 +43,20 @@ CONNECT tunnel failed, response 403
 
 **What to run**, anywhere with normal internet access:
 ```bash
-python scripts/download_history.py
+# all currently trading non-stable USDT spot pairs, 1h, 12 months
+python -m scripts.download_history --all --timeframe 1h --months 12
+
+# or a top-N subset (e.g., top 100 by 24h quote volume)
+python -m scripts.download_history --all --top-n 100 --timeframe 1h --months 12
+
+python -m scripts.dataset_integrity
 ```
 Writes candle data to the path configured under `storage` in `config/default.yaml`
 (Parquet by default). Binance publishes free historical klines at
 `data.binance.vision` — no API key needed.
 
-**Then:**
-```bash
-python scripts/dataset_integrity.py
-```
-to verify the download before anything else touches it.
+The `--all` flag is new; it fetches the symbol list from `www.binance.com/api/v3`,
+excludes stablecoin bases by default, and downloads all remaining pairs concurrently.
 
 **Unblocks:** `specs/TASKS.md` **T-003** (the costed backtest — the single
 highest-leverage task in the whole backlog, per `specs/STATUS.md`), and
@@ -61,10 +64,14 @@ transitively **T-010** (config fitting), **K1** (Kronos forecaster training,
 `specs/KRONOS_INTEGRATION.md`), and every "does any strategy have edge" question
 raised in this project so far.
 
-**Status:** ⬜ not done — **operator has explicitly deferred this** (2026-08) in
-favor of item 2 below; not blocking, just sequenced later by choice. Note this
-means K1 (training AIMOS's own native forecaster on real data) is also on hold
-until this lands, independent of how item 2 goes.
+**Status:** 🟨 **ready to run** — `scripts/download_history.py` now supports `--all`
+and bounded concurrency; the 12-month download is no longer blocked by missing
+code. The operator still needs to run it where `data.binance.vision` is reachable
+and then re-run the T-003 backtest with the full dataset if they want a complete
+universes card (current run cards are Tier-1 only).
+
+Note this means K1 (training AIMOS's own native forecaster on real data) is also
+on hold until the full history lands, independent of how item 2 goes.
 
 ---
 

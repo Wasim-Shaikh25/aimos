@@ -6,6 +6,16 @@ Keep a Changelog. Dates are the working session, not calendar-exact.
 
 ## Unreleased
 
+### Added (integration — combine all open PRs and PR #36 Kronos docs)
+- Merged the currently open branches into the `devin/t-003-costed-backtest`
+  integration branch: PR #30 (T-001 outcomes), PR #33 (T-002 clock follow-up),
+  PR #34 (T-013 warmup), and PR #36 (Kronos download spec + `OPERATOR_ACTIONS.md`
+  + T-002 reconciliation).
+- Updated `specs/STATUS.md`, `specs/OPERATOR_ACTIONS.md`, and `specs/TASKS.md`
+  after the merge: T-001/T-002/T-003/T-013 are ✅, the critical path is now
+  T-001 → T-003 → T-010 with T-004 as the next P0, and Kronos K1-K5 remains
+  gated by K0 operator sign-off.
+
 ### Added (T-003 — 12-month costed walk-forward backtest)
 - New `scripts/run_backtest_card.py` downloads 12 months of Binance 1h klines for the
   offline Tier-1 universe, runs a costed walk-forward backtest per symbol, and
